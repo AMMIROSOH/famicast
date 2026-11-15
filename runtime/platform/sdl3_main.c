@@ -7,7 +7,8 @@
  * Select, F5 = reset, Esc = quit.
  * Gamepads: first connected = player 1, second = player 2; hot-plug works.
  * D-pad or left stick; East = A, South = B (NES layout: B left of A),
- * Back = Select, Start = Start. */
+ * Back = Select, Start = Start.
+ * Battery saves are kept next to the ROM as ROM.sav. */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <stdlib.h>
@@ -102,6 +103,15 @@ int main(int argc, char **argv) {
         return 1;
     }
     SDL_free(rom);
+    /* battery-backed PRG RAM (saves): ROM path + ".sav", 8 KB */
+    char sav_path[1024];
+    SDL_snprintf(sav_path, sizeof sav_path, "%s.sav", argv[1]);
+    if (nes.cart.battery) {
+        size_t sav_size;
+        void *sav = SDL_LoadFile(sav_path, &sav_size);
+        if (sav && sav_size == sizeof nes.cart.prg_ram) SDL_memcpy(nes.cart.prg_ram, sav, sav_size);
+        SDL_free(sav);
+    }
 
     InputLog replay_log = {0};
     if (replay && input_log_load(replay, &replay_log) != 0) {
@@ -193,6 +203,8 @@ int main(int argc, char **argv) {
     input_log_free(&replay_log);
     for (int i = 0; i < 2; i++)
         if (gamepads[i]) SDL_CloseGamepad(gamepads[i]);
+    if (nes.cart.battery && !SDL_SaveFile(sav_path, nes.cart.prg_ram, sizeof nes.cart.prg_ram))
+        SDL_Log("%s: %s", sav_path, SDL_GetError());
     cart_free(&nes.cart);
     if (audio) SDL_DestroyAudioStream(audio);
     SDL_DestroyTexture(tex);

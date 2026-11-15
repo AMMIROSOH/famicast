@@ -132,7 +132,21 @@ nes/
 - **Exit:** met except the pending items above.
 
 ## M7 · More mappers and games
-- MMC1, UxROM, CNROM, then MMC3 (scanline IRQ). Bank-aware block keys.
+M7a (runtime):
+- [x] Mappers 0, 1 (MMC1, incl. SUROM 512 KB and the ignored consecutive
+  write), 2, 3, 4 (MMC3 rev B with A12-clocked IRQ), 7, 11, 66: 1,313 of the
+  1,460 ROMs in the local collection.
+- [x] PPU sprite fetches spread over dots 257-320 (removes the M3 shortcut);
+  every PPU bus address reported to the cart (A12, with the M2 filter).
+- [x] Bus: mapper writes catch up the PPU first (mid-frame bank switches);
+  PRG fast-path pages follow the bank tables; MMC3 IRQ catch-up points.
+- [x] Battery saves (`ROM.sav`) in the frontend.
+- [x] Tests: mmc3_test_2 5/6 (6 = rev A, pending), test_ppu_read_buffer and
+  cpu_dummy_reads (CNROM) pass; `tools/smoke_games.py` boots a sample of the
+  local collection per mapper (52/53 ok, see 06).
+M7b (recompiler):
+- [ ] Bank-aware blocks: code compiled per (PRG bank, CPU window), looked up
+  by the bank currently mapped; feedback loop extended to banks.
 - **Exit:** at least one game per mapper runs in `--diff` with no divergence.
 
 ## M8 · Tooling and polish

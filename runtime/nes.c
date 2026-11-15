@@ -9,7 +9,9 @@
  * Between those points nothing can observe the PPU, so running its dots later
  * in one batch gives the same result; checked by the test ROMs, frame hashes
  * and --diff (docs/06). The APU (M6) is caught up the same way; its events
- * are the frame IRQ and DMC sample fetches. Mapper IRQs (M7) will add theirs. */
+ * are the frame IRQ and DMC sample fetches. The MMC3 IRQ (M7) asserts on a
+ * PPU A12 rise: while it is armed, the PPU is caught up every cycle around
+ * the sprite fetches (dots 255-330 of rendering lines). */
 #include "nes.h"
 
 #include <string.h>
@@ -24,7 +26,26 @@ static void plan_next_event(Nes *n) {
     int64_t d = VBLANK_POS - pos + 1;
     if (d <= 0) d += FRAME_SHORT;
     int64_t apu = n->cpu.bus_pending + 3 * apu_cycles_to_event(&n->apu);
-    n->cpu.bus_budget = (int32_t)(apu < d ? apu : d);
+    if (apu < d) d = apu;
+    /* MMC3: the counter is clocked on A12 rises during rendering (around dot
+     * 260 or 324, or at dot 5 of the pre-render line, depending on the
+     * pattern tables). While the IRQ is enabled, check the counter at dots 0
+     * and 255 of every rendering line; once the next clock can fire, catch
+     * up every cycle until the line ends, so a batch never runs past it. */
+    if (n->cart.mapper == 4 && n->cart.irq_enabled && (n->ppu.mask & 0x18)) {
+        int line = n->ppu.scanline, dot = n->ppu.dot;
+        int rendering_line = line < 240 || line == 261;
+        int64_t m;
+        if (rendering_line && cart_irq_armed(&n->cart)) m = 3;
+        else if (rendering_line && dot < 255) m = 255 - dot;
+        else {  /* dot 0 of the next rendering line */
+            int next = line < 239 ? line + 1 : (line == 261 ? 0 : 261);
+            m = ((next - line + 262) % 262) * LINE - dot;
+        }
+        m += n->cpu.bus_pending;
+        if (m < d) d = m;
+    }
+    n->cpu.bus_budget = (int32_t)d;
 }
 
 /* APU order within CPU cycle N: the bus access sees the APU as of N-1, then
@@ -32,7 +53,7 @@ static void plan_next_event(Nes *n) {
  * to N-1, and every slow-path access finishes with sync_apu() (through N). */
 static void sync_apu(Nes *n) {
     apu_run(&n->apu, n->cpu.cycles - 1);
-    n->cpu.irq = apu_irq(&n->apu);  /* the IRQ line, like $4015, lags one cycle */
+    n->cpu.irq = apu_irq(&n->apu) || n->cart.irq_line;  /* APU IRQ lags one cycle, like $4015 */
     apu_run(&n->apu, n->cpu.cycles);
 }
 
@@ -45,6 +66,7 @@ static void catch_up(Nes *n) {
     n->nmi_prev = n->ppu.nmi_out;
     n->cpu.bus_pending = 0;
     apu_run(&n->apu, n->cpu.cycles - 1);
+    n->cpu.irq = apu_irq(&n->apu) || n->cart.irq_line;
     plan_next_event(n);
 }
 
@@ -80,6 +102,7 @@ static uint8_t read_no_tick(Nes *n, uint16_t a) {
 }
 
 static int is_ppu(uint16_t a) { return (a & 0xE000) == 0x2000; }
+static void map_memory(Nes *n);
 
 /* DMC sample fetch: the CPU is halted on its next read cycle while the DMA
  * unit reads the byte (nesdev "APU DMC", "DMA").
@@ -144,14 +167,15 @@ static void oam_dma(Nes *n, uint8_t page) {
 void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
     Nes *n = c->bus;
     n->cpu.open_bus = v;
-    if (!is_ppu(a) && a != 0x4014) {
+    int mapper_reg = a >= 0x8000 && n->cart.mapper != 0;
+    if (!is_ppu(a) && a != 0x4014 && !mapper_reg) {
         add_dots(n, 3);
         if (a < 0x2000) n->ram[a & 0x7FF] = v;
         else if (a == 0x4016) {
             n->strobe = v & 1;
             if (n->strobe) { n->pad_shift[0] = n->pad[0]; n->pad_shift[1] = n->pad[1]; }
         }
-        else if (a >= 0x4020) cart_cpu_write(&n->cart, a, v);
+        else if (a >= 0x4020) cart_cpu_write(&n->cart, a, v, n->cpu.cycles);
         else if (a <= 0x4017) {  /* APU registers ($4014/$4016 handled above) */
             sync_apu(n);
             apu_write(&n->apu, a, v);
@@ -163,6 +187,9 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
     n->cpu.bus_pending += DOTS_BEFORE_ACCESS;
     catch_up(n);
     if (a == 0x4014) oam_dma(n, v);
+    else if (mapper_reg) {  /* bank switches can be raster effects: PPU caught up first */
+        if (cart_cpu_write(&n->cart, a, v, n->cpu.cycles)) map_memory(n);
+    }
     else ppu_reg_write(&n->ppu, a, v);
     after_ppu_access(n);
     /* the rest of this cycle runs now: a $2000 write or $2002 read can change
@@ -174,13 +201,14 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
 }
 
 /* Fast-path pages for the CPU (cpu.h): 2 KB RAM mirrored over $0000-$1FFF,
- * PRG RAM at $6000-$7FFF, PRG ROM at $8000-$FFFF (NROM: 16 KB mirrored).
- * shortcut: NROM layout only; bank-switching mappers (M7) update these. */
+ * PRG RAM at $6000-$7FFF, PRG ROM at $8000-$FFFF as the mapper has banked it
+ * (rebuilt after every mapper write). */
 static void map_memory(Nes *n) {
     Cpu *c = &n->cpu;
     for (int i = 0; i < 4; i++) c->read_map[i] = c->write_map[i] = n->ram;
     for (int i = 12; i < 16; i++) c->read_map[i] = c->write_map[i] = n->cart.prg_ram + (i - 12) * 0x800;
-    for (int i = 16; i < 32; i++) c->read_map[i] = n->cart.prg + ((i - 16) * 0x800) % n->cart.prg_size;
+    for (int i = 16; i < 32; i++)  /* 8 KB windows from the mapper, 4 pages each */
+        c->read_map[i] = n->cart.prg + n->cart.prg_off[(i - 16) >> 2] + ((i & 3) * 0x800);
     c->bus_step = 3;
 }
 

@@ -3,6 +3,30 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M7a: mappers
+- mmc3_test_2: 1-clocking, 2-details, 3-A12_clocking, 4-scanline_timing,
+  5-MMC3 pass; 6-MMC3_alt (rev A behaviour) pending, it contradicts rev B.
+  Fixes on the way:
+  - after a $2007 access the PPU bus shows the incremented v (A12 can rise
+    there): 3-A12_clocking;
+  - the MMC3 IRQ was set inside a long PPU batch (line 238) and seen at
+    vblank: catch-up points now at dots 0 and 255 of every rendering line
+    while the IRQ is enabled, every cycle when the next clock can fire;
+    with background at $1000 the counted rise is at dot 5 of the pre-render
+    line (after vblank), which a fixed 255-330 window missed. Tried moving
+    the sprite pattern address one dot earlier: fixed line 239, broke line 0;
+    reverted (the real cause was the missed catch-up).
+- test_ppu_read_buffer (CNROM) passes; cpu_dummy_reads (CNROM) prints
+  "Passed" on screen (no $6000 signature; checked by screenshot).
+  MMC1_A12 is an interactive visual test, not automated.
+- Game smoke test (`tools/smoke_games.py`, local collection, good dumps,
+  1,500 frames with Start presses): USA sample 32/32 and Europe sample 20/21
+  boot and show content, checked on contact sheets (MMC3 IRQ splits in Power
+  Blade, Kirby's Adventure, Mega Man 3 correct). The one blank is "3-in-1
+  (E)", a multicart that needs a mapper-4 variant with an outer bank.
+- Battery save: a seeded `.sav` is loaded and written back unchanged.
+- Battle City: tests and 10-minute `--diff` unchanged.
+
 ## 2026-11-15 · M6: APU, audio, interrupt details
 First run of the APU: 9/40 of the new ROMs passed. Final: all fetched ROM
 tests pass except 7 listed as pending in `tests/test_roms.py`.
@@ -48,6 +72,7 @@ What it took, in order:
   pending (needs polling during DMA).
 - Mistake on the way: a timing sweep with an unanchored `sed` rewrote the
   $4017 jitter code too and made 12 tests fail; caught by the suite, fixed.
+- Sound confirmed by ear by the user ("sound is perfect").
 - Battle City: frame hash changed (EBB97DBA → 3A8AD2AE for 6,000 frames)
   because of the CPU interrupt fixes; 10-minute `--diff` identical, audio
   hash identical in both modes (FE2A5DF2, 28.75 M samples), title silent and

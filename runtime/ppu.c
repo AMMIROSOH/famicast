@@ -16,8 +16,14 @@ static uint8_t pal_index(uint16_t a) {
     return ((i & 0x13) == 0x10) ? (uint8_t)(i & ~0x10) : i;  /* $3F10/14/18/1C mirror $3F00/04/08/0C */
 }
 
+/* Every PPU bus access drives A12 (MMC3 counts its rises, cart.c). */
+static inline void bus_address(Ppu *p, uint16_t a) {
+    if (p->cart->mapper == 4) cart_ppu_address(p->cart, a, p->dots);
+}
+
 static uint8_t mem_read(Ppu *p, uint16_t a) {
     a &= 0x3FFF;
+    bus_address(p, a);
     if (a < 0x2000) return cart_chr_read(p->cart, a);
     if (a < 0x3F00) return p->nt[cart_nt_index(p->cart, a)];
     return p->pal[pal_index(a)];
@@ -25,6 +31,7 @@ static uint8_t mem_read(Ppu *p, uint16_t a) {
 
 static void mem_write(Ppu *p, uint16_t a, uint8_t v) {
     a &= 0x3FFF;
+    bus_address(p, a);
     if (a < 0x2000) cart_chr_write(p->cart, a, v);
     else if (a < 0x3F00) p->nt[cart_nt_index(p->cart, a)] = v;
     else p->pal[pal_index(a)] = v & 0x3F;
@@ -82,9 +89,9 @@ static void fetch_step(Ppu *p) {
  * Dots 1-64 clear secondary OAM; dots 65-256 copy up to 8 in-range sprites,
  * one OAM read on odd dots and one secondary-OAM write on even dots. With 8
  * found, the overflow search increments both n and m (the hardware bug), so
- * it can miss or falsely detect overflow. Patterns are fetched at dot 257.
- * shortcut: fetches are not spread over dots 257-320 (matters for MMC3 IRQ
- * timing, M7). */
+ * it can miss or falsely detect overflow. Dots 257-320 fetch the patterns,
+ * 8 dots per slot (garbage nametable/attribute reads, then pattern low/high;
+ * empty slots fetch tile $FF), as the MMC3 IRQ counter sees on A12. */
 static uint8_t reverse8(uint8_t b) {
     b = (uint8_t)((b & 0xF0) >> 4 | (b & 0x0F) << 4);
     b = (uint8_t)((b & 0xCC) >> 2 | (b & 0x33) << 2);
@@ -155,38 +162,49 @@ static void evaluation_dot(Ppu *p) {
     }
 }
 
-static void fetch_sprites(Ppu *p) {
+static void sprite_fetch_dot(Ppu *p) {
+    int i = (p->dot - 257) >> 3, phase = (p->dot - 257) & 7;
+    if (phase == 0 || phase == 2) {  /* garbage nametable / attribute fetch */
+        mem_read(p, 0x2000 | (p->v & 0x0FFF));
+        return;
+    }
+    if (phase != 4 && phase != 6) return;
     int h = (p->ctrl & 0x20) ? 16 : 8;
-    int n = p->ev_found / 4;
-    for (int i = 0; i < n; i++) {
-        const uint8_t *s = &p->sec_oam[i * 4];
-        int row = p->scanline - s[0];
-        uint8_t tile = s[1], attr = s[2];
-        if (attr & 0x80) row = h - 1 - row;
-        uint16_t addr;
-        if (h == 16)
-            addr = (uint16_t)(((tile & 1) ? 0x1000 : 0) + (tile & 0xFE) * 16 + (row >= 8 ? 16 : 0) + (row & 7));
-        else
-            addr = (uint16_t)(((p->ctrl & 0x08) ? 0x1000 : 0) + tile * 16 + row);
-        uint8_t lo = mem_read(p, addr), hi = mem_read(p, addr + 8);
+    int n = p->scanline == 261 ? 0 : p->ev_found / 4;
+    const uint8_t *s = &p->sec_oam[i * 4];
+    uint8_t y = i < n ? s[0] : 0xFF, tile = i < n ? s[1] : 0xFF, attr = i < n ? s[2] : 0xFF;
+    int row = (p->scanline - y) & (h - 1);
+    if (i < n && (attr & 0x80)) row = h - 1 - row;
+    uint16_t addr;
+    if (h == 16)
+        addr = (uint16_t)(((tile & 1) ? 0x1000 : 0) + (tile & 0xFE) * 16 + (row >= 8 ? 16 : 0) + (row & 7));
+    else
+        addr = (uint16_t)(((p->ctrl & 0x08) ? 0x1000 : 0) + tile * 16 + row);
+    if (phase == 4) {
+        p->sp_fetch_lo = mem_read(p, addr);
+        return;
+    }
+    uint8_t lo = p->sp_fetch_lo, hi = mem_read(p, addr + 8);
+    if (i < n) {
         if (attr & 0x40) { lo = reverse8(lo); hi = reverse8(hi); }
         p->sp_x[i] = s[3];
         p->sp_attr[i] = attr;
         p->sp_lo[i] = lo;
         p->sp_hi[i] = hi;
     }
+    if (i < 7) return;
     p->sp_count = n;
     /* front-most opaque sprite per pixel (lower slot wins), as render_pixel
      * would find it by scanning the 8 slots */
     memset(p->sp_line, 0, sizeof p->sp_line);
-    for (int i = n - 1; i >= 0; i--) {
+    for (int k = n - 1; k >= 0; k--) {
         for (int off = 0; off < 8; off++) {
-            int x = p->sp_x[i] + off;
+            int x = p->sp_x[k] + off;
             if (x > 255) break;
-            uint8_t px = (uint8_t)(((p->sp_lo[i] >> (7 - off)) & 1) | (((p->sp_hi[i] >> (7 - off)) & 1) << 1));
+            uint8_t px = (uint8_t)(((p->sp_lo[k] >> (7 - off)) & 1) | (((p->sp_hi[k] >> (7 - off)) & 1) << 1));
             if (!px) continue;
-            p->sp_line[x] = (uint8_t)(px | ((p->sp_attr[i] & 3) + 4) << 2 | (p->sp_attr[i] & 0x20) |
-                                      (i == 0 ? 0x40 : 0));
+            p->sp_line[x] = (uint8_t)(px | ((p->sp_attr[k] & 3) + 4) << 2 | (p->sp_attr[k] & 0x20) |
+                                      (k == 0 ? 0x40 : 0));
         }
     }
 }
@@ -224,6 +242,7 @@ static void render_pixel(Ppu *p) {
 
 void ppu_step(Ppu *p) {
     int line = p->scanline, dot = p->dot;
+    p->dots++;
     int visible = line < 240, pre = line == 261;
 
     if ((visible || pre) && RENDERING(p)) {
@@ -237,10 +256,9 @@ void ppu_step(Ppu *p) {
         if (dot == 257) { load_shifters(p); copy_x(p); }
         if (pre && dot >= 280 && dot <= 304) copy_y(p);
         if (visible && dot >= 1 && dot <= 256) evaluation_dot(p);
-        if (dot == 257) {
-            if (visible) fetch_sprites(p);
-            else p->sp_count = 0, p->sp_zero_next = 0;
-        }
+        if (pre && dot == 257) p->sp_zero_next = 0;
+        if (dot >= 257 && dot <= 320) sprite_fetch_dot(p);
+        if (dot == 337 || dot == 339) mem_read(p, 0x2000 | (p->v & 0x0FFF));  /* unused NT fetches */
     }
     if (visible && dot >= 1 && dot <= 256) render_pixel(p);
     if (dot == 340) {  /* sprites evaluated on this line are drawn on the next */
@@ -284,6 +302,7 @@ void ppu_run(Ppu *p, int k) {
             p->dot = pos % 341;
             p->rendering_prev = RENDERING(p) != 0;
             p->nmi_out = (p->status & 0x80) && (p->ctrl & 0x80);
+            p->dots += (uint64_t)n;
             k -= n;
             continue;
         }
@@ -336,6 +355,7 @@ uint8_t ppu_reg_read(Ppu *p, uint16_t reg) {
             p->read_buf = mem_read(p, a - 0x1000);
         }
         p->v = (p->v + ((p->ctrl & 0x04) ? 32 : 1)) & 0x7FFF;
+        bus_address(p, p->v & 0x3FFF);  /* the bus then shows the new address (MMC3 A12) */
         break;
     }
     default: break;  /* write-only registers return the latch */
@@ -363,12 +383,13 @@ void ppu_reg_write(Ppu *p, uint16_t reg, uint8_t v) {
         break;
     case 6:
         if (!p->w) p->t = (uint16_t)((p->t & 0x00FF) | ((v & 0x3F) << 8));
-        else { p->t = (p->t & 0xFF00) | v; p->v = p->t; }
+        else { p->t = (p->t & 0xFF00) | v; p->v = p->t; bus_address(p, p->v & 0x3FFF); }
         p->w ^= 1;
         break;
     case 7:
         mem_write(p, p->v, v);
         p->v = (p->v + ((p->ctrl & 0x04) ? 32 : 1)) & 0x7FFF;
+        bus_address(p, p->v & 0x3FFF);
         break;
     default: break;
     }

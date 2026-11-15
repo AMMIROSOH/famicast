@@ -25,6 +25,7 @@ typedef struct Ppu {
     int scanline, dot;    /* scanline 0-261 (261 = pre-render), dot 0-340 */
     uint8_t odd_frame, rendering_prev;
     uint64_t frame;
+    uint64_t dots;        /* PPU dots since power-on (MMC3 A12 filter) */
     /* background pipeline */
     uint16_t bg_lo, bg_hi, at_lo, at_hi;
     uint8_t nt_byte, at_bits, pt_lo, pt_hi;
@@ -34,6 +35,7 @@ typedef struct Ppu {
     /* per-pixel sprite result for the current line, built at fetch time:
      * bits 0-1 pixel, 2-4 palette (4-7), 5 behind background, 6 sprite 0 */
     uint8_t sp_line[256];
+    uint8_t sp_fetch_lo;
     uint8_t sp_zero_on_line, sp_zero_next;
     /* sprite evaluation state (dots 1-256) */
     uint8_t sec_oam[32];
