@@ -63,6 +63,7 @@ static int nestest(const char *rom, long steps, int recomp) {
             fprintf(stderr, "no recompiled code for this ROM\n");
             return 2;
         }
+        c.yield = 1;  /* one block per call: every block boundary is checked */
         while (c.cycles <= (uint64_t)steps && !c.jammed) {
             printf("%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%" PRIu64 "\n",
                    c.pc, c.a, c.x, c.y, c.p, c.s, c.cycles);

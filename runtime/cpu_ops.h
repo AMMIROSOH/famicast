@@ -6,6 +6,16 @@
 
 #include "cpu.h"
 
+/* Recompiled code is built with CPU_OPS_OUTLINE: one out-of-line copy of the
+ * bus helpers per file keeps thousands of blocks small (CMakeLists.txt). */
+#if defined(CPU_OPS_OUTLINE) && defined(_MSC_VER)
+#define BUS_INLINE static __declspec(noinline)
+#elif defined(CPU_OPS_OUTLINE)
+#define BUS_INLINE static __attribute__((noinline))
+#else
+#define BUS_INLINE static inline
+#endif
+
 /* After every cycle the interrupt lines are sampled; an instruction ends by
  * checking the sample from its second-to-last cycle, as the 6502 does
  * (nesdev "CPU interrupts"). This also delays CLI/SEI/PLP by one instruction. */
@@ -16,7 +26,7 @@ static inline void poll_interrupts(Cpu *c) {
 /* One bus cycle. Mapped pages (RAM, ROM) are accessed inline while the bus
  * clock has room; everything else, and the cycle where the bus must catch
  * up, goes through cpu_read/cpu_write. Both paths do the same thing. */
-static inline uint8_t rd(Cpu *c, uint16_t a) {
+BUS_INLINE uint8_t rd(Cpu *c, uint16_t a) {
     c->cycles++;
     const uint8_t *m = c->read_map[a >> 11];
     int32_t due = c->bus_pending + c->bus_step;
@@ -30,7 +40,7 @@ static inline uint8_t rd(Cpu *c, uint16_t a) {
     poll_interrupts(c);
     return v;
 }
-static inline void wr(Cpu *c, uint16_t a, uint8_t v) {
+BUS_INLINE void wr(Cpu *c, uint16_t a, uint8_t v) {
     c->cycles++;
     uint8_t *m = c->write_map[a >> 11];
     int32_t due = c->bus_pending + c->bus_step;
@@ -44,7 +54,7 @@ static inline void wr(Cpu *c, uint16_t a, uint8_t v) {
 }
 /* A bus cycle reading a byte known at compile time (code bytes in ROM, used
  * by recompiled code): same timing and side effects as rd(), no load. */
-static inline uint8_t fetch_k(Cpu *c, uint16_t a, uint8_t k) {
+BUS_INLINE uint8_t fetch_k(Cpu *c, uint16_t a, uint8_t k) {
     c->cycles++;
     int32_t due = c->bus_pending + c->bus_step;
     if (c->read_map[a >> 11] && due < c->bus_budget) {

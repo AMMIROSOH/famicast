@@ -13,6 +13,9 @@ static const uint16_t NOISE_PERIOD[16] = {4, 8, 16, 32, 64, 96, 128, 160, 202, 2
 static const uint16_t DMC_PERIOD[16] = {428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54};
 
 enum { CPU_HZ = 1789773 };
+
+static void mixer_tables(void);
+static float PULSE_OUT[31], TND_OUT[203];  /* mixer tables, see mix() */
 /* $4017 writes take effect on even APU clocks: one cycle later when written
  * on the other parity (blargg 2005 "Clock Jitter"; parity chosen by test). */
 enum { FC_JITTER_PARITY = 1 };
@@ -22,6 +25,7 @@ static void half_frame(Apu *a);
 
 void apu_reset(Apu *a, Cart *cart, int power_on) {
     if (power_on) {
+        if (TND_OUT[1] == 0) mixer_tables();
         memset(a, 0, sizeof *a);
         a->noise.lfsr = 1;
         a->noise.period = a->noise.timer = NOISE_PERIOD[0];
@@ -197,7 +201,15 @@ static void timers(Apu *a) {
     }
 }
 
-/* ---- mixer (nesdev "APU Mixer", lookup-table form) ---- */
+/* ---- mixer (nesdev "APU Mixer", lookup-table form) ----
+ * Tables built once from the same float formulas, so the output is the same
+ * bit for bit; mix() runs every CPU cycle. */
+
+static void mixer_tables(void) {
+    for (int p = 1; p < 31; p++) PULSE_OUT[p] = 95.52f / (8128.0f / (float)p + 100.0f);
+    for (int t = 1; t < 203; t++) TND_OUT[t] = 163.67f / (24329.0f / (float)t + 100.0f);
+}
+
 static float mix(Apu *a) {
     int p = 0;
     for (int i = 0; i < 2; i++) {
@@ -208,10 +220,7 @@ static float mix(Apu *a) {
     int t = TRIANGLE[a->tri.seq];
     const Noise *n = &a->noise;
     int nz = (n->len && !(n->lfsr & 1)) ? (n->env.constant ? n->env.period : n->env.decay) : 0;
-    float pulse_out = p ? 95.52f / (8128.0f / (float)p + 100.0f) : 0.0f;
-    int tnd = 3 * t + 2 * nz + a->dmc.level;
-    float tnd_out = tnd ? 163.67f / (24329.0f / (float)tnd + 100.0f) : 0.0f;
-    return pulse_out + tnd_out;
+    return PULSE_OUT[p] + TND_OUT[3 * t + 2 * nz + a->dmc.level];
 }
 
 /* Box-filter to 48 kHz, then the NES's own output filters: high-pass 90 Hz

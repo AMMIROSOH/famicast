@@ -21,6 +21,16 @@ typedef struct {
     size_t rom_size;
 } RecompProgram;
 
+/* A block ends by continuing in the next block when it is known statically,
+ * with a guaranteed tail call (no stack growth), unless an interrupt is due
+ * or the dispatcher wants control (c->yield). Compilers without musttail
+ * return to the dispatcher instead. */
+#if defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 15)
+#define RECOMP_CHAIN(f) __attribute__((musttail)) return f(c)
+#else
+#define RECOMP_CHAIN(f) return
+#endif
+
 /* Defined by the generated code; NULL in builds without it (recomp_none.c). */
 extern const RecompProgram *const recomp_program;
 

@@ -64,6 +64,7 @@ static void sync_apu(Nes *n) {
  * than the current cycle, so one edge check per batch sees every rise. */
 static void catch_up(Nes *n) {
     ppu_run(&n->ppu, n->cpu.bus_pending);
+    n->cpu.yield |= n->ppu.frame_done;  /* the frame loop needs control back */
     if (n->ppu.nmi_out && !n->nmi_prev) n->cpu.nmi = 1;  /* NMI is edge-triggered */
     n->nmi_prev = n->ppu.nmi_out;
     n->cpu.bus_pending = 0;
@@ -326,7 +327,7 @@ int nes_state_load(Nes *n, const char *path, char *err, size_t errlen) {
 }
 
 void nes_run_frame(Nes *n) {
-    n->ppu.frame_done = 0;
+    n->ppu.frame_done = n->cpu.yield = 0;
     while (!n->ppu.frame_done && !n->cpu.jammed) nes_step(n);
 }
 

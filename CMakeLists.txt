@@ -123,6 +123,9 @@ function(nes_recompile name rom)
         DEPENDS "${rom}" ${hints} ${trace} ${played} nesrecomp
         COMMENT "Recompiling ${name}")
     add_library(${name}_code STATIC ${out})
+    # bus helpers out of line in generated code: thousands of blocks with them
+    # inlined outgrow the CPU caches (Kirby: 8.6 -> 4.6 MB, 19.9x -> 23.4x, docs/06)
+    target_compile_definitions(${name}_code PRIVATE CPU_OPS_OUTLINE)
     target_link_libraries(${name}_code PUBLIC nescpu)
     add_executable(${name}_headless runtime/tests/nes_headless.c)
     target_link_libraries(${name}_headless PRIVATE nescore ${name}_code)

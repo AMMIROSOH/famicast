@@ -96,6 +96,7 @@ static void print_cpu(const char *who, const Cpu *c) {
 static int run_frame_diff(Nes *n, Nes *ref, long frame) {
     n->ppu.frame_done = 0;
     while (!n->ppu.frame_done && !n->cpu.jammed) {
+        n->cpu.yield = 1;  /* one block per step: compare after each */
         Cpu before = n->cpu;
         nes_step(n);
         while (ref->cpu.cycles < n->cpu.cycles && !ref->cpu.jammed) cpu_step(&ref->cpu);
