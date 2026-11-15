@@ -1,18 +1,27 @@
-/* SDL3 frontend: runs a ROM in the interpreter (M3/M4).
- * Usage: nes ROM [--frames N]   (N > 0: quit after N frames, for smoke tests)
- * Keys: arrows = D-pad, X = A, Z = B, Enter = Start, Right Shift = Select,
- *       F5 = reset, Esc = quit. Gamepads: M4. */
+/* SDL3 frontend: runs a ROM in the interpreter.
+ * Usage: nes ROM [--frames N] [--record FILE] [--replay FILE]
+ *   --frames N   quit after N frames (smoke tests)
+ *   --record     save the input of every frame (runtime/input_log.h)
+ *   --replay     play a recording back; live input resumes when it ends
+ * Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =
+ * Select, F5 = reset, Esc = quit.
+ * Gamepads: first connected = player 1, second = player 2; hot-plug works.
+ * D-pad or left stick; East = A, South = B (NES layout: B left of A),
+ * Back = Select, Start = Start. */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "input_log.h"
 #include "nes.h"
 
-enum { NES_W = 256, NES_H = 240, SCALE = 3 };
+enum { NES_W = 256, NES_H = 240, SCALE = 3, STICK_DEADZONE = 16000 };
 static const double FRAME_NS = 1e9 / 60.0988;  /* NTSC frame rate, docs/04 */
 
-static uint8_t keyboard_pad(void) {
+static SDL_Gamepad *gamepads[2];
+
+static uint8_t keyboard_buttons(void) {
     const bool *k = SDL_GetKeyboardState(NULL);
     uint8_t b = 0;
     if (k[SDL_SCANCODE_X]) b |= PAD_A;
@@ -26,14 +35,59 @@ static uint8_t keyboard_pad(void) {
     return b;
 }
 
+static uint8_t gamepad_buttons(SDL_Gamepad *g) {
+    if (!g) return 0;
+    static const struct { SDL_GamepadButton button; uint8_t bit; } map[] = {
+        {SDL_GAMEPAD_BUTTON_EAST, PAD_A},       {SDL_GAMEPAD_BUTTON_SOUTH, PAD_B},
+        {SDL_GAMEPAD_BUTTON_BACK, PAD_SELECT},  {SDL_GAMEPAD_BUTTON_START, PAD_START},
+        {SDL_GAMEPAD_BUTTON_DPAD_UP, PAD_UP},   {SDL_GAMEPAD_BUTTON_DPAD_DOWN, PAD_DOWN},
+        {SDL_GAMEPAD_BUTTON_DPAD_LEFT, PAD_LEFT}, {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, PAD_RIGHT},
+    };
+    uint8_t b = 0;
+    for (size_t i = 0; i < sizeof map / sizeof *map; i++)
+        if (SDL_GetGamepadButton(g, map[i].button)) b |= map[i].bit;
+    int x = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFTX);
+    int y = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFTY);
+    if (x < -STICK_DEADZONE) b |= PAD_LEFT;
+    if (x > STICK_DEADZONE) b |= PAD_RIGHT;
+    if (y < -STICK_DEADZONE) b |= PAD_UP;
+    if (y > STICK_DEADZONE) b |= PAD_DOWN;
+    return b;
+}
+
+static void gamepad_event(const SDL_Event *e) {
+    if (e->type == SDL_EVENT_GAMEPAD_ADDED) {
+        for (int i = 0; i < 2; i++)
+            if (gamepads[i] && SDL_GetGamepadID(gamepads[i]) == e->gdevice.which) return;
+        for (int i = 0; i < 2; i++) {
+            if (gamepads[i]) continue;
+            gamepads[i] = SDL_OpenGamepad(e->gdevice.which);
+            if (gamepads[i]) SDL_Log("player %d: %s", i + 1, SDL_GetGamepadName(gamepads[i]));
+            return;
+        }
+    } else if (e->type == SDL_EVENT_GAMEPAD_REMOVED) {
+        for (int i = 0; i < 2; i++) {
+            if (gamepads[i] && SDL_GetGamepadID(gamepads[i]) == e->gdevice.which) {
+                SDL_Log("player %d: gamepad disconnected", i + 1);
+                SDL_CloseGamepad(gamepads[i]);
+                gamepads[i] = NULL;
+            }
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
-        SDL_Log("usage: nes ROM [--frames N]");
+        SDL_Log("usage: nes ROM [--frames N] [--record FILE] [--replay FILE]");
         return 2;
     }
     long max_frames = 0;
-    for (int i = 2; i + 1 < argc; i++)
-        if (!strcmp(argv[i], "--frames")) max_frames = atol(argv[i + 1]);
+    const char *record = NULL, *replay = NULL;
+    for (int i = 2; i + 1 < argc; i++) {
+        if (!strcmp(argv[i], "--frames")) max_frames = atol(argv[++i]);
+        else if (!strcmp(argv[i], "--record")) record = argv[++i];
+        else if (!strcmp(argv[i], "--replay")) replay = argv[++i];
+    }
 
     size_t size;
     void *rom = SDL_LoadFile(argv[1], &size);
@@ -49,7 +103,18 @@ int main(int argc, char **argv) {
     }
     SDL_free(rom);
 
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
+    InputLog replay_log = {0};
+    if (replay && input_log_load(replay, &replay_log) != 0) {
+        SDL_Log("%s: not an input recording", replay);
+        return 1;
+    }
+    FILE *record_file = NULL;
+    if (record && !(record_file = input_log_create(record))) {
+        SDL_Log("%s: cannot create", record);
+        return 1;
+    }
+
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         SDL_Log("SDL_Init: %s", SDL_GetError());
         return 1;
     }
@@ -69,15 +134,29 @@ int main(int argc, char **argv) {
     nes_palette_rgb(palette);
     static uint32_t fb[NES_W * NES_H];
     uint64_t next = SDL_GetTicksNS();
-    int running = 1;
+    int running = 1, reset_pressed = 0;
     for (long frame = 0; running && (max_frames <= 0 || frame < max_frames); frame++) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT) running = 0;
             if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) running = 0;
-            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_F5) nes_reset(&nes);
+            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_F5 && !e.key.repeat) reset_pressed = 1;
+            gamepad_event(&e);
         }
-        nes.pad[0] = keyboard_pad();
+        InputFrame in;
+        if (frame < replay_log.count) {
+            in = replay_log.frames[frame];
+        } else {
+            in.pad[0] = input_clean(keyboard_buttons() | gamepad_buttons(gamepads[0]));
+            in.pad[1] = input_clean(gamepad_buttons(gamepads[1]));
+            in.flags = reset_pressed ? INPUT_RESET : 0;
+        }
+        reset_pressed = 0;
+        if (record_file) input_log_write(record_file, in);
+        if (in.flags & INPUT_RESET) nes_reset(&nes);
+        nes.pad[0] = in.pad[0];
+        nes.pad[1] = in.pad[1];
+
         nes_run_frame(&nes);
         if (nes.cpu.jammed) {
             SDL_Log("CPU jammed at $%04X", nes.cpu.pc);
@@ -94,6 +173,10 @@ int main(int argc, char **argv) {
         if (next > now) SDL_DelayPrecise(next - now);
         else next = now;  /* fell behind: don't try to catch up */
     }
+    if (record_file) fclose(record_file);
+    input_log_free(&replay_log);
+    for (int i = 0; i < 2; i++)
+        if (gamepads[i]) SDL_CloseGamepad(gamepads[i]);
     cart_free(&nes.cart);
     SDL_DestroyTexture(tex);
     SDL_DestroyRenderer(ren);

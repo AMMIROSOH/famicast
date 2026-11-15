@@ -20,9 +20,7 @@ See [docs/02-architecture.md](docs/02-architecture.md) and the plan in
 ## Status
 M0-M3 done: verified opcode table and decoder, a reference interpreter (nestest,
 SingleStepTests) and a PPU passing 52 blargg-style test ROMs. Battle City runs
-on the interpreter: `build/nes "Battle City.nes"` (arrows, X = A, Z = B,
-Enter = Start, Right Shift = Select, F5 = reset). Next: gamepads (M4), then
-the recompiler (M5). See
+on the interpreter: `build/nes "Battle City.nes"`. Next: the recompiler (M5). See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
@@ -36,6 +34,14 @@ cmake --build build
 build/nes path/to/game.nes      # NROM games for now
 ```
 Headless (no SDL3): add `-DNES_FRONTEND=OFF`.
+
+## Controls
+Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =
+Select, F5 = reset, Esc = quit. Gamepads: first = player 1, second = player 2,
+hot-plug; D-pad or left stick, East = A, South = B, Back = Select, Start.
+
+Record and replay input: `build/nes game.nes --record run.nesi`, then
+`build/nes game.nes --replay run.nesi` (live input resumes at the end).
 
 ## Tests
 ```

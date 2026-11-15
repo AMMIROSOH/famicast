@@ -26,7 +26,8 @@ add_executable(cpu_tests runtime/tests/cpu_tests.c)
 target_link_libraries(cpu_tests PRIVATE nescpu)
 
 # The NES system: bus, PPU, cartridge (implements cpu_read/cpu_write).
-add_library(nescore STATIC runtime/nes.c runtime/ppu.c runtime/cart.c runtime/palette.c)
+add_library(nescore STATIC runtime/nes.c runtime/ppu.c runtime/cart.c runtime/palette.c
+    runtime/input_log.c)
 target_link_libraries(nescore PUBLIC nescpu)
 if(NOT MSVC)
     target_link_libraries(nescore PUBLIC m)

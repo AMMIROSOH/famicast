@@ -72,9 +72,16 @@ nes/
 
 ## M4 · Input
 - [x] $4016/$4017 controller shift registers, keyboard (done in M3).
-- [ ] SDL3 gamepads (hot-plug, two players), configurable keys.
-- **Exit:** Battle City playable in `--interp` mode with keyboard and a pad.
-  Record/replay of input to a file (needed for the regression tests below).
+- [x] SDL3 gamepads: two players, hot-plug, D-pad or left stick.
+- [x] Opposite directions (left+right, up+down) filtered, as on a real pad.
+- [x] Input recordings (`runtime/input_log.c`, `.nesi`): `--record` /
+  `--replay` in both `nes` and `nes_headless`; reset presses are recorded.
+- [x] `tests/test_input.py`: record → replay gives the identical frame;
+  a recording written by Python matches; reset flag replays (uses a local
+  Battle City ROM found by SHA-256, `tests/games.py`; skips without it).
+- [ ] Configurable key/button mapping: not needed yet; add when asked.
+- **Exit:** met for keyboard and recordings; gamepad code builds and runs but
+  was not tested with a physical pad on the dev machine (none connected).
 
 ## M5 · Recompiler v1 (NROM)
 - `emit_c.py`: one C function per block, all bus access through the runtime,

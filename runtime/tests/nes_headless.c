@@ -1,6 +1,7 @@
 /* Headless NES runner for tests (driven by tests/test_ppu.py).
  *
  *   nes_headless ROM [--frames N] [--blargg] [--peek ADDR] [--ppm FILE] [--hash]
+ *                    [--press F:MASK]... [--record FILE] [--replay FILE]
  *
  * --blargg  run until the test ROM reports through $6000 (protocol: $6001-$6003
  *           = DE B0 61, $6000 = $80 running, $81 reset wanted, <$80 result,
@@ -11,11 +12,14 @@
  * --hash    print an FNV-1a hash of the last frame (regression tests).
  * --press F:MASK  hold controller-1 buttons MASK (hex, see nes.h) during
  *           frames F..F+5; may be repeated (scripted input for tests).
+ * --record  save the input of every frame (runtime/input_log.h).
+ * --replay  use a recording's input; N defaults to its length.
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "input_log.h"
 #include "nes.h"
 
 static uint8_t *read_file(const char *path, long *size) {
@@ -65,13 +69,15 @@ int main(int argc, char **argv) {
     int blargg = 0, hash = 0, npress = 0;
     long press_frame[64];
     unsigned press_mask[64];
-    const char *ppm = NULL;
+    const char *ppm = NULL, *record = NULL, *replay = NULL;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]);
         else if (!strcmp(argv[i], "--peek") && i + 1 < argc) peek = strtol(argv[++i], NULL, 16);
         else if (!strcmp(argv[i], "--ppm") && i + 1 < argc) ppm = argv[++i];
         else if (!strcmp(argv[i], "--blargg")) blargg = 1;
         else if (!strcmp(argv[i], "--hash")) hash = 1;
+        else if (!strcmp(argv[i], "--record") && i + 1 < argc) record = argv[++i];
+        else if (!strcmp(argv[i], "--replay") && i + 1 < argc) replay = argv[++i];
         else if (!strcmp(argv[i], "--press") && i + 1 < argc && npress < 64 &&
                  sscanf(argv[++i], "%ld:%x", &press_frame[npress], &press_mask[npress]) == 2) npress++;
         else { fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
@@ -84,14 +90,26 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s: %s\n", argv[1], err);
         return 2;
     }
-    if (frames < 0) frames = blargg ? 3600 : 60;
+    InputLog log = {0};
+    if (replay && input_log_load(replay, &log) != 0) {
+        fprintf(stderr, "%s: not an input recording\n", replay);
+        return 2;
+    }
+    FILE *rec = NULL;
+    if (record && !(rec = input_log_create(record))) { perror(record); return 2; }
+    if (frames < 0) frames = replay ? log.count : blargg ? 3600 : 60;
 
     int result = 0;
     long reset_at = -1;
     for (long f = 0; f < frames; f++) {
-        nes.pad[0] = 0;
+        InputFrame in = {{0, 0}, 0};
+        if (f < log.count) in = log.frames[f];
         for (int i = 0; i < npress; i++)
-            if (f >= press_frame[i] && f < press_frame[i] + 6) nes.pad[0] |= (uint8_t)press_mask[i];
+            if (f >= press_frame[i] && f < press_frame[i] + 6) in.pad[0] |= (uint8_t)press_mask[i];
+        if (rec) input_log_write(rec, in);
+        if (in.flags & INPUT_RESET) nes_reset(&nes);
+        nes.pad[0] = in.pad[0];
+        nes.pad[1] = in.pad[1];
         nes_run_frame(&nes);
         if (nes.cpu.jammed) {
             printf("CPU jammed at frame %ld, PC=$%04X\n", f, nes.cpu.pc);
@@ -121,6 +139,8 @@ int main(int argc, char **argv) {
         printf("HASH %08X\n", h);
     }
     if (ppm) write_ppm(&nes, ppm);
+    if (rec) fclose(rec);
+    input_log_free(&log);
     cart_free(&nes.cart);
     free(rom);
     return result;

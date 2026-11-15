@@ -3,6 +3,19 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M4: input
+- Recording format (`runtime/input_log.h`): "NESI", version 1, then pad 1,
+  pad 2, flags per frame. Emulation is deterministic from power-on, so
+  replays are exact.
+- Battle City, 900 frames with Start/Start/Up/A presses: live run and replay
+  give the same frame hash (5EBB8292); with no input the hash differs
+  (F0AE1C10), so the presses reached the game through $4016.
+- A recording written by Python (independent of the C writer) replays to the
+  same hash as the `--press` run; a reset flag at frame 850 replays
+  deterministically and changes the result.
+- Gamepads: built against SDL3 3.4.20; no pad was connected on the dev
+  machine, so button mapping and hot-plug are untested on hardware.
+
 ## 2026-11-15 · M3: PPU, bus, NROM
 Run: `python -m unittest tests.test_ppu` (ROMs from the nes-test-roms mirror,
 commit `95d8f621`). First run of the new PPU: 33/50 passed. After the fixes
