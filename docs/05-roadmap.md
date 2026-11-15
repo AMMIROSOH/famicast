@@ -96,16 +96,23 @@ nes/
   zero divergences, zero interpreted instructions.
 - **Exit:** met.
 
-## M5b · Speed (new)
-Recompiled code is correct but not yet faster than the interpreter (37 s vs
-29 s for 10 minutes of Battle City; both ~16-21x real time). Most time is
-the PPU stepped every CPU cycle plus per-block dispatch. Ideas, each to be
-checked with `--diff`:
-- [ ] PPU catch-up only when the CPU touches PPU registers or an event is due
-  (NMI, sprite 0, frame end), instead of every cycle (helps both modes).
-- [ ] Operand bytes as constants (`rd` still ticks the clock, value folded).
-- [ ] Jumps between blocks of the same function as `goto`; fewer returns.
-- [ ] Skip the per-instruction interrupt check where none can arrive.
+## M5b · Speed
+- [x] `tools/bench.py`: best of 3 runs (desktop timings vary ±20%).
+- [x] Lazy PPU catch-up (`nes.c`): dots are counted and run in batches when
+  the CPU touches the PPU, OAM DMA runs, or vblank (NMI) is due.
+- [x] `ppu_run`: skips vblank lines in one step; sprite line buffer
+  (per-pixel lookup instead of scanning 8 sprites).
+- [x] Memory-map fast path in `rd`/`wr` (`cpu.h` read/write maps): RAM,
+  PRG RAM and ROM accesses are inline loads; helps both modes.
+- [x] Recompiled code with static PC: code bytes and PC values are constants
+  (`fetch_k`, `emit_c.static_body`).
+- Result (6,000 frames, best of 3): interpreter 27.7x → 31.0x real time,
+  recompiled 18.5x → 30.5x. CPU side alone (PPU stubbed): recompiled
+  1.8x faster than the interpreter (123x vs 69x real time). The PPU is now
+  ~75% of the time in both modes, so overall they are at parity.
+- [ ] Optional later: a faster PPU (specialized loop for visible-line dots, or a
+  scanline renderer used when no CPU access falls inside the line), checked
+  against the per-dot PPU with the test ROMs and frame hashes.
 
 ## M6 · APU + audio
 - Pulse ×2, triangle, noise, DMC, frame counter + IRQ; SDL3 audio stream with

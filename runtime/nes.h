@@ -17,7 +17,6 @@ typedef struct Nes {
     Ppu ppu;
     Cart cart;
     uint8_t ram[0x800];
-    uint8_t open_bus;     /* last value on the CPU data bus */
     uint8_t pad[2];       /* buttons held, set by the frontend */
     uint8_t pad_shift[2], strobe;
     uint8_t nmi_prev;
@@ -34,5 +33,6 @@ void nes_reset(Nes *n);                /* reset button */
 void nes_step(Nes *n);                 /* one block, or one interpreted instruction */
 void nes_run_frame(Nes *n);            /* run until the next vblank starts */
 uint8_t nes_peek(Nes *n, uint16_t a);  /* read without side effects (debug, tests) */
+void nes_sync(Nes *n);                 /* run the PPU up to the CPU (before inspecting it) */
 
 #endif

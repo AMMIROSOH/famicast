@@ -176,6 +176,19 @@ static void fetch_sprites(Ppu *p) {
         p->sp_hi[i] = hi;
     }
     p->sp_count = n;
+    /* front-most opaque sprite per pixel (lower slot wins), as render_pixel
+     * would find it by scanning the 8 slots */
+    memset(p->sp_line, 0, sizeof p->sp_line);
+    for (int i = n - 1; i >= 0; i--) {
+        for (int off = 0; off < 8; off++) {
+            int x = p->sp_x[i] + off;
+            if (x > 255) break;
+            uint8_t px = (uint8_t)(((p->sp_lo[i] >> (7 - off)) & 1) | (((p->sp_hi[i] >> (7 - off)) & 1) << 1));
+            if (!px) continue;
+            p->sp_line[x] = (uint8_t)(px | ((p->sp_attr[i] & 3) + 4) << 2 | (p->sp_attr[i] & 0x20) |
+                                      (i == 0 ? 0x40 : 0));
+        }
+    }
 }
 
 static void render_pixel(Ppu *p) {
@@ -187,18 +200,12 @@ static void render_pixel(Ppu *p) {
         bg = (uint8_t)(((p->bg_lo & bit) ? 1 : 0) | ((p->bg_hi & bit) ? 2 : 0));
         bg_pal = (uint8_t)(((p->at_lo & bit) ? 1 : 0) | ((p->at_hi & bit) ? 2 : 0));
     }
-    if ((p->mask & 0x10) && (x >= 8 || (p->mask & 0x04))) {
-        for (int i = 0; i < p->sp_count; i++) {
-            int off = x - p->sp_x[i];
-            if (off < 0 || off > 7) continue;
-            uint8_t px = (uint8_t)(((p->sp_lo[i] >> (7 - off)) & 1) | (((p->sp_hi[i] >> (7 - off)) & 1) << 1));
-            if (!px) continue;
-            sp = px;
-            sp_pal = (p->sp_attr[i] & 3) + 4;
-            sp_behind = p->sp_attr[i] & 0x20;
-            sp_is_zero = (i == 0 && p->sp_zero_on_line);
-            break;
-        }
+    if (p->sp_count && (p->mask & 0x10) && (x >= 8 || (p->mask & 0x04))) {
+        uint8_t s = p->sp_line[x];
+        sp = s & 3;
+        sp_pal = (s >> 2) & 7;
+        sp_behind = s & 0x20;
+        sp_is_zero = (s & 0x40) && p->sp_zero_on_line;
     }
     if (sp_is_zero && bg && x != 255) p->status |= 0x40;  /* sprite 0 hit */
 
@@ -260,6 +267,28 @@ void ppu_step(Ppu *p) {
             p->odd_frame ^= 1;
             p->frame++;
         }
+    }
+}
+
+/* Lines 241 (from dot 2) to 260 have no per-dot effects: no rendering, no
+ * fetches, the flags only change at (241,1) and (261,1), and the end-of-line
+ * sprite reset is a no-op after line 240. Skip them in one step. */
+void ppu_run(Ppu *p, int k) {
+    while (k > 0) {
+        int line = p->scanline;
+        if ((line == 241 && p->dot >= 2) || (line > 241 && line <= 260)) {
+            int left = (261 - line) * 341 - p->dot;  /* dots until (261, 0) */
+            int n = k < left ? k : left;
+            int pos = line * 341 + p->dot + n;
+            p->scanline = pos / 341;
+            p->dot = pos % 341;
+            p->rendering_prev = RENDERING(p) != 0;
+            p->nmi_out = (p->status & 0x80) && (p->ctrl & 0x80);
+            k -= n;
+            continue;
+        }
+        ppu_step(p);
+        k--;
     }
 }
 

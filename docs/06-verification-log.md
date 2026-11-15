@@ -3,6 +3,35 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M5b: speed
+Benchmark: `python tools/bench.py ROM EXE...` (Battle City, 6,000 frames of
+`tests/play_script.py` seed 1, best of 3; single runs vary by ±20%).
+
+| Step | Interpreter | Recompiled |
+|---|---|---|
+| M5 baseline | 27.7x | 18.5x |
+| lazy PPU catch-up | ~28x | ~20x |
+| + `ppu_run` vblank skip, sprite line buffer | 29.1x | 20.3x |
+| + memory-map fast path in rd/wr | 31.0x | 29.7x |
+| + static PC / constant code bytes | 31.0x | 30.5x |
+
+(times in multiples of real NES speed)
+
+Attribution (6,000 frames, interpreter): 3.39 s total; with no per-dot PPU
+work 1.02 s. Pixel output ~0.8 s, background fetches ~0.55 s, sprite
+evaluation ~0.27 s, per-dot bookkeeping ~0.75 s. With the PPU stubbed out,
+CPU side only: interpreter 1.44 s, recompiled 0.81 s (1.8x).
+
+Correctness after every step: frame hash of the 6,000-frame session
+unchanged (EBB97DBA), 10-minute session unchanged (9A346143) and `--diff`
+identical for 36,000 frames, all 52 test ROMs, nestest (interpreted and
+recompiled), SingleStepTests.
+
+Bug found on the way: the first lazy catch-up left the dot after a $2000
+write pending, so enabling NMI during vblank fired late (ppu_vbl_nmi 04 and
+07 failed). Fix: after any PPU register access, the rest of that CPU cycle
+is run at once.
+
 ## 2026-11-15 · M5: recompiler v1
 - **nestest, recompiled** (`nestest_recomp_tests`, hints in
   `tests/data/nestest.toml`): 7,404 instructions in 2,653 blocks. The CPU

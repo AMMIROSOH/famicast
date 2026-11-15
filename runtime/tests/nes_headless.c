@@ -19,10 +19,12 @@
  * --diff    run a pure-interpreter NES in lockstep and compare CPU, RAM and PPU
  *           state after every recompiled block; stop at the first difference.
  * --misses  print how many instructions were interpreted, and where.
+ * --time    print the emulation time and speed relative to a real NES.
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "input_log.h"
 #include "nes.h"
@@ -55,6 +57,8 @@ static void write_ppm(Nes *n, const char *path) {
 
 /* ---- lockstep comparison (--diff) ---- */
 static const char *compare(Nes *a, Nes *b) {
+    nes_sync(a);
+    nes_sync(b);
     const Cpu *x = &a->cpu, *y = &b->cpu;
     if (x->pc != y->pc || x->a != y->a || x->x != y->x || x->y != y->y || x->s != y->s ||
         x->p != y->p || x->cycles != y->cycles || x->nmi != y->nmi || x->poll_prev != y->poll_prev)
@@ -125,7 +129,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     long frames = -1, peek = -1;
-    int blargg = 0, hash = 0, npress = 0, interp = 0, diff = 0, misses = 0;
+    int blargg = 0, hash = 0, npress = 0, interp = 0, diff = 0, misses = 0, timing = 0;
     long press_frame[64];
     unsigned press_mask[64];
     const char *ppm = NULL, *record = NULL, *replay = NULL;
@@ -138,6 +142,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--interp")) interp = 1;
         else if (!strcmp(argv[i], "--diff")) diff = 1;
         else if (!strcmp(argv[i], "--misses")) misses = 1;
+        else if (!strcmp(argv[i], "--time")) timing = 1;
         else if (!strcmp(argv[i], "--record") && i + 1 < argc) record = argv[++i];
         else if (!strcmp(argv[i], "--replay") && i + 1 < argc) replay = argv[++i];
         else if (!strcmp(argv[i], "--press") && i + 1 < argc && npress < 64 &&
@@ -173,7 +178,9 @@ int main(int argc, char **argv) {
     if (frames < 0) frames = replay ? log.count : blargg ? 3600 : 60;
 
     int result = 0;
-    long reset_at = -1;
+    long reset_at = -1, frames_run = 0;
+    struct timespec t0, t1;
+    timespec_get(&t0, TIME_UTC);
     for (long f = 0; f < frames; f++) {
         InputFrame in = {{0, 0}, 0};
         if (f < log.count) in = log.frames[f];
@@ -181,6 +188,7 @@ int main(int argc, char **argv) {
             if (f >= press_frame[i] && f < press_frame[i] + 6) in.pad[0] |= (uint8_t)press_mask[i];
         if (rec) input_log_write(rec, in);
         if (in.flags & INPUT_RESET) { nes_reset(&nes); if (diff) nes_reset(&ref); }
+        frames_run++;
         nes.pad[0] = ref.pad[0] = in.pad[0];
         nes.pad[1] = ref.pad[1] = in.pad[1];
         if (!diff) nes_run_frame(&nes);
@@ -215,6 +223,11 @@ int main(int argc, char **argv) {
         uint32_t h = 2166136261u;
         for (int i = 0; i < 256 * 240; i++) h = (h ^ nes.ppu.fb[i]) * 16777619u;
         printf("HASH %08X\n", h);
+    }
+    timespec_get(&t1, TIME_UTC);
+    if (timing) {
+        double sec = (double)(t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+        printf("TIME %.2f s for %ld frames (%.1fx real time)\n", sec, frames_run, frames_run / 60.0988 / sec);
     }
     if (diff) printf("DIFF OK: %ld frames, recompiled and interpreter identical\n", frames);
     if (misses) print_misses(&nes);

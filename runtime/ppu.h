@@ -31,6 +31,9 @@ typedef struct Ppu {
     /* sprites selected for the current scanline */
     int sp_count;
     uint8_t sp_x[8], sp_attr[8], sp_lo[8], sp_hi[8];
+    /* per-pixel sprite result for the current line, built at fetch time:
+     * bits 0-1 pixel, 2-4 palette (4-7), 5 behind background, 6 sprite 0 */
+    uint8_t sp_line[256];
     uint8_t sp_zero_on_line, sp_zero_next;
     /* sprite evaluation state (dots 1-256) */
     uint8_t sec_oam[32];
@@ -45,6 +48,7 @@ typedef struct Ppu {
 
 void ppu_reset(Ppu *p, Cart *cart);
 void ppu_step(Ppu *p);
+void ppu_run(Ppu *p, int dots);  /* = dots x ppu_step, skipping idle vblank lines */
 uint8_t ppu_reg_read(Ppu *p, uint16_t reg);   /* reg = 0..7 */
 void ppu_reg_write(Ppu *p, uint16_t reg, uint8_t v);
 void ppu_oam_dma_write(Ppu *p, uint8_t v);    /* one byte of $4014 DMA */

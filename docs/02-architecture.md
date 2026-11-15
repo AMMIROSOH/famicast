@@ -41,9 +41,12 @@ typedef struct { uint8_t a, x, y, s, p; uint16_t pc; uint64_t cycles; } Cpu;
 - All memory access goes through `bus_read(addr)` / `bus_write(addr, v)`.
   The emitter may inline a direct array access only when the address is a
   constant known to be internal RAM ($0000-$07FF, mirrored) or fixed PRG-ROM.
-- Every bus access first advances the PPU/APU to the current CPU cycle
-  ("catch-up"), so register reads/writes happen at the right dot without
-  splitting blocks.
+- The PPU is caught up lazily: the bus counts pending dots and runs them in
+  a batch when the CPU touches the PPU, OAM DMA runs, or vblank is due, so
+  register reads/writes happen at the right dot without splitting blocks.
+- `Cpu` carries per-2 KB read/write maps; RAM, PRG RAM and ROM accesses are
+  inline loads while the lazy clock has room (`cpu_ops.h`). A bus that maps
+  nothing (the CPU test bus) sees every access through `cpu_read/cpu_write`.
 
 ## Recompiled code
 - **Decoder**: recursive descent from the reset/NMI/IRQ vectors plus extra

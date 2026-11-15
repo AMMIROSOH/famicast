@@ -13,16 +13,48 @@ static inline void poll_interrupts(Cpu *c) {
     c->poll_prev = c->poll;
     c->poll = c->nmi || (c->irq && !(c->p & FLAG_I));
 }
+/* One bus cycle. Mapped pages (RAM, ROM) are accessed inline while the bus
+ * clock has room; everything else, and the cycle where the bus must catch
+ * up, goes through cpu_read/cpu_write. Both paths do the same thing. */
 static inline uint8_t rd(Cpu *c, uint16_t a) {
     c->cycles++;
-    uint8_t v = cpu_read(c, a);
+    const uint8_t *m = c->read_map[a >> 11];
+    int32_t due = c->bus_pending + c->bus_step;
+    uint8_t v;
+    if (m && due < c->bus_budget) {
+        c->bus_pending = due;
+        v = c->open_bus = m[a & 0x7FF];
+    } else {
+        v = cpu_read(c, a);
+    }
     poll_interrupts(c);
     return v;
 }
 static inline void wr(Cpu *c, uint16_t a, uint8_t v) {
     c->cycles++;
-    cpu_write(c, a, v);
+    uint8_t *m = c->write_map[a >> 11];
+    int32_t due = c->bus_pending + c->bus_step;
+    if (m && due < c->bus_budget) {
+        c->bus_pending = due;
+        c->open_bus = m[a & 0x7FF] = v;
+    } else {
+        cpu_write(c, a, v);
+    }
     poll_interrupts(c);
+}
+/* A bus cycle reading a byte known at compile time (code bytes in ROM, used
+ * by recompiled code): same timing and side effects as rd(), no load. */
+static inline uint8_t fetch_k(Cpu *c, uint16_t a, uint8_t k) {
+    c->cycles++;
+    int32_t due = c->bus_pending + c->bus_step;
+    if (c->read_map[a >> 11] && due < c->bus_budget) {
+        c->bus_pending = due;
+        c->open_bus = k;
+    } else {
+        (void)cpu_read(c, a);
+    }
+    poll_interrupts(c);
+    return k;
 }
 static inline void push(Cpu *c, uint8_t v) { wr(c, 0x100 | c->s, v); c->s--; }
 static inline uint8_t pull(Cpu *c) { c->s++; return rd(c, 0x100 | c->s); }

@@ -20,6 +20,16 @@ typedef struct Cpu {
     uint8_t poll, poll_prev;  /* interrupt wanted, sampled after each cycle */
     uint64_t cycles;  /* CPU cycles since power-on; +1 per bus access */
     void *bus;        /* owner's context for cpu_read/cpu_write */
+    uint8_t open_bus; /* last value on the data bus */
+    /* Optional fast path, set up by the bus (all NULL/0 = every access goes
+     * through cpu_read/cpu_write, as the test bus wants). read_map/write_map:
+     * per 2 KB page, memory that can be accessed directly with no side
+     * effects. bus_pending/bus_budget: the bus's lazy clock (nes.c: PPU dots
+     * not yet run, and how many may pile up before the PPU must run);
+     * bus_step is added per fast access. */
+    const uint8_t *read_map[32];
+    uint8_t *write_map[32];
+    int32_t bus_pending, bus_budget, bus_step;
 } Cpu;
 
 /* Implemented by whatever bus is linked with the core (NES bus, test bus).
