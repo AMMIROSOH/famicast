@@ -7,17 +7,20 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
     add_compile_options(-Wall -Wextra)
 endif()
 
-find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
+# The recompiler is a build-time tool. It also writes the interpreter's opcode
+# switch, from the same table and C templates (recomp/ops.c, recomp/c6502.c),
+# so instruction semantics exist once.
+add_executable(nesrecomp recomp/main.c recomp/ops.c recomp/c6502.c recomp/analyze.c
+    recomp/emit.c runtime/cart.c)
+target_include_directories(nesrecomp PRIVATE runtime)
 
-# The interpreter's opcode switch is generated from recomp/ops.py, the same
-# table and C templates the recompiler uses (recomp/c6502.py).
 set(GEN_DIR ${CMAKE_BINARY_DIR}/gen)
 add_custom_command(
     OUTPUT ${GEN_DIR}/cpu_switch.inc
-    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/gen_cpu_switch.py ${GEN_DIR}/cpu_switch.inc
-    DEPENDS tools/gen_cpu_switch.py recomp/c6502.py recomp/ops.py
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Generating CPU switch from recomp/ops.py")
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN_DIR}
+    COMMAND nesrecomp --cpu-switch ${GEN_DIR}/cpu_switch.inc
+    DEPENDS nesrecomp
+    COMMENT "Generating the interpreter's opcode switch")
 
 add_library(nescpu STATIC runtime/cpu.c ${GEN_DIR}/cpu_switch.inc)
 target_include_directories(nescpu PUBLIC runtime PRIVATE ${GEN_DIR})
@@ -58,9 +61,15 @@ if(NES_FRONTEND)
 endif()
 
 # ---- Recompiled programs (M5) ----
-# nes_recompile(NAME ROM [HINTS]) generates ${GEN_DIR}/NAME.c with
-# `python -m recomp` and builds NAME_headless (and NAME with the frontend).
-file(GLOB RECOMP_PY ${CMAKE_SOURCE_DIR}/recomp/*.py)
+# nes_recompile(NAME ROM [HINTS]) generates ${GEN_DIR}/NAME.c with nesrecomp
+# (the ROM is embedded) and builds NAME_headless (and NAME with the frontend).
+#
+# NES_AUTO_HINTS: first run the game in the interpreter with scripted input
+# (nes_headless --play) and give every address it ran to nesrecomp, so code
+# reached in that session is recompiled without hand-made hints. The merged
+# hints are written to ${GEN_DIR}/NAME.toml; copy them to games/ to keep them.
+option(NES_AUTO_HINTS "Trace each game in the interpreter before recompiling it" OFF)
+set(NES_AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by NES_AUTO_HINTS")
 function(nes_recompile name rom)
     set(out ${GEN_DIR}/${name}.c)
     set(hints "")
@@ -69,11 +78,20 @@ function(nes_recompile name rom)
         set(hints "${ARGV2}")
         set(hint_args --hints "${ARGV2}")
     endif()
+    set(trace "")
+    if(NES_AUTO_HINTS)
+        set(trace ${GEN_DIR}/${name}.trace)
+        add_custom_command(
+            OUTPUT ${trace}
+            COMMAND nes_headless "${rom}" --play 1 --frames ${NES_AUTO_HINTS_FRAMES} --misses --out ${trace}
+            DEPENDS "${rom}" nes_headless
+            COMMENT "Tracing ${name} in the interpreter (${NES_AUTO_HINTS_FRAMES} frames)")
+        list(APPEND hint_args --misses ${trace} --save-hints ${GEN_DIR}/${name}.toml)
+    endif()
     add_custom_command(
         OUTPUT ${out}
-        COMMAND Python3::Interpreter -m recomp "${rom}" -o ${out} ${hint_args}
-        DEPENDS "${rom}" ${hints} ${RECOMP_PY}
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMAND nesrecomp "${rom}" -o ${out} ${hint_args}
+        DEPENDS "${rom}" ${hints} ${trace} nesrecomp
         COMMENT "Recompiling ${name}")
     add_library(${name}_code STATIC ${out})
     target_link_libraries(${name}_code PUBLIC nescpu)

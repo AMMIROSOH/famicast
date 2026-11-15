@@ -1,5 +1,6 @@
-/* SDL3 frontend: runs a ROM in the interpreter.
+/* SDL3 frontend: runs a ROM (recompiled code where linked, else interpreted).
  * Usage: nes ROM [--frames N] [--record FILE] [--replay FILE]
+ *   ROM may be left out in recompiled builds: the ROM they embed is used.
  *   --frames N   quit after N frames (smoke tests)
  *   --record     save the input of every frame (runtime/input_log.h)
  *   --replay     play a recording back; live input resumes when it ends
@@ -16,6 +17,7 @@
 
 #include "input_log.h"
 #include "nes.h"
+#include "recomp_rt.h"
 
 enum { NES_W = 256, NES_H = 240, SCALE = 3, STICK_DEADZONE = 16000 };
 static const double FRAME_NS = 1e9 / 60.0988;  /* NTSC frame rate, docs/04 */
@@ -78,34 +80,38 @@ static void gamepad_event(const SDL_Event *e) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
+    const char *rom_path = argc > 1 && argv[1][0] != '-' ? argv[1] : NULL;
+    const int embedded = !rom_path && recomp_program && recomp_program->rom;
+    if (!rom_path && !embedded) {
         SDL_Log("usage: nes ROM [--frames N] [--record FILE] [--replay FILE]");
         return 2;
     }
     long max_frames = 0;
     const char *record = NULL, *replay = NULL;
-    for (int i = 2; i + 1 < argc; i++) {
+    for (int i = rom_path ? 2 : 1; i + 1 < argc; i++) {
         if (!strcmp(argv[i], "--frames")) max_frames = atol(argv[++i]);
         else if (!strcmp(argv[i], "--record")) record = argv[++i];
         else if (!strcmp(argv[i], "--replay")) replay = argv[++i];
     }
 
-    size_t size;
-    void *rom = SDL_LoadFile(argv[1], &size);
-    if (!rom) {
-        SDL_Log("%s: %s", argv[1], SDL_GetError());
+    size_t size = embedded ? recomp_program->rom_size : 0;
+    void *rom = embedded ? NULL : SDL_LoadFile(rom_path, &size);
+    if (!embedded && !rom) {
+        SDL_Log("%s: %s", rom_path, SDL_GetError());
         return 1;
     }
     static Nes nes;
     char err[128];
-    if (nes_load(&nes, rom, size, err, sizeof err) != 0) {
-        SDL_Log("%s: %s", argv[1], err);
+    if (nes_load(&nes, embedded ? recomp_program->rom : rom, size, err, sizeof err) != 0) {
+        SDL_Log("%s: %s", embedded ? recomp_program->rom_name : rom_path, err);
         return 1;
     }
     SDL_free(rom);
-    /* battery-backed PRG RAM (saves): ROM path + ".sav", 8 KB */
+    /* battery-backed PRG RAM (saves): ROM path + ".sav", 8 KB; for the
+     * embedded ROM, its file name + ".sav" next to the program */
     char sav_path[1024];
-    SDL_snprintf(sav_path, sizeof sav_path, "%s.sav", argv[1]);
+    if (embedded) SDL_snprintf(sav_path, sizeof sav_path, "%s%s.sav", SDL_GetBasePath(), recomp_program->rom_name);
+    else SDL_snprintf(sav_path, sizeof sav_path, "%s.sav", rom_path);
     if (nes.cart.battery) {
         size_t sav_size;
         void *sav = SDL_LoadFile(sav_path, &sav_size);

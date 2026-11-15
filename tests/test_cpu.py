@@ -9,7 +9,7 @@ import re
 import subprocess
 import unittest
 
-from recomp.ops import OPS
+from tests.nesrecomp import BUILT, ops
 from tests.fetch_test_roms import ROMS, fetch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -48,7 +48,8 @@ SST_DISAGREE = {
 class TestSingleStep(unittest.TestCase):
     def test_every_opcode(self):
         required = os.environ.get("NES_SST_REQUIRED") == "1"
-        for op in OPS:
+        self.assertTrue(BUILT, "nesrecomp (the opcode table) is built with the runtime")
+        for op in ops():
             if op.mn == "KIL" or op.code in SST_DISAGREE:
                 continue  # KIL: registers match; the 11-cycle bus pattern of a jammed CPU is not modelled
             path = os.path.join(ROMS, "sst", "%02x.bin" % op.code)

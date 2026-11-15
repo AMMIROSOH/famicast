@@ -3,6 +3,43 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M8a: recompiler in C, embedded ROM, auto hints
+- **Port check**: before deleting the Python recompiler, both versions
+  generated code for nestest and the 8 games of the M7b table with the same
+  hints (Python's region order made deterministic first). Output identical
+  byte for byte apart from the header and the new embedded-ROM trailer; the
+  interpreter switch (`nesrecomp --cpu-switch`) identical too. Kirby:
+  0.15 s (C) vs 0.23 s (Python).
+- **Tests**: those that imported `recomp/` now drive `nesrecomp` and read the
+  generated C back (`tests/nesrecomp.py`); same assertions, 26/26 pass.
+  A helper bug showed on the way: writing the IRQ vector with
+  `data[-2:0] = ...` inserted bytes instead of replacing them.
+- **Scripted input** moved from `tests/play_script.py` to
+  `nes_headless --play SEED` (same pattern, xorshift32 instead of Python's
+  `random`), so sessions differ from M7b. With the old hints, Metroid,
+  Mega Man and SMB/Duck Hunt reached code not yet recompiled (38,990 /
+  17,717 / 2,659 interpreted steps): what auto hints are for.
+- **Trace**: `--misses` now counts in interpreter-only runs too, so one run
+  of `nes_headless` lists every instruction executed.
+- **Auto hints** (`-DNES_AUTO_HINTS=ON`, 6,000 frames, seed 1), then
+  `--play 1 --diff --misses` on each build, ROM taken from the executable:
+
+| Game | `--diff` | Interpreted steps | What remains |
+|---|---|---|---|
+| Battle City | identical | 0 | |
+| Metroid (E) | identical | 0 | |
+| Mega Man (E) | identical | 0 | |
+| Arkista's Ring (U) | identical | 0 | |
+| Kirby's Adventure (U) | identical | 25,103 | RAM code, 18 window straddles |
+| Solstice (E) | identical | 5,996 | NMI handler in RAM |
+| Chiller (U) | identical | 0 | |
+| Super Mario Bros / Duck Hunt (U) | identical | 1,785 | RAM code |
+
+  Kirby from no hints at all: one trace pass gives 25,103 interpreted steps,
+  as good as the hand-run M7b loop (25,118). Building the 9 programs with
+  tracing: 31 s (parallel). The merged hints were copied to `games/`, so the
+  default build gives the same table.
+
 ## 2026-11-15 · M7b: bank-aware recompiler
 Scripted play (`tests/play_script.py`, 6,000 frames, seed 1), feedback loop
 (`--misses` → `recomp.suggest` → rebuild) until stable, then `--diff`:

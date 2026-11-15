@@ -9,9 +9,9 @@ only when that test passes in CI.
 ```
 nes/
   CMakeLists.txt
-  recomp/            Python: ines.py, ops.py, decoder.py, c6502.py (C per opcode),
-                     blocks.py, emit_c.py, cli.py
-  tools/             gen_cpu_switch.py, import_r2_6502.py
+  recomp/            nesrecomp (C, since M8a): ops.c, c6502.c (C per opcode),
+                     analyze.c (decode, blocks, banks), emit.c, main.c
+  tools/             import_r2_6502.py, bench.py, smoke_games.py
   runtime/
     cpu.h cpu_ops.h cpu.c  bus.c  ppu.c  apu.c  input.c  dispatch.c
     mappers/  nrom.c mmc1.c uxrom.c cnrom.c ...
@@ -145,7 +145,7 @@ M7a (runtime):
   cpu_dummy_reads (CNROM) pass; `tools/smoke_games.py` boots a sample of the
   local collection per mapper (52/53 ok, see 06).
 M7b (recompiler):
-- [x] Bank-aware regions (`recomp/banks.py`): code compiled per (PRG bank,
+- [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color
   Dreams/GxROM), looked up by the bank mapped at run time; NROM/CNROM stay
   one region. A block returns after a store that may hit a mapper register
@@ -162,8 +162,22 @@ M7b (recompiler):
 - **Exit:** met.
 
 ## M8 · Tooling and polish
+M8a (recompiler in the build):
+- [x] Recompiler ported from Python to C (`nesrecomp`, `recomp/*.c`); its
+  output is byte-identical to the Python version's for nestest and the 8
+  test games, and so is the interpreter switch it writes. The build needs
+  no Python; the tests still use it.
+- [x] The generated C embeds the whole ROM; the executables run without a
+  ROM path (data is read through unbounded pointers, so nothing is left out).
+- [x] `-DNES_AUTO_HINTS=ON`: the build traces each game in the interpreter
+  (`nes_headless --play 1 --misses`, `NES_AUTO_HINTS_FRAMES`) and gives the
+  trace to `nesrecomp --misses`; one pass, no rebuild loop.
+- [x] Python tests that imported `recomp/` now drive `nesrecomp`
+  (`tests/nesrecomp.py`); `tests/play_script.py` became `nes_headless --play`.
+- **Exit:** met (06).
+
+M8b:
 - Coverage report (share of cycles in recompiled vs fallback code).
-- Auto-suggest `game.toml` entries from fallback logs.
 - Save states (interpreter and recompiled share one state format).
 - Optional: frame-hash regression suite for several games.
 

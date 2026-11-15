@@ -1,0 +1,159 @@
+/* Recursive-descent decoding, basic blocks and PRG banking.
+ *
+ * Instructions are keyed by address, so two decodes may overlap (e.g. the SMB
+ * `BIT abs` trick, where the operand bytes are also an instruction reached by
+ * a jump). Code that cannot be followed statically (JMP (ind), RTS used as a
+ * jump, jumps into RAM) is left to the runtime's interpreter (docs/02). */
+#include <stdlib.h>
+#include <string.h>
+
+#include "recomp.h"
+
+Instr decode_at(const uint8_t *mem, uint16_t pc) {
+    Instr i = {pc, 0, 0, &OPS[mem[pc]]};
+    i.size = i.op->size;
+    if (i.size == 2) i.operand = mem[(uint16_t)(pc + 1)];
+    else if (i.size == 3) i.operand = (uint16_t)(mem[(uint16_t)(pc + 1)] | mem[(uint16_t)(pc + 2)] << 8);
+    return i;
+}
+
+int ins_target(const Instr *i) {
+    if (is_branch(i->op->mn)) return (uint16_t)(i->pc + 2 + (int8_t)i->operand);
+    if ((!strcmp(i->op->mn, "JMP") || !strcmp(i->op->mn, "JSR")) && !strcmp(i->op->mode, "ABS")) return i->operand;
+    return -1;
+}
+
+static int flow_end(const char *mn) {
+    return !strcmp(mn, "JMP") || !strcmp(mn, "RTS") || !strcmp(mn, "RTI") || !strcmp(mn, "BRK") || !strcmp(mn, "KIL");
+}
+
+int falls_through(const Instr *i) { return !flow_end(i->op->mn); }
+
+int is_transfer(const Instr *i) {
+    return is_branch(i->op->mn) || flow_end(i->op->mn) || !strcmp(i->op->mn, "JSR");
+}
+
+void explore(Program *prog, const uint8_t *mem, uint32_t lo, uint32_t hi, const AddrSet *no_return) {
+    memset(&prog->instrs, 0, sizeof prog->instrs);
+    memset(&prog->indirect, 0, sizeof prog->indirect);
+    memset(&prog->external, 0, sizeof prog->external);
+    uint16_t *work = malloc(sizeof *work * 0x30000);  /* entries + 2 pushes per decoded pc */
+    size_t n = 0;
+    for (uint32_t a = 0; a < 0x10000; a++)
+        if (prog->entries.b[a]) work[n++] = (uint16_t)a;
+    while (n) {
+        uint16_t pc = work[--n];
+        if (prog->instrs.b[pc]) continue;
+        if (pc < lo || pc >= hi) { prog->external.b[pc] = 1; continue; }
+        Instr ins = decode_at(mem, pc);
+        if ((uint32_t)pc + ins.size > hi) { prog->external.b[pc] = 1; continue; }  /* operand in the next window */
+        prog->instrs.b[pc] = 1;
+        if (!strcmp(ins.op->mn, "JMP") && !strcmp(ins.op->mode, "IND")) prog->indirect.b[pc] = 1;
+        int t = ins_target(&ins);
+        if (t >= 0) {
+            work[n++] = (uint16_t)t;
+            if (!strcmp(ins.op->mn, "JSR")) prog->entries.b[t] = 1;
+        }
+        if (falls_through(&ins) && !(!strcmp(ins.op->mn, "JSR") && no_return && no_return->b[t]))
+            work[n++] = (uint16_t)(pc + ins.size);
+    }
+    free(work);
+}
+
+void block_starts(const Program *prog, const uint8_t *mem, AddrSet *starts) {
+    static uint8_t preds[0x10000];
+    memset(preds, 0, sizeof preds);
+    memcpy(starts, &prog->entries, sizeof *starts);
+    for (uint32_t pc = 0; pc < 0x10000; pc++) {
+        if (!prog->instrs.b[pc]) continue;
+        Instr ins = decode_at(mem, (uint16_t)pc);
+        int t = ins_target(&ins);
+        uint16_t nxt = (uint16_t)(pc + ins.size);
+        if (t >= 0 && prog->instrs.b[t]) starts->b[t] = 1;
+        if (is_transfer(&ins) && prog->instrs.b[nxt]) starts->b[nxt] = 1;
+        /* two decode chains meeting (overlapping instructions) */
+        if ((!is_transfer(&ins) || is_branch(ins.op->mn) || !strcmp(ins.op->mn, "JSR")) &&
+            falls_through(&ins) && prog->instrs.b[nxt] && preds[nxt] < 2)
+            preds[nxt]++;
+    }
+    for (uint32_t pc = 0; pc < 0x10000; pc++) {
+        if (preds[pc] > 1) starts->b[pc] = 1;
+        starts->b[pc] &= prog->instrs.b[pc];
+    }
+}
+
+void chain_starts(const uint8_t *mem, const AddrSet *misses, AddrSet *starts) {
+    static AddrSet follows, seen;
+    static uint16_t succ[0x10000][2];
+    memset(&follows, 0, sizeof follows);
+    for (uint32_t pc = 0; pc < 0x10000; pc++) {
+        succ[pc][0] = succ[pc][1] = 0;  /* 0 = none ($0000 is never a ROM miss) */
+        if (!misses->b[pc]) continue;
+        Instr ins = decode_at(mem, (uint16_t)pc);
+        int t = ins_target(&ins);
+        uint16_t nxt = (uint16_t)(pc + ins.size);
+        if (falls_through(&ins) && misses->b[nxt]) succ[pc][0] = nxt, follows.b[nxt] = 1;
+        if (t >= 0 && misses->b[t]) succ[pc][1] = (uint16_t)t, follows.b[t] = 1;
+    }
+    for (uint32_t pc = 0; pc < 0x10000; pc++) starts->b[pc] = misses->b[pc] && !follows.b[pc];
+    /* A loop entered from code the decoder cannot see (RAM, another bank) has
+     * no start of its own: take its lowest address until all is reachable. */
+    uint16_t *work = malloc(sizeof *work * 0x30000);  /* starts + 2 pushes per pc */
+    for (;;) {
+        memset(&seen, 0, sizeof seen);
+        size_t n = 0;
+        for (uint32_t pc = 0; pc < 0x10000; pc++)
+            if (starts->b[pc]) work[n++] = (uint16_t)pc;
+        while (n) {
+            uint16_t pc = work[--n];
+            if (seen.b[pc]) continue;
+            seen.b[pc] = 1;
+            for (int k = 0; k < 2; k++)
+                if (succ[pc][k]) work[n++] = succ[pc][k];
+        }
+        uint32_t rest = 0;
+        while (rest < 0x10000 && !(misses->b[rest] && !seen.b[rest])) rest++;
+        if (rest == 0x10000) break;
+        starts->b[rest] = 1;
+    }
+    free(work);
+}
+
+/* ---- banking ----
+ * Recompiled code is identified by (8 KB PRG bank, CPU window); window w
+ * covers $8000 + w * $2000. The runtime looks code up by the bank mapped at
+ * that moment, so the layout below is only where static exploration starts:
+ * a wrong guess costs coverage (the interpreter runs that code), never
+ * correctness. */
+
+int assumed_layout(const Rom *r, int layout[4]) {
+    int n8 = (int)(r->prg_size / 0x2000);
+    for (int w = 0; w < 4; w++) layout[w] = -1;
+    switch (r->mapper) {
+    case 0: case 3:              /* NROM, CNROM: no PRG switching (16 KB mirrors: 0,1,0,1) */
+    case 7: case 11: case 66:    /* 32 KB switching, bank 0 at power-on */
+        for (int w = 0; w < 4; w++) layout[w] = w % n8;
+        return 0;
+    case 1: case 2:              /* MMC1 (mode 3), UxROM: last 16 KB fixed */
+    case 4:                      /* MMC3: $E000 fixed, $C000 in mode 0 */
+        layout[2] = n8 - 2;
+        layout[3] = n8 - 1;
+        return 0;
+    }
+    return -1;
+}
+
+/* How many 8 KB windows switch together: code may run across windows inside
+ * one unit (consecutive banks), never across units. */
+int unit_windows(const Rom *r) {
+    if (r->mapper == 7 || r->mapper == 11 || r->mapper == 66) return 4;  /* 32 KB */
+    if (r->mapper == 1 || r->mapper == 2) return 2;  /* 16 KB (MMC1 32 KB mode = two units) */
+    return 1;                                        /* MMC3: 8 KB windows independent */
+}
+
+void view(const Rom *r, const int layout[4], uint8_t *mem) {
+    memset(mem, 0, 0x10000);
+    for (int w = 0; w < 4; w++)
+        if (layout[w] >= 0 && (uint32_t)(layout[w] + 1) * 0x2000 <= r->prg_size)
+            memcpy(mem + 0x8000 + w * 0x2000, r->prg + layout[w] * 0x2000, 0x2000);
+}

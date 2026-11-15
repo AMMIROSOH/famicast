@@ -1,5 +1,5 @@
-# Recompiler hints (see python -m recomp --help).
-# Entries marked 'runtime' came from python -m recomp.suggest.
+# Recompiler hints (see recomp/main.c).
+# Entries marked 'runtime' were found by running the game (nesrecomp --misses).
 prg_fnv1a = "B3C0A87F"  # the dump these hints belong to
 entries = [
 ]
@@ -13,6 +13,9 @@ banked = [  # [8 KB PRG bank, address]
     [0, 0x8AC7],
     [0, 0x90BA],
     [0, 0x90D7],
+    [0, 0x9359],  # runtime
+    [0, 0x9394],  # runtime
+    [0, 0x939E],  # runtime
     [0, 0x988A],
     [0, 0x9A07],
     [1, 0xA93E],
@@ -22,9 +25,13 @@ banked = [  # [8 KB PRG bank, address]
     [1, 0xBC7B],
     [1, 0xBCAA],
     [2, 0x8058],
+    [2, 0x80B0],  # runtime
     [2, 0x81DA],
     [2, 0x820F],
     [2, 0x83F5],
+    [2, 0x844B],  # runtime
+    [2, 0x84A7],  # runtime
+    [2, 0x84FE],  # runtime
     [2, 0x8B13],
     [2, 0x8B79],
     [2, 0x8B9D],
@@ -47,36 +54,57 @@ banked = [  # [8 KB PRG bank, address]
     [3, 0xB733],
     [3, 0xB809],
     [3, 0xB817],
+    [3, 0xB902],  # runtime
+    [3, 0xB91D],  # runtime
     [3, 0xBC7B],
     [3, 0xBCB0],
+    [14, 0xC01A],  # runtime
+    [14, 0xC0D9],  # runtime
     [14, 0xC1BC],
     [14, 0xC2B3],
+    [14, 0xC328],  # runtime
     [14, 0xC37E],
     [14, 0xC42C],
     [14, 0xC47D],
     [14, 0xC531],
     [14, 0xC552],
+    [14, 0xC6D6],  # runtime
     [14, 0xC801],
     [14, 0xC8D1],
     [14, 0xC92B],
+    [14, 0xC9A6],  # runtime
     [14, 0xC9B1],
     [14, 0xC9D7],
+    [14, 0xCC98],  # runtime
     [14, 0xCCC2],
+    [14, 0xCE92],  # runtime
     [14, 0xCFBE],
     [14, 0xD002],
     [14, 0xD0B5],
     [14, 0xD198],
+    [14, 0xD41A],  # runtime
+    [14, 0xD41F],  # runtime
+    [14, 0xD651],  # runtime
+    [14, 0xD976],  # runtime
+    [14, 0xDC67],  # runtime
     [14, 0xDC7F],
     [14, 0xDD8B],
+    [15, 0xE01C],  # runtime
+    [15, 0xE038],  # runtime
+    [15, 0xE1E1],  # runtime
     [15, 0xE1F1],
+    [15, 0xE269],  # runtime
     [15, 0xE5E2],
     [15, 0xE770],
     [15, 0xE77B],
     [15, 0xE8F1],
     [15, 0xE8FC],
+    [15, 0xEA26],  # runtime
     [15, 0xEB06],
     [15, 0xEB8C],
+    [15, 0xEDFE],  # runtime
     [15, 0xF034],
+    [15, 0xF323],  # runtime
     [15, 0xF345],
     [15, 0xF3BE],
     [15, 0xF3E6],
@@ -90,4 +118,6 @@ banked = [  # [8 KB PRG bank, address]
     [15, 0xFC65],
     [15, 0xFDE3],
     [15, 0xFE1B],
+    [15, 0xFFB0],  # runtime
+    [15, 0xFFD8],  # runtime
 ]

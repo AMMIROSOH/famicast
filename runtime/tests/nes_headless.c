@@ -1,8 +1,10 @@
-/* Headless NES runner for tests (driven by tests/test_ppu.py).
+/* Headless NES runner for tests (driven by tests/test_roms.py and others).
  *
- *   nes_headless ROM [--frames N] [--blargg] [--peek ADDR] [--ppm FILE] [--hash]
- *                    [--press F:MASK]... [--record FILE] [--replay FILE]
- *                    [--interp] [--diff] [--misses]
+ *   nes_headless [ROM] [--frames N] [--blargg] [--peek ADDR] [--ppm FILE] [--hash]
+ *                      [--press F:MASK]... [--record FILE] [--replay FILE] [--play SEED]
+ *                      [--interp] [--diff] [--misses] [--out FILE]
+ *
+ * ROM may be left out in recompiled builds: the ROM they embed is used.
  *
  * --blargg  run until the test ROM reports through $6000 (protocol: $6001-$6003
  *           = DE B0 61, $6000 = $80 running, $81 reset wanted, <$80 result,
@@ -15,10 +17,14 @@
  *           frames F..F+5; may be repeated (scripted input for tests).
  * --record  save the input of every frame (runtime/input_log.h).
  * --replay  use a recording's input; N defaults to its length.
+ * --play    scripted pseudo-random input from SEED (play_script below); N
+ *           defaults to 6000. Drives coverage, lockstep tests and benchmarks.
  * --interp  ignore linked recompiled code (pure interpreter).
  * --diff    run a pure-interpreter NES in lockstep and compare CPU, RAM and PPU
  *           state after every recompiled block; stop at the first difference.
- * --misses  print how many instructions were interpreted, and where.
+ * --misses  print how many instructions were interpreted, and where (input
+ *           for nesrecomp --misses; without recompiled code, a full trace).
+ * --out     write the report to FILE instead of standard output (build steps).
  * --time    print the emulation time and speed relative to a real NES.
  * --wav     write the audio output (48 kHz mono, 16-bit) to a WAV file.
  * --audio-hash  print an FNV-1a hash of the 16-bit audio (regression tests).
@@ -151,6 +157,41 @@ static void write_wav(const char *path) {
     fclose(f);
 }
 
+/* --play: a deterministic session. Start at frames 300 and 700 (as for
+ * Battle City's title), then random D-pad directions held 20-90 frames with
+ * A tapped every few frames, and Start twice every ~20 s (pause/unpause, or
+ * a new game after a game over). Not a good player, but it goes through
+ * menus and early levels the same way on every run. */
+static uint32_t rng;
+
+static uint32_t rnd(uint32_t n) {  /* xorshift32 */
+    rng ^= rng << 13;
+    rng ^= rng >> 17;
+    rng ^= rng << 5;
+    return rng % n;
+}
+
+static void play_script(InputLog *log, long n, unsigned seed) {
+    static const uint8_t DIRS[5] = {PAD_UP, PAD_DOWN, PAD_LEFT, PAD_RIGHT, 0};
+    static const int TAPS[3] = {6, 8, 12};
+    log->frames = calloc((size_t)n + 1, sizeof *log->frames);
+    log->count = n;
+    rng = seed * 2654435761u + 1;
+    for (long f = 300; f <= 700; f += 400)
+        for (long i = f; i < f + 6 && i < n; i++) log->frames[i].pad[0] |= PAD_START;
+    for (long f = 760; f < n;) {
+        uint8_t dir = DIRS[rnd(5)];
+        long end = f + 20 + (long)rnd(71);
+        for (; f < end && f < n; f++) {
+            log->frames[f].pad[0] |= dir;
+            if (f % TAPS[rnd(3)] < 2) log->frames[f].pad[0] |= PAD_A;
+        }
+    }
+    for (long f = 1900; f < n; f += 1200)
+        for (long s = f; s <= f + 90; s += 90)
+            for (long i = s; i < s + 6 && i < n; i++) log->frames[i].pad[0] = PAD_START;
+}
+
 static int blargg_ready(Nes *n) {
     return nes_peek(n, 0x6001) == 0xDE && nes_peek(n, 0x6002) == 0xB0 && nes_peek(n, 0x6003) == 0x61;
 }
@@ -164,17 +205,18 @@ static void print_blargg_text(Nes *n) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        fprintf(stderr, "usage: nes_headless ROM [--frames N] [--blargg] [--peek ADDR] [--ppm FILE] [--hash]\n");
+    const char *rom_path = argc > 1 && argv[1][0] != '-' ? argv[1] : NULL;
+    if (!rom_path && !(recomp_program && recomp_program->rom)) {
+        fprintf(stderr, "usage: nes_headless ROM [--frames N] [--blargg] [--peek ADDR] [--ppm FILE] [--hash] ...\n");
         return 2;
     }
-    long frames = -1, peek = -1;
+    long frames = -1, peek = -1, play_seed = -1;
     int blargg = 0, hash = 0, npress = 0, interp = 0, diff = 0, misses = 0, timing = 0, audio_hash = 0;
     const char *wav = NULL;
     long press_frame[64];
     unsigned press_mask[64];
     const char *ppm = NULL, *record = NULL, *replay = NULL;
-    for (int i = 2; i < argc; i++) {
+    for (int i = rom_path ? 2 : 1; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]);
         else if (!strcmp(argv[i], "--peek") && i + 1 < argc) peek = strtol(argv[++i], NULL, 16);
         else if (!strcmp(argv[i], "--ppm") && i + 1 < argc) ppm = argv[++i];
@@ -188,16 +230,23 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--audio-hash")) audio_hash = 1;
         else if (!strcmp(argv[i], "--record") && i + 1 < argc) record = argv[++i];
         else if (!strcmp(argv[i], "--replay") && i + 1 < argc) replay = argv[++i];
+        else if (!strcmp(argv[i], "--play") && i + 1 < argc) play_seed = atol(argv[++i]);
+        else if (!strcmp(argv[i], "--out") && i + 1 < argc) {
+            if (!freopen(argv[++i], "w", stdout)) { perror(argv[i]); return 2; }
+        }
         else if (!strcmp(argv[i], "--press") && i + 1 < argc && npress < 64 &&
                  sscanf(argv[++i], "%ld:%x", &press_frame[npress], &press_mask[npress]) == 2) npress++;
         else { fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
     }
     long size;
-    uint8_t *rom = read_file(argv[1], &size);
+    const uint8_t *rom;
+    uint8_t *rom_file = NULL;
+    if (rom_path) rom = rom_file = read_file(rom_path, &size);
+    else rom = recomp_program->rom, size = (long)recomp_program->rom_size, rom_path = recomp_program->rom_name;
     static Nes nes;
     char err[128];
     if (nes_load(&nes, rom, size, err, sizeof err) != 0) {
-        fprintf(stderr, "%s: %s\n", argv[1], err);
+        fprintf(stderr, "%s: %s\n", rom_path, err);
         return 2;
     }
     if (interp) nes.recomp = NULL;
@@ -218,6 +267,10 @@ int main(int argc, char **argv) {
     }
     FILE *rec = NULL;
     if (record && !(rec = input_log_create(record))) { perror(record); return 2; }
+    if (play_seed >= 0) {
+        if (frames < 0) frames = 6000;
+        play_script(&log, frames, (unsigned)play_seed);
+    }
     if (frames < 0) frames = replay ? log.count : blargg ? 3600 : 60;
 
     int result = 0;
@@ -289,6 +342,6 @@ int main(int argc, char **argv) {
     if (rec) fclose(rec);
     input_log_free(&log);
     cart_free(&nes.cart);
-    free(rom);
+    free(rom_file);
     return result;
 }

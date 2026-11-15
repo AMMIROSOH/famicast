@@ -1,9 +1,9 @@
+"""Decoder checks through the instructions nesrecomp emits (tests/nesrecomp.py)."""
 import re
 import unittest
 
-from recomp.decoder import decode_at, explore
-from recomp.ines import Cartridge
 from tests.fetch_test_roms import fetch
+from tests.nesrecomp import BUILT, falls_through, make_rom, recompile, target
 
 LOG_LINE = re.compile(r"^([0-9A-F]{4})  ((?:[0-9A-F]{2} ){1,3})\s*(\*?)([A-Z]{3})")
 
@@ -19,17 +19,20 @@ def parse_nestest_log(path):
     return rows
 
 
-class TestDecodeAt(unittest.TestCase):
+@unittest.skipUnless(BUILT, "build nesrecomp first (cmake --build build)")
+class TestDecode(unittest.TestCase):
     def test_modes_and_targets(self):
-        mem = bytearray(0x10000)
-        mem[0x8000:0x8008] = bytes([0xB1, 0x11, 0x6C, 0x34, 0x12, 0xD0, 0xFE, 0x60])
-        lda = decode_at(mem, 0x8000)
-        self.assertEqual((lda.op.mn, lda.op.mode, lda.size, lda.operand), ("LDA", "IZY", 2, 0x11))
-        jmp = decode_at(mem, 0x8002)
-        self.assertEqual((jmp.op.mode, jmp.operand, jmp.target), ("IND", 0x1234, None))
-        self.assertEqual(decode_at(mem, 0x8005).target, 0x8005)  # BNE to itself
+        # $8000: LDA ($11),Y / JMP ($1234)   $8005: BNE $8005 / RTS
+        rom = make_rom(bytes([0xB1, 0x11, 0x6C, 0x34, 0x12, 0xD0, 0xFE, 0x60]), vectors=(0x8000,) * 3)
+        prog, _ = recompile(rom, entries=[0x8005])
+        lda, jmp, bne = prog.instrs[0x8000], prog.instrs[0x8002], prog.instrs[0x8005]
+        self.assertEqual((lda.mn, lda.arg, len(lda.raw)), ("LDA", "($11),Y", 2))
+        self.assertEqual((jmp.arg, target(jmp), falls_through(jmp)), ("($1234)", None, False))
+        self.assertEqual(target(bne), 0x8005)  # BNE to itself
+        self.assertIn(0x8007, prog.instrs)     # its fall-through
 
 
+@unittest.skipUnless(BUILT, "build nesrecomp first (cmake --build build)")
 class TestNestest(unittest.TestCase):
     """Every ROM instruction Nintendulator executed must be found statically,
     with the same bytes and mnemonic, once the dynamic jumps are given as
@@ -39,21 +42,20 @@ class TestNestest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.mem = Cartridge.load(fetch("nestest.nes")).nrom_image()
         cls.log = parse_nestest_log(fetch("nestest.log"))
         # Fixed point: decode, collect transfers the decoder could not predict,
         # feed their ROM targets back as entries, repeat.
         hints = set()
         while True:
-            prog = explore(cls.mem, [0xC000, *hints])
+            prog, _ = recompile(fetch("nestest.nes"), entries=[0xC000, *sorted(hints)])
             dynamic = []  # (from_pc, kind, to_pc)
             for (pc, *_), (nxt, *_) in zip(cls.log, cls.log[1:]):
                 ins = prog.instrs.get(pc)
                 if ins is None:
                     continue
-                succ = {ins.target, (pc + ins.size) & 0xFFFF if ins.falls_through else None}
+                succ = {target(ins), (pc + len(ins.raw)) & 0xFFFF if falls_through(ins) else None}
                 if nxt not in succ:
-                    dynamic.append((pc, ins.op.mn + ("(ind)" if ins.op.mode == "IND" else ""), nxt))
+                    dynamic.append((pc, ins.mn + ("(ind)" if ins.arg.startswith("(") and ins.mn == "JMP" else ""), nxt))
             new = {to for _, _, to in dynamic if to >= 0x8000} - hints
             if not new:
                 break
@@ -61,21 +63,18 @@ class TestNestest(unittest.TestCase):
         cls.prog, cls.dynamic = prog, dynamic
 
     def test_dynamic_transfers_are_only_rts_rti_jmp_ind(self):
-        kinds = {mn for _, mn, _ in self.dynamic}
-        self.assertLessEqual(kinds, {"RTS", "RTI", "JMP(ind)"})
-        self.assertEqual(kinds, {"RTS", "RTI", "JMP(ind)"})  # nestest uses all three
+        self.assertEqual({mn for _, mn, _ in self.dynamic}, {"RTS", "RTI", "JMP(ind)"})  # nestest uses all three
 
     def test_log_instructions_are_decoded_identically(self):
         missing, wrong = set(), []
         for pc, raw, unofficial, mn in self.log:
             if pc < 0x8000:
                 continue  # RAM code: runtime fallback
-
             ins = self.prog.instrs.get(pc)
             if ins is None:
                 missing.add(pc)
                 continue
-            got = (bytes(self.mem[pc:pc + ins.size]), not ins.op.official, ins.op.mn)
+            got = (ins.raw, ins.unofficial, ins.mn)
             if got != (raw, unofficial, mn):
                 wrong.append((f"${pc:04X}", got, (raw, unofficial, mn)))
         self.assertFalse(wrong, wrong[:10])

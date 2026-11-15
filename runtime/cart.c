@@ -1,4 +1,4 @@
-/* iNES parsing follows recomp/ines.py (nesdev "INES"). Mapper behaviour:
+/* iNES parsing: nesdev "INES" (nesrecomp uses this file too). Mapper behaviour:
  * nesdev wiki "MMC1", "UxROM", "CNROM", "MMC3", "AxROM", "Color Dreams",
  * "GxROM". */
 #include "cart.h"

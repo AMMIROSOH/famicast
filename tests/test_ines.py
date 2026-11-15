@@ -1,37 +1,46 @@
+"""iNES loading as the recompiler sees it (runtime/cart.c, via nesrecomp --info)."""
+import os
+import tempfile
 import unittest
 
-from recomp.ines import Cartridge
+from tests.nesrecomp import BUILT, make_rom, run
 
 
-def make_rom(prg_units=1, chr_units=1, f6=0, f7=0, trainer=False):
-    hdr = b"NES\x1a" + bytes([prg_units, chr_units, f6 | (0x04 if trainer else 0), f7]) + bytes(8)
-    prg = bytearray(prg_units * 0x4000)
-    prg[-6:] = bytes([0x00, 0xD4, 0x70, 0xC0, 0x70, 0xC0])  # NMI $D400, RESET/IRQ $C070
-    return hdr + (bytes(512) if trainer else b"") + bytes(prg) + bytes(chr_units * 0x2000)
+def info(rom):
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "t.nes")
+        with open(path, "wb") as f:
+            f.write(rom)
+        r = run("--info", path, check=False)
+        return r.returncode, (r.stdout + r.stderr).strip()
 
 
+@unittest.skipUnless(BUILT, "build nesrecomp first (cmake --build build)")
 class TestInes(unittest.TestCase):
     def test_nrom128(self):
-        c = Cartridge(make_rom(f6=0x01))
-        self.assertEqual((c.mapper, c.mirroring, c.chr_ram), (0, "vertical", False))
-        self.assertEqual(c.vectors(), (0xD400, 0xC070, 0xC070))
-        img = c.nrom_image()
-        self.assertEqual(img[0xBFFA:0xC000], img[0xFFFA:0x10000])  # 16 KB mirrored
+        self.assertEqual(info(make_rom(f6=0x01)), (0, "mapper 0, PRG 16 KB, CHR 8 KB, vertical mirroring, "
+                                                      "NMI=$D400 RESET=$C070 IRQ=$C070"))
 
-    def test_mapper_nibbles_trainer_chr_ram(self):
-        c = Cartridge(make_rom(prg_units=8, chr_units=0, f6=0x10, f7=0x40, trainer=True))
-        self.assertEqual(c.mapper, 0x41)
-        self.assertTrue(c.chr_ram)
-        self.assertEqual(c.vectors()[1], 0xC070)  # trainer skipped
+    def test_mapper_high_nibble(self):
+        code, text = info(make_rom(f6=0x10, f7=0x40))
+        self.assertEqual(code, 2)
+        self.assertIn("mapper 65 not supported", text)
+
+    def test_trainer_and_chr_ram(self):
+        code, text = info(make_rom(prg_units=8, chr_units=0, f6=0x20, trainer=True))
+        self.assertEqual(code, 0)
+        self.assertIn("mapper 2, PRG 128 KB, CHR RAM", text)
+        self.assertIn("RESET=$C070", text)  # trainer skipped
 
     def test_diskdude_junk_header(self):
         rom = bytearray(make_rom(f6=0x21))
         rom[7:16] = b"DiskDude!"  # byte 7 'D' would add $40 to the mapper
-        self.assertEqual(Cartridge(bytes(rom)).mapper, 2)
+        self.assertIn("mapper 2,", info(bytes(rom))[1])
 
     def test_truncated(self):
-        with self.assertRaises(ValueError):
-            Cartridge(make_rom()[:-1])
+        code, text = info(make_rom()[:-1])
+        self.assertEqual(code, 2)
+        self.assertIn("shorter", text)
 
 
 if __name__ == "__main__":

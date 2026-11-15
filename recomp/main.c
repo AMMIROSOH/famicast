@@ -1,0 +1,386 @@
+/* nesrecomp: recompile an NES ROM to C (docs/02).
+ *
+ *   nesrecomp ROM -o OUT.c [--hints GAME.toml] [--misses RUN.txt]... [--save-hints OUT.toml]
+ *   nesrecomp --cpu-switch OUT.inc     the interpreter's opcode switch (runtime/cpu.c)
+ *   nesrecomp --ops                    the opcode table, one line per opcode (tests)
+ *   nesrecomp --info ROM               iNES header summary (tests)
+ *
+ * GAME.toml (all keys optional; only this subset of TOML is read):
+ *   prg_fnv1a = "65D2E392"           # the dump the hints were made for
+ *   entries   = [0xCE67, ...]        # extra entry points in assumed-bank windows
+ *   banked    = [[5, 0x8123], ...]   # [8 KB PRG bank, address] entry points
+ *   no_return = [0xD123, ...]        # subroutines that never return to the caller
+ *
+ * --misses takes the output of `nes_headless ROM --misses` (addresses the
+ * runtime interpreted). An interpreter-only nes_headless reports every
+ * instruction it ran, so one run is a complete trace of that session. The
+ * first address of each run of misses becomes a banked entry; --save-hints
+ * writes the merged hints (marked 'runtime') for games/<name>.toml. */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <ctype.h>
+
+#include "cart.h"
+#include "recomp.h"
+
+typedef struct {
+    size_t n, cap;
+    uint32_t *v;
+} List;
+
+static void push(List *l, uint32_t x) {
+    if (l->n == l->cap) l->v = realloc(l->v, (l->cap = l->cap * 2 + 16) * sizeof *l->v);
+    l->v[l->n++] = x;
+}
+
+typedef struct {
+    List entries, no_return, banked;  /* banked: bank << 16 | address */
+    char prg_fnv1a[16];
+} Hints;
+
+static uint8_t *read_file(const char *path, size_t *size) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { perror(path); exit(2); }
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *buf = malloc((size_t)n + 1);
+    if (fread(buf, 1, (size_t)n, f) != (size_t)n) { perror(path); exit(2); }
+    fclose(f);
+    buf[n] = 0;
+    *size = (size_t)n;
+    return buf;
+}
+
+static void write_file(const char *path, const Buf *b) {
+    FILE *f = fopen(path, "wb");
+    if (!f || fwrite(b->s, 1, b->len, f) != b->len || fclose(f)) { perror(path); exit(2); }
+}
+
+static int cmp_u32(const void *a, const void *b) {
+    uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
+    return (x > y) - (x < y);
+}
+
+/* ---- hints (TOML subset) ---- */
+
+/* Start of the value of `key = ` at the beginning of a line, or NULL. */
+static const char *toml_value(const char *text, const char *key) {
+    size_t n = strlen(key);
+    for (const char *p = text; (p = strstr(p, key)); p += n) {
+        if (p != text && p[-1] != '\n') continue;
+        const char *q = p + n;
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q != '=') continue;
+        for (q++; *q == ' ' || *q == '\t'; q++) {}
+        return q;
+    }
+    return NULL;
+}
+
+/* All integers of the [...] value at p (nested arrays flattened). */
+static void toml_ints(const char *p, List *out, const char *path, const char *key) {
+    if (!p) return;
+    if (*p != '[') { fprintf(stderr, "%s: %s is not an array\n", path, key); exit(2); }
+    for (int depth = 0; *p; ) {
+        if (*p == '[') depth++, p++;
+        else if (*p == ']') { p++; if (--depth == 0) return; }
+        else if (*p >= '0' && *p <= '9') {
+            char *end;
+            int hex = p[0] == '0' && (p[1] == 'x' || p[1] == 'X');
+            push(out, (uint32_t)strtoul(hex ? p + 2 : p, &end, hex ? 16 : 10));
+            p = end;
+        } else if (strchr(" \t\r\n,", *p)) p++;
+        else { fprintf(stderr, "%s: unexpected '%c' in %s\n", path, *p, key); exit(2); }
+    }
+    fprintf(stderr, "%s: unterminated %s\n", path, key);
+    exit(2);
+}
+
+static void load_hints(const char *path, Hints *h) {
+    size_t size;
+    char *text = (char *)read_file(path, &size);
+    /* drop comments (no '#' inside the strings we use) */
+    for (char *p = text; (p = strchr(p, '#'));)
+        while (*p && *p != '\n') *p++ = ' ';
+    toml_ints(toml_value(text, "entries"), &h->entries, path, "entries");
+    toml_ints(toml_value(text, "no_return"), &h->no_return, path, "no_return");
+    List pairs = {0};
+    toml_ints(toml_value(text, "banked"), &pairs, path, "banked");
+    if (pairs.n % 2) { fprintf(stderr, "%s: banked needs [bank, address] pairs\n", path); exit(2); }
+    for (size_t i = 0; i < pairs.n; i += 2) push(&h->banked, pairs.v[i] << 16 | (pairs.v[i + 1] & 0xFFFF));
+    free(pairs.v);
+    const char *v = toml_value(text, "prg_fnv1a");
+    if (v && sscanf(v, "\"%8[0-9A-Fa-f]\"", h->prg_fnv1a) != 1) { fprintf(stderr, "%s: bad prg_fnv1a\n", path); exit(2); }
+    for (char *p = h->prg_fnv1a; *p; p++) *p = (char)toupper((unsigned char)*p);
+    qsort(h->banked.v, h->banked.n, sizeof *h->banked.v, cmp_u32);
+    free(text);
+}
+
+static int contains(const List *l, uint32_t x) {
+    for (size_t i = 0; i < l->n; i++)
+        if (l->v[i] == x) return 1;
+    return 0;
+}
+
+static void render_hints(Buf *o, const Hints *h, const List *found, uint32_t prg_hash) {
+    bprintf(o, "# Recompiler hints (see recomp/main.c).\n");
+    bprintf(o, "# Entries marked 'runtime' were found by running the game (nesrecomp --misses).\n");
+    bprintf(o, "prg_fnv1a = \"%08X\"  # the dump these hints belong to\n", prg_hash);
+    bprintf(o, "entries = [\n");
+    for (size_t i = 0; i < h->entries.n; i++) bprintf(o, "    0x%04X,\n", h->entries.v[i]);
+    bprintf(o, "]\nbanked = [  # [8 KB PRG bank, address]\n");
+    for (size_t i = 0; i < h->banked.n; i++) {
+        uint32_t x = h->banked.v[i];
+        bprintf(o, "    [%u, 0x%04X],%s\n", x >> 16, x & 0xFFFF, contains(found, x) ? "  # runtime" : "");
+    }
+    bprintf(o, "]\n");
+    if (h->no_return.n) {
+        bprintf(o, "no_return = [");
+        for (size_t i = 0; i < h->no_return.n; i++) bprintf(o, i ? ", 0x%04X" : "0x%04X", h->no_return.v[i]);
+        bprintf(o, "]\n");
+    }
+}
+
+/* Merge the chain starts of a --misses file into h->banked; new ones go to `found`. */
+static void add_misses(const char *path, const Rom *r, Hints *h, List *found) {
+    size_t size;
+    char *text = (char *)read_file(path, &size);
+    int nbanks = (int)(r->prg_size / 0x2000), k = unit_windows(r), layout[4];
+    assumed_layout(r, layout);
+    /* misses per (bank, window) */
+    AddrSet **groups = calloc((size_t)nbanks * 4, sizeof *groups);
+    long nrom = 0, nram = 0;
+    for (char *line = text, *next; line; line = next) {
+        if ((next = strchr(line, '\n'))) next++;
+        unsigned addr, count, bank;
+        char ram[8];
+        if (sscanf(line, "MISS $%4x %u bank %u", &addr, &count, &bank) == 3 && addr >= 0x8000 &&
+            (int)bank < nbanks) {
+            int key = (int)bank * 4 + window_of(addr);
+            if (!groups[key]) groups[key] = calloc(1, sizeof **groups);
+            nrom += !groups[key]->b[addr];
+            groups[key]->b[addr] = 1;
+        } else if (sscanf(line, "MISS $%4x %u (%3s", &addr, &count, ram) == 3) {
+            nram++;
+        }
+    }
+    static uint8_t mem[0x10000];
+    static AddrSet starts;
+    long nnew = 0;
+    for (int key = 0; key < nbanks * 4; key++) {
+        if (!groups[key]) continue;
+        int b = key / 4, w = key % 4, w0 = w - w % k, b0 = b - w % k, lay[4];
+        memcpy(lay, layout, sizeof lay);
+        for (int i = 0; i < k; i++) lay[w0 + i] = b0 + i;
+        view(r, lay, mem);
+        chain_starts(mem, groups[key], &starts);
+        for (uint32_t a = 0x8000; a < 0x10000; a++) {
+            uint32_t x = (uint32_t)b << 16 | a;
+            if (starts.b[a] && !contains(&h->banked, x)) push(&h->banked, x), push(found, x), nnew++;
+        }
+        free(groups[key]);
+    }
+    free(groups);
+    qsort(h->banked.v, h->banked.n, sizeof *h->banked.v, cmp_u32);
+    fprintf(stderr, "%s: %ld ROM misses, %ld RAM; %ld new entries\n", path, nrom, nram, nnew);
+    free(text);
+}
+
+/* ---- exploration ---- */
+
+static void vectors(const Rom *r, uint16_t v[3]) {  /* NMI, RESET, IRQ: last 6 bytes of PRG */
+    const uint8_t *p = r->prg + r->prg_size - 6;
+    for (int i = 0; i < 3; i++) v[i] = (uint16_t)(p[i * 2] | p[i * 2 + 1] << 8);
+}
+
+/* Decode every reachable region: one over $8000-$FFFF for mappers that never
+ * switch PRG, else one per (bank, unit) so code never assumes a bank it
+ * cannot check. Returns the number of regions, sorted by (bank, window). */
+static int explore_regions(const Rom *r, const Hints *h, Region **out) {
+    int layout[4], nbanks = (int)(r->prg_size / 0x2000), k = unit_windows(r);
+    AddrSet *no_return = calloc(1, sizeof *no_return);
+    for (size_t i = 0; i < h->no_return.n; i++) no_return->b[h->no_return.v[i] & 0xFFFF] = 1;
+    if (assumed_layout(r, layout) != 0) {
+        fprintf(stderr, "mapper %d not supported by the recompiler\n", r->mapper);
+        exit(2);
+    }
+    uint16_t vec[3];
+    vectors(r, vec);
+    if (r->mapper == 0 || r->mapper == 3) {
+        Region *R = *out = calloc(1, sizeof *R);
+        R->prog = calloc(1, sizeof *R->prog);
+        R->mem = malloc(0x10000);
+        memcpy(R->banks, layout, sizeof layout);
+        view(r, layout, R->mem);
+        for (int i = 0; i < 3; i++) R->prog->entries.b[vec[i]] |= vec[i] >= 0x8000;
+        for (size_t i = 0; i < h->entries.n; i++) R->prog->entries.b[h->entries.v[i] & 0xFFFF] = 1;
+        for (size_t i = 0; i < h->banked.n; i++) R->prog->entries.b[h->banked.v[i] & 0xFFFF] = 1;
+        explore(R->prog, R->mem, 0x8000, 0x10000, no_return);
+        free(no_return);
+        return 1;
+    }
+    /* seeds[(bank of the unit's first window) * 64K + address] */
+    uint8_t *seeds = calloc((size_t)nbanks << 16, 1), *done = calloc((size_t)nbanks << 16, 1);
+    Region *regions = calloc((size_t)nbanks * 4, sizeof *regions);  /* by bank0 * 4 + w0 */
+#define ADD(addr, bank) do {                                                         \
+        uint32_t a_ = (addr);                                                        \
+        int b_ = (bank), w_ = window_of(a_);                                         \
+        if (a_ < 0x8000) break;                    /* RAM: interpreter only */       \
+        if (b_ < 0) b_ = layout[w_];               /* bank unknown: runtime/hints */ \
+        if (b_ < 0 || b_ - w_ % k < 0 || b_ - w_ % k + k > nbanks) break;            \
+        seeds[(size_t)(b_ - w_ % k) << 16 | a_] = 1;                                 \
+    } while (0)
+    for (int i = 0; i < 3; i++) ADD(vec[i], -1);
+    for (size_t i = 0; i < h->entries.n; i++) ADD(h->entries.v[i] & 0xFFFF, -1);
+    for (size_t i = 0; i < h->banked.n; i++) ADD(h->banked.v[i] & 0xFFFF, (int)(h->banked.v[i] >> 16));
+    uint8_t *touched = malloc((size_t)nbanks * 4);
+    for (int again = 1; again;) {
+        again = 0;
+        memset(touched, 0, (size_t)nbanks * 4);
+        for (size_t s = 0; s < (size_t)nbanks << 16; s++) {
+            if (!seeds[s] || done[s]) continue;
+            done[s] = 1;
+            int bank0 = (int)(s >> 16), a = (int)(s & 0xFFFF), w0 = window_of(a) - window_of(a) % k;
+            Region *R = &regions[bank0 * 4 + w0];
+            if (!R->prog) {
+                R->prog = calloc(1, sizeof *R->prog);
+                R->mem = malloc(0x10000);
+                int lay[4];
+                memcpy(lay, layout, sizeof lay);
+                for (int w = 0; w < 4; w++) R->banks[w] = -1;
+                for (int i = 0; i < k; i++) lay[w0 + i] = R->banks[w0 + i] = bank0 + i;
+                view(r, lay, R->mem);
+            }
+            R->prog->entries.b[a] = 1;
+            touched[bank0 * 4 + w0] = 1;
+        }
+        for (int key = 0; key < nbanks * 4; key++) {
+            if (!touched[key]) continue;
+            Region *R = &regions[key];
+            uint32_t lo = 0x8000 + (key % 4) * 0x2000, hi = lo + k * 0x2000;
+            explore(R->prog, R->mem, lo, hi, no_return);
+            for (uint32_t t = 0; t < 0x10000; t++)
+                if (R->prog->external.b[t] && !(t >= lo && t < hi)) ADD(t, -1);  /* inside: straddles the unit's end */
+            again = 1;
+        }
+    }
+#undef ADD
+    int n = 0;
+    for (int key = 0; key < nbanks * 4; key++)
+        if (regions[key].prog) regions[n++] = regions[key];
+    *out = regions;
+    free(seeds), free(done), free(touched), free(no_return);
+    return n;
+}
+
+static const char *basename_of(const char *path) {
+    const char *b = path;
+    for (const char *p = path; *p; p++)
+        if (*p == '/' || *p == '\\') b = p + 1;
+    return b;
+}
+
+static int load_rom(const char *path, Cart *cart, uint8_t **file, size_t *size) {
+    char err[128];
+    *file = read_file(path, size);
+    if (cart_load(cart, *file, *size, err, sizeof err) != 0) {
+        fprintf(stderr, "%s: %s\n", path, err);
+        return 2;
+    }
+    return 0;
+}
+
+static void summary(const Cart *c, char *out, size_t len) {
+    static const char *const MIRROR[] = {"horizontal", "vertical", "four", "single-low", "single-high"};
+    uint16_t v[3];
+    Rom r = {c->prg, c->prg_size, c->mapper};
+    vectors(&r, v);
+    char chr[16];
+    if (c->chr_ram) snprintf(chr, sizeof chr, "RAM");
+    else snprintf(chr, sizeof chr, "%u KB", c->chr_size / 1024);
+    snprintf(out, len, "mapper %d, PRG %u KB, CHR %s, %s mirroring, NMI=$%04X RESET=$%04X IRQ=$%04X",
+             c->mapper, c->prg_size / 1024, chr, MIRROR[c->mirroring], v[0], v[1], v[2]);
+}
+
+static int usage(void) {
+    fprintf(stderr, "usage: nesrecomp ROM -o OUT.c [--hints GAME.toml] [--misses RUN.txt]... [--save-hints OUT.toml]\n"
+                    "       nesrecomp --cpu-switch OUT.inc | --ops | --info ROM\n");
+    return 2;
+}
+
+int main(int argc, char **argv) {
+    ops_init();
+    Buf o = {0};
+    if (argc == 3 && !strcmp(argv[1], "--cpu-switch")) {
+        emit_cpu_switch(&o);
+        write_file(argv[2], &o);
+        return 0;
+    }
+    if (argc == 2 && !strcmp(argv[1], "--ops")) {
+        for (int i = 0; i < 256; i++)
+            printf("%02X %s %s %d %d %d %d\n", i, OPS[i].mn, OPS[i].mode, OPS[i].size, OPS[i].cycles,
+                   OPS[i].official, page_penalty(&OPS[i]));
+        return 0;
+    }
+    Cart cart;
+    uint8_t *file;
+    size_t size;
+    char text[160];
+    if (argc == 3 && !strcmp(argv[1], "--info")) {
+        if (load_rom(argv[2], &cart, &file, &size)) return 2;
+        summary(&cart, text, sizeof text);
+        printf("%s\n", text);
+        return 0;
+    }
+    if (argc < 2 || argv[1][0] == '-') return usage();
+    const char *rom_path = argv[1], *output = NULL, *hints_path = NULL, *save_hints = NULL;
+    const char *misses[64];
+    int nmisses = 0;
+    for (int i = 2; i < argc; i++) {
+        if (!strcmp(argv[i], "-o") && i + 1 < argc) output = argv[++i];
+        else if (!strcmp(argv[i], "--hints") && i + 1 < argc) hints_path = argv[++i];
+        else if (!strcmp(argv[i], "--misses") && i + 1 < argc && nmisses < 64) misses[nmisses++] = argv[++i];
+        else if (!strcmp(argv[i], "--save-hints") && i + 1 < argc) save_hints = argv[++i];
+        else return usage();
+    }
+    if (!output && !save_hints) return usage();
+    if (load_rom(rom_path, &cart, &file, &size)) return 2;
+    Rom rom = {cart.prg, cart.prg_size, cart.mapper};
+    uint32_t prg_hash = fnv1a(cart.prg, cart.prg_size);
+    Hints hints = {0};
+    if (hints_path) {
+        FILE *f = fopen(hints_path, "rb");  /* optional: games/<name>.toml may not exist yet */
+        if (f) fclose(f), load_hints(hints_path, &hints);
+    }
+    char want[16];
+    snprintf(want, sizeof want, "%08X", prg_hash);
+    if (hints.prg_fnv1a[0] && strcmp(hints.prg_fnv1a, want))
+        fprintf(stderr, "warning: %s was made for another dump (PRG %s); its entries may be wrong here "
+                        "(the runtime stays correct, misses go up)\n", hints_path, hints.prg_fnv1a);
+    List found = {0};
+    for (int i = 0; i < nmisses; i++) add_misses(misses[i], &rom, &hints, &found);
+    if (save_hints) {
+        render_hints(&o, &hints, &found, prg_hash);
+        write_file(save_hints, &o);
+        o.len = 0;
+    }
+    if (!output) return 0;
+
+    Region *regions;
+    int n = explore_regions(&rom, &hints, &regions);
+    const char *name = basename_of(rom_path);
+    emit_program(&o, regions, n, name, prg_hash, (int)(cart.prg_size / 0x2000), cart.mapper != 0 && cart.mapper != 3,
+                 file, size);
+    write_file(output, &o);
+    long ninstr = 0, nindirect = 0;
+    for (int i = 0; i < n; i++)
+        for (uint32_t a = 0; a < 0x10000; a++)
+            ninstr += regions[i].prog->instrs.b[a], nindirect += regions[i].prog->indirect.b[a];
+    summary(&cart, text, sizeof text);
+    printf("%s: %s\n  %ld instructions in %d regions, %ld indirect jumps -> %s\n", name, text, ninstr, n,
+           nindirect, output);
+    return 0;
+}

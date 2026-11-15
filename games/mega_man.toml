@@ -1,5 +1,5 @@
-# Recompiler hints (see python -m recomp --help).
-# Entries marked 'runtime' came from python -m recomp.suggest.
+# Recompiler hints (see recomp/main.c).
+# Entries marked 'runtime' were found by running the game (nesrecomp --misses).
 prg_fnv1a = "44EB2517"  # the dump these hints belong to
 entries = [
 ]
@@ -22,14 +22,18 @@ banked = [  # [8 KB PRG bank, address]
     [8, 0x98BF],
     [8, 0x990F],
     [10, 0x9000],
+    [10, 0x99EB],  # runtime
     [11, 0xA0D8],
     [11, 0xA105],
     [11, 0xA18B],
     [11, 0xA261],
     [11, 0xA298],
     [11, 0xA35C],
+    [11, 0xAA29],  # runtime
+    [11, 0xAAD1],  # runtime
     [13, 0xBFF3],
     [13, 0xBFF6],
+    [14, 0xC008],  # runtime
     [14, 0xC3BF],
     [14, 0xC3E3],
     [14, 0xC400],
@@ -38,10 +42,12 @@ banked = [  # [8 KB PRG bank, address]
     [14, 0xC477],
     [14, 0xC483],
     [14, 0xC4E0],
+    [14, 0xC53D],  # runtime
     [14, 0xC55D],
     [14, 0xC5AC],
     [14, 0xC613],
     [14, 0xC72A],
+    [14, 0xC73F],  # runtime
     [14, 0xC75B],
     [14, 0xC8B2],
     [14, 0xC9BE],
@@ -49,8 +55,12 @@ banked = [  # [8 KB PRG bank, address]
     [14, 0xCC2F],
     [14, 0xCD74],
     [14, 0xD470],
+    [14, 0xD4AE],  # runtime
     [14, 0xD84C],
     [14, 0xD89C],
     [14, 0xDB92],
+    [15, 0xF539],  # runtime
+    [15, 0xF641],  # runtime
+    [15, 0xF681],  # runtime
     [15, 0xF95C],
 ]

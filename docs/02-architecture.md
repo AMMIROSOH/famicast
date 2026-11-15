@@ -10,10 +10,11 @@ Non-goals for now: PAL timing, Famicom Disk System, expansion audio, netplay.
 
 ## Components
 ```
-              build time                               run time
-ROM ──► recomp/ (Python) ──► gen/<game>.c ──┐
-          decode, blocks, emit C            ├─► cc ──► <game>.exe
-game.toml (hints) ──────────┘   runtime/ ───┘          │
+              build time (all driven by CMake)          run time
+ROM ──► nesrecomp (recomp/, C) ──► gen/<game>.c ──┐
+          decode, blocks, emit C, embed ROM       ├─► cc ──► <game>.exe
+game.toml (hints) ─┤              runtime/ ───────┘          │
+trace (optional) ──┘  nes_headless --play --misses (interpreter)
                                                        ▼
                      ┌──────────── runtime (C11) ────────────┐
                      │ dispatch: pc → block function          │
@@ -26,10 +27,10 @@ game.toml (hints) ──────────┘   runtime/ ───┘     
 
 | Part | Language | Notes |
 |------|----------|-------|
-| `recomp/` | Python ≥ 3.11 | `tomllib` for configs; no third-party deps |
+| `recomp/` | C11 | `nesrecomp`, a build-time tool; also writes the interpreter's opcode switch |
 | `runtime/` | C11 | builds with clang/gcc/MSVC via CMake |
 | platform | SDL3 (zlib) | fetched by CMake `FetchContent`; keyboard + gamepad |
-| tests | Python `unittest` + a C test runner | test ROMs downloaded by script, not committed |
+| tests | Python `unittest` + C test runners | test ROMs downloaded by script, not committed; the build does not need Python |
 
 ## CPU state and memory
 ```c
@@ -52,9 +53,9 @@ typedef struct { uint8_t a, x, y, s, p; uint16_t pc; uint64_t cycles; } Cpu;
 - **Decoder**: recursive descent from the reset/NMI/IRQ vectors plus extra
   entry points from `games/<name>.toml`. Instructions are keyed by address,
   so overlapping decodes are allowed.
-- **Blocks** (`recomp/blocks.py`, `recomp/emit_c.py`): one C function per
+- **Blocks** (`recomp/analyze.c`, `recomp/emit.c`): one C function per
   basic block, `static void b_C079(Cpu *c)`. Each instruction is the same C
-  the interpreter's switch is generated from (`recomp/c6502.py`), so bus
+  the interpreter's switch is generated from (`recomp/c6502.c`), so bus
   traffic and cycle counts are identical by construction; the recompiler
   removes fetch/decode/dispatch. A `switch (c->pc)` at the top makes every
   instruction start an entry point (resume after RTI without falling back).
@@ -62,7 +63,12 @@ typedef struct { uint8_t a, x, y, s, p; uint16_t pc; uint64_t cycles; } Cpu;
   interrupts happen on the same instruction as in the interpreter.
 - **Identity**: the generated code carries an FNV-1a hash of the PRG; the
   runtime uses it only if the loaded ROM matches.
-- **Banked mappers** (`recomp/banks.py`): code is compiled per (PRG bank,
+- **Embedded ROM**: the generated C also holds the whole iNES file, used when
+  no ROM path is given. Not only the code bytes: data (tables, graphics) is
+  read through pointers such as `LDA (ptr),Y` or `LDA table,X` whose range
+  no static analysis can bound, so leaving bytes out could break a game
+  late. A build therefore contains the game and must not be shared.
+- **Banked mappers** (`recomp/analyze.c`, banking): code is compiled per (PRG bank,
   window unit) and looked up by the bank mapped at run time, so a wrong
   static guess about banking costs coverage, never correctness. Units match
   how the mapper switches (8/16/32 KB); code never runs across units. After
@@ -99,9 +105,14 @@ three jobs:
 Static decoding cannot see every target. nestest alone uses RTS and RTI as
 jumps, JMP through a RAM pointer, and runs code from RAM (see 06). Plan:
 1. v1 (done): the interpreter runs missed code; `nes_headless --misses`
-   lists it; `python -m recomp.suggest` keeps the chain starts and merges
-   them into `games/<name>.toml`; recompiling then covers them. For Battle
-   City one round (28 entries) brought a 10-minute session to zero misses.
+   lists it; `nesrecomp --misses` keeps the chain starts (the first address
+   of each run; the lowest one for loops entered from elsewhere) and merges
+   them into the hints. Run without recompiled code, `--misses` lists every
+   instruction executed, so one interpreter run is a complete trace of that
+   session and no rebuild-and-retry rounds are needed. With
+   `-DNES_AUTO_HINTS=ON` the build does this itself with scripted input
+   (`--play`) before recompiling (M8a). Coverage is limited to what the
+   input reaches; your own recording (`--replay`) reaches further.
 2. Later (stretch): a JIT for missed code, so targets found at run time get
    native speed without a rebuild. Not needed for speed in v1: a C 6502
    interpreter runs far faster than real time, and misses are rare after the

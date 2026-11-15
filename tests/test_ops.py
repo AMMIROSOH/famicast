@@ -2,7 +2,7 @@ import json
 import os
 import unittest
 
-from recomp.ops import OPS
+from tests.nesrecomp import BUILT, ops
 
 DATA = os.path.join(os.path.dirname(__file__), "data", "r2_6502.json")
 
@@ -20,7 +20,13 @@ R2_KNOWN_WRONG = {
 }
 
 
+@unittest.skipUnless(BUILT, "build nesrecomp first (cmake --build build)")
 class TestOps(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        global OPS
+        OPS = ops()
+
     def test_256_entries_and_151_official(self):
         self.assertEqual([o.code for o in OPS], list(range(256)))
         self.assertEqual(sum(o.official for o in OPS), 151)

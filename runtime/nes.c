@@ -247,10 +247,14 @@ void nes_step(Nes *n) {
             n->steps_native++;
             return;
         }
-        if (n->misses) n->misses[nes_miss_slot(n, c->pc)]++;
     }
-    if (c->poll_prev) n->steps_interrupt++;
-    else n->steps_interp++;
+    if (c->poll_prev) {
+        n->steps_interrupt++;
+    } else {
+        n->steps_interp++;
+        /* without recompiled code this traces every instruction (nesrecomp --misses) */
+        if (n->misses && !c->jammed) n->misses[nes_miss_slot(n, c->pc)]++;
+    }
     cpu_step(c);
 }
 
