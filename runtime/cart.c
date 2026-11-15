@@ -185,21 +185,8 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     }
 }
 
-uint8_t cart_chr_read(Cart *c, uint16_t a) { return c->chr[c->chr_off[(a >> 10) & 7] + (a & 0x3FF)]; }
-
 void cart_chr_write(Cart *c, uint16_t a, uint8_t v) {
     if (c->chr_ram) c->chr[c->chr_off[(a >> 10) & 7] + (a & 0x3FF)] = v;
-}
-
-uint16_t cart_nt_index(Cart *c, uint16_t a) {
-    a &= 0x0FFF;
-    switch (c->mirroring) {
-    case MIRROR_VERTICAL: return a & 0x07FF;                         /* $2000=$2800 */
-    case MIRROR_HORIZONTAL: return (a & 0x03FF) | ((a & 0x0800) >> 1); /* $2000=$2400 */
-    case MIRROR_SINGLE_LOW: return a & 0x03FF;
-    case MIRROR_SINGLE_HIGH: return 0x400 | (a & 0x03FF);
-    default: return a;                                                /* four-screen */
-    }
 }
 
 void cart_ppu_address(Cart *c, uint16_t a, uint64_t dot) {

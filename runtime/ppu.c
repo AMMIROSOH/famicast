@@ -288,6 +288,46 @@ void ppu_step(Ppu *p) {
     }
 }
 
+/* Dots 1-256 of a visible line with rendering on: what ppu_step does there,
+ * without its checks for other lines and dots. Nothing the checks guard can
+ * change inside one ppu_run call (no CPU access in between): mask, ctrl and
+ * the vblank flag stay as they are. */
+static void visible_dots(Ppu *p, int n) {
+    /* render_pixel with the mask decoded once; pixels go to a local line
+     * first (stores into p->fb could alias every PPU field) */
+    const uint8_t mask = p->mask;
+    const int bg_on = mask & 0x08, bg_left = mask & 0x02;
+    const int sp_on = (mask & 0x10) && p->sp_count, sp_left = mask & 0x04;
+    const uint8_t grey = (mask & 0x01) ? 0x30 : 0x3F;
+    const int first = p->dot - 1;
+    uint8_t line[256];
+    for (; n > 0; n--) {
+        int dot = p->dot, x = dot - 1;
+        p->dots++;
+        if (bg_on && dot >= 2) {
+            p->bg_lo <<= 1; p->bg_hi <<= 1; p->at_lo <<= 1; p->at_hi <<= 1;
+        }
+        fetch_step(p);
+        if (dot == 256) inc_y(p);
+        evaluation_dot(p);
+        uint8_t bg = 0, bg_pal = 0;
+        if (bg_on && (x >= 8 || bg_left)) {
+            uint16_t bit = 0x8000 >> p->fine_x;
+            bg = (uint8_t)(((p->bg_lo & bit) ? 1 : 0) | ((p->bg_hi & bit) ? 2 : 0));
+            bg_pal = (uint8_t)(((p->at_lo & bit) ? 1 : 0) | ((p->at_hi & bit) ? 2 : 0));
+        }
+        uint8_t s = (sp_on && (x >= 8 || sp_left)) ? p->sp_line[x] : 0, sp = s & 3;
+        if ((s & 0x40) && p->sp_zero_on_line && bg && x != 255) p->status |= 0x40;  /* sprite 0 hit */
+        uint8_t idx = (!sp || (bg && (s & 0x20))) ? (uint8_t)(bg ? bg_pal * 4 + bg : 0)
+                                                    : (uint8_t)(((s >> 2) & 7) * 4 + sp);
+        line[x] = p->pal[idx] & grey;
+        p->dot = dot + 1;
+    }
+    memcpy(p->fb + p->scanline * 256 + first, line + first, (size_t)(p->dot - 1 - first));
+    p->rendering_prev = 1;
+    p->nmi_out = (p->status & 0x80) && (p->ctrl & 0x80);
+}
+
 /* Lines 241 (from dot 2) to 260 have no per-dot effects: no rendering, no
  * fetches, the flags only change at (241,1) and (261,1), and the end-of-line
  * sprite reset is a no-op after line 240. Skip them in one step. */
@@ -303,6 +343,13 @@ void ppu_run(Ppu *p, int k) {
             p->rendering_prev = RENDERING(p) != 0;
             p->nmi_out = (p->status & 0x80) && (p->ctrl & 0x80);
             p->dots += (uint64_t)n;
+            k -= n;
+            continue;
+        }
+        if (line < 240 && p->dot >= 1 && p->dot <= 256 && RENDERING(p)) {
+            int n = 257 - p->dot;
+            if (n > k) n = k;
+            visible_dots(p, n);
             k -= n;
             continue;
         }

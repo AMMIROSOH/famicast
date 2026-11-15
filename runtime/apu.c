@@ -87,6 +87,7 @@ static int pulse_muted(const Pulse *p) {
 }
 
 static void quarter_frame(Apu *a) {
+    a->mix_dirty = 1;
     clock_envelope(&a->pulse[0].env);
     clock_envelope(&a->pulse[1].env);
     clock_envelope(&a->noise.env);
@@ -97,6 +98,7 @@ static void quarter_frame(Apu *a) {
 }
 
 static void half_frame(Apu *a) {
+    a->mix_dirty = 1;
     a->last_half_clock = a->cycle;
     for (int i = 0; i < 2; i++) {
         Pulse *p = &a->pulse[i];
@@ -177,14 +179,14 @@ static void timers(Apu *a) {
     if (a->cycle & 1) {  /* pulse timers run on APU cycles (every other CPU cycle) */
         for (int i = 0; i < 2; i++) {
             Pulse *p = &a->pulse[i];
-            if (p->timer == 0) { p->timer = p->period; p->seq = (p->seq + 1) & 7; }
+            if (p->timer == 0) { p->timer = p->period; p->seq = (p->seq + 1) & 7; a->mix_dirty = 1; }
             else p->timer--;
         }
     }
     Triangle *t = &a->tri;
     if (t->timer == 0) {
         t->timer = t->period;
-        if (t->lin && t->len) t->seq = (t->seq + 1) & 31;
+        if (t->lin && t->len) t->seq = (t->seq + 1) & 31, a->mix_dirty = 1;
     } else {
         t->timer--;
     }
@@ -193,11 +195,13 @@ static void timers(Apu *a) {
         n->timer = n->period;
         uint16_t fb = (n->lfsr ^ (n->lfsr >> (n->mode ? 6 : 1))) & 1;
         n->lfsr = (uint16_t)(n->lfsr >> 1 | fb << 14);
+        a->mix_dirty = 1;
     }
     Dmc *d = &a->dmc;
     if (--d->timer == 0) {
         d->timer = d->period;
         dmc_clock(a);
+        a->mix_dirty = 1;
     }
 }
 
@@ -226,7 +230,8 @@ static float mix(Apu *a) {
 /* Box-filter to 48 kHz, then the NES's own output filters: high-pass 90 Hz
  * and 440 Hz, low-pass 14 kHz (nesdev "APU Mixer"). */
 static void output(Apu *a) {
-    a->acc += mix(a);
+    if (a->mix_dirty) a->mix_last = mix(a), a->mix_dirty = 0;
+    a->acc += a->mix_last;
     a->acc_n++;
     a->frac += APU_SAMPLE_RATE;
     if (a->frac < CPU_HZ) return;
@@ -287,6 +292,7 @@ static void load_length(Apu *a, uint8_t *len, uint8_t len_before, int channel, u
 }
 
 void apu_write(Apu *a, uint16_t addr, uint8_t v) {
+    a->mix_dirty = 1;
     if (addr < 0x4008) {
         Pulse *p = &a->pulse[(addr >> 2) & 1];
         switch (addr & 3) {

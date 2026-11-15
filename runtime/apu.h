@@ -59,6 +59,8 @@ typedef struct Apu {
     /* audio out: box-filter resampling to 48 kHz, then the NES output filters */
     float acc;
     int acc_n;
+    float mix_last;           /* mixer output, recomputed only when mix_dirty: */
+    uint8_t mix_dirty;        /* set wherever channel state can change */
     int64_t frac;
     float hp1_x, hp1_y, hp2_x, hp2_y, lp_y;
     float buf[APU_BUF];
