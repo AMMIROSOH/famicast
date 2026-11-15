@@ -118,6 +118,11 @@ Coverage of a recompiled game: `build/battle_city_headless --play 1 --coverage`
 (share of CPU cycles in recompiled code; `--misses` also lists the
 addresses that were interpreted).
 
+## Credits
+Written by the project author together with Claude (Anthropic) as a coding
+partner; commits carry `Co-Authored-By` lines. Outside knowledge used along
+the way is listed in [docs/07-sources.md](docs/07-sources.md).
+
 ## ROMs
 No ROMs are included or will ever be committed. Bring your own legally dumped
 cartridges. `roms/` is git-ignored.
