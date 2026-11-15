@@ -311,6 +311,7 @@ int main(int argc, char **argv) {
 
     int result = 0;
     long reset_at = -1, frames_run = 0;
+    int reset_armed = 1;  /* $6000 left $81 since the last reset */
     struct timespec t0, t1;
     timespec_get(&t0, TIME_UTC);
     for (long f = 0; f < frames; f++) {
@@ -337,8 +338,11 @@ int main(int argc, char **argv) {
         }
         if (!blargg || !blargg_ready(&nes)) continue;
         uint8_t st = nes_peek(&nes, 0x6000);
-        if (st == 0x81 && reset_at < 0) reset_at = f + 10;  /* "press reset after >= 100 ms" */
-        if (reset_at >= 0 && f == reset_at) { nes_reset(&nes); reset_at = -1; }
+        /* "press reset after >= 100 ms"; once per request: after a reset the
+         * test may take frames to leave $81 (apu_reset delays ~2 frames) */
+        if (st != 0x81) reset_armed = 1;
+        if (st == 0x81 && reset_armed && reset_at < 0) reset_at = f + 10;
+        if (reset_at >= 0 && f == reset_at) { nes_reset(&nes); reset_at = -1; reset_armed = 0; }
         if (st < 0x80) {
             print_blargg_text(&nes);
             printf("\nRESULT %d after %ld frames\n", st, f + 1);

@@ -19,8 +19,6 @@ PENDING = {  # path -> why it is not expected to pass yet
     "sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes": "as sprdma_and_dmc_dma",
     "dmc_dma_during_read4/double_2007_read.nes": "two $2007 reads on consecutive cycles: PPU read-buffer "
         "timing not modelled (2nd row prints 33 44 55 66 77)",
-    "apu_reset/4017_written.nes": "reset case #3 unclear without test source; power case passes (docs/06)",
-    "apu_reset/len_ctrs_enabled.nes": "reset case #3 unclear without test source; power case passes (docs/06)",
 }
 
 
