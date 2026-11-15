@@ -1,0 +1,14 @@
+# ROMs are copyrighted: never commit them
+roms/
+*.nes
+*.fds
+*.zip
+# build outputs
+out/
+build/
+__pycache__/
+*.pyc
+*.o
+*.exe
+*.i64
+*.idb
