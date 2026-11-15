@@ -3,6 +3,46 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-16 · Open items pass
+- **Play-to-recompile**: Kirby with no hints file: 7.2% of cycles recompiled
+  before; after one 1,500-frame session in the real frontend (replaying the
+  scripted input) and a rebuild, 99.94%.
+- **Profiling**: a small sampler (suspends the process every ~1 ms, maps RIP
+  to symbols with `nm`; scratch tool, not committed). Kirby, before:
+  PPU ~58%, APU 16.5%, recompiled blocks + dispatch ~21% vs the
+  interpreter's ~12% for the same CPU work. Code size, not dispatch: with
+  the bus helpers inlined, thousands of blocks outgrew the caches (-Os and
+  LTO did not help; out-of-line helpers did).
+- **Speed** (best of 3, 6,000 frames of `--play 1`):
+
+| Step | Kirby recompiled | Kirby interpreter | Battle City recompiled |
+|---|---|---|---|
+| before | 19.9x | 22.3x | 25.5x |
+| bus helpers out of line in generated code | 23.4x | | 27.7x |
+| block chaining (musttail) | 23.5x | | 27.8x |
+| CHR/nametable reads inline, PPU visible-dot loop | 27.6x | 25.6x | 32.8x |
+| PPU pixel step specialized (local line buffer) | 30.6x | 28.0x | 37.1x |
+| APU mixer output cached | **32.6x** | **30.0x** | **38.0x** |
+
+  Every step kept all frame and audio hashes and the test ROMs unchanged.
+- **4-irq_and_dma**: not the DMA length. `apu_cycles_to_event` returned 2
+  instead of 1 at frame counts 29830-29832, so when the bus synced on the
+  exact cycle the IRQ was raised (as at the end of an OAM DMA), the next
+  opcode fetch missed it. Found by logging DMA and IRQ cycles per test case
+  and checking the four tail cases against the expected table.
+- **DMA rework** (nesdev "DMA", Mesen2's structure): dmc_dma_during_read4
+  dma_2007_read prints CRC 5E3DF9C4 (one of the two results its source
+  documents), dma_4016_read, dma_2007_write, read_write_2007 pass (new
+  `--text` check). sprdma_and_dmc_dma still fails: the only expected values
+  found are rows $0A/$0B = 526/527 of the 512 variant (nesdev forum thread
+  7547); ours are 526/528. Kirby's frame hash changed (DMC fetches now 3-4
+  cycles); its `--diff` stays identical.
+- **apu_reset 4017_written / len_ctrs_enabled**: a harness bug. After a
+  reset, the test's reset code runs ~2 frames before it leaves $6000 = $81,
+  and `nes_headless` pressed reset again. 6/6 pass now.
+- **Straddling instructions**: compiled with the operand read at run time;
+  Kirby's ROM misses are 0, interpreted steps 25,085 (RAM code only).
+
 ## 2026-11-15 · M8b: coverage, save states, frame hashes, frontend settings
 - **Coverage** (`--play 1 --coverage`, 6,000 frames, share of CPU cycles):
 

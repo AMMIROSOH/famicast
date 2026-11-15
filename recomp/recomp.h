@@ -44,6 +44,7 @@ typedef struct { uint8_t b[0x10000]; } AddrSet;
 
 typedef struct {
     AddrSet instrs, entries, indirect, external;
+    AddrSet straddle;  /* operand bytes in the next window: read at run time, flow not followed */
 } Program;
 
 /* Follow statically known control flow from prog->entries within [lo, hi).

@@ -18,6 +18,9 @@ detail yet.
 | mmc3_test_2 (readme read), MMC1_A12 from the same mirror | MMC3 IRQ and A12 checks (M7) | freely distributed test ROMs | read |
 | nesdev wiki: MMC1, UxROM, CNROM, MMC3 (IRQ counter, A12 filter, "cycle 260"), AxROM, Color Dreams, GxROM, PPU sprite fetches | `runtime/cart.c`, sprite fetch timing | from memory |
 | Mesen2 APU reset behaviour (keep $4017 mode, clear IRQ inhibit; pulse/noise length counters zeroed and unhalted, triangle unaffected) | `apu_reset()` | from memory |
+| nesdev wiki "DMA" (halt, dummy and alignment cycles, get/put, DMC during OAM DMA) and Mesen2's DMA loop | `run_dma` in `runtime/nes.c` | from memory |
+| Test sources from the pinned nes-test-roms mirror: cpu_interrupts_v2/source/4-irq_and_dma.s, apu_reset/source/*.s, dmc_dma_during_read4/source/*.s | expected outputs and what each test measures | read |
+| [nesdev forum, "Help with dmc_dma [SOLVED]"](https://nesdev.nes.science/f3/t7547.xhtml) | sprdma_and_dmc_dma_512 rows $0A/$0B = 526/527 | read |
 | nesdev wiki "INES" (DiskDude! junk in bytes 7-15) | header check in `runtime/cart.c`, used by `nesrecomp` too | from memory |
 | Inigo Quilez, "2D distance functions" (rounded box SDF) | `runtime/platform/tv_frame.c` shapes | from memory |
 | George Marsaglia, "Xorshift RNGs" (J. Stat. Software, 2003), the 13/17/5 xorshift32 | `nes_headless --play` input generator | from memory |

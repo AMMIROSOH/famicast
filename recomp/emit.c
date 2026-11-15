@@ -106,6 +106,17 @@ static void static_body(Buf *o, const Instr *ins, const uint8_t *mem) {
     }
 }
 
+/* An instruction whose operand is in the next window: the interpreter's C
+ * as is (operand read at run time), only the opcode is known. */
+static void dynamic_body(Buf *o, const Instr *ins) {
+    Lines l;
+    body(ins->op, &l);
+    bprintf(o, "        c->pc = 0x%04X;  /* operand in the next window: read at run time */\n",
+            (uint16_t)(ins->pc + 1));
+    for (int k = 0; k < l.n; k++)
+        if (*l.s[k]) bprintf(o, "        %s\n", l.s[k]);
+}
+
 /* Could this instruction write to $8000-$FFFF (a mapper register)? */
 static int may_write_rom(const Instr *i) {
     static const char STORES[] = " STA STX STY SAX AHX SHX SHY TAS ASL LSR ROL ROR INC DEC SLO RLA SRE RRA DCP ISB ";
@@ -188,7 +199,8 @@ void emit_program(Buf *o, Region *regions, int nregions, const char *rom_name, u
                 disasm(text, sizeof text, i, R->mem);
                 bprintf(o, "i_%04X: /* %s */\n", i->pc, text);
                 bprintf(o, "    fetch_k(c, 0x%04X, 0x%02X);\n    {\n", i->pc, R->mem[i->pc]);
-                static_body(o, i, R->mem);
+                if (R->prog->straddle.b[i->pc]) dynamic_body(o, i);
+                else static_body(o, i, R->mem);
                 bprintf(o, "    }\n");
                 int last = k == n - 1;
                 if (!strcmp(i->op->mn, "KIL")) bprintf(o, "    return;\n");
@@ -209,7 +221,7 @@ void emit_program(Buf *o, Region *regions, int nregions, const char *rom_name, u
             else if (t >= 0) next[nnext++] = t;                       /* JMP abs, JSR */
             else if (!is_transfer(end)) next[nnext++] = after;        /* the next block starts here */
             if (nnext == 2 && next[0] == next[1]) nnext = 1;
-            if (banked && may_write_rom(end)) nnext = 0;
+            if ((banked && may_write_rom(end)) || R->prog->straddle.b[end->pc]) nnext = 0;
             int chained = 0;
             for (int k = 0; k < nnext; k++) {
                 if (!R->prog->instrs.b[next[k]] || !starts->b[next[k]]) continue;

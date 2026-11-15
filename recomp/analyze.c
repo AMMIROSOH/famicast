@@ -37,6 +37,7 @@ void explore(Program *prog, const uint8_t *mem, uint32_t lo, uint32_t hi, const 
     memset(&prog->instrs, 0, sizeof prog->instrs);
     memset(&prog->indirect, 0, sizeof prog->indirect);
     memset(&prog->external, 0, sizeof prog->external);
+    memset(&prog->straddle, 0, sizeof prog->straddle);
     uint16_t *work = malloc(sizeof *work * 0x30000);  /* entries + 2 pushes per decoded pc */
     size_t n = 0;
     for (uint32_t a = 0; a < 0x10000; a++)
@@ -46,8 +47,11 @@ void explore(Program *prog, const uint8_t *mem, uint32_t lo, uint32_t hi, const 
         if (prog->instrs.b[pc]) continue;
         if (pc < lo || pc >= hi) { prog->external.b[pc] = 1; continue; }
         Instr ins = decode_at(mem, pc);
-        if ((uint32_t)pc + ins.size > hi) { prog->external.b[pc] = 1; continue; }  /* operand in the next window */
         prog->instrs.b[pc] = 1;
+        if ((uint32_t)pc + ins.size > hi) {  /* operand in the next window, maybe another bank */
+            prog->straddle.b[pc] = 1;
+            continue;
+        }
         if (!strcmp(ins.op->mn, "JMP") && !strcmp(ins.op->mode, "IND")) prog->indirect.b[pc] = 1;
         int t = ins_target(&ins);
         if (t >= 0) {
@@ -67,6 +71,7 @@ void block_starts(const Program *prog, const uint8_t *mem, AddrSet *starts) {
     for (uint32_t pc = 0; pc < 0x10000; pc++) {
         if (!prog->instrs.b[pc]) continue;
         Instr ins = decode_at(mem, (uint16_t)pc);
+        if (prog->straddle.b[pc]) continue;  /* last of its block; operand unknown here */
         int t = ins_target(&ins);
         uint16_t nxt = (uint16_t)(pc + ins.size);
         if (t >= 0 && prog->instrs.b[t]) starts->b[t] = 1;

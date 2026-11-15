@@ -89,6 +89,20 @@ typedef struct { uint8_t a, x, y, s, p; uint16_t pc; uint64_t cycles; } Cpu;
   not delayed by a whole block. Exact per-instruction NMI timing is only needed
   by a few games; the interpreter fallback can provide it if one needs it.
 
+## Speed notes
+- Generated code calls one out-of-line copy of the bus helpers per file
+  (`CPU_OPS_OUTLINE`): inlined everywhere, thousands of blocks outgrow the
+  CPU caches and run slower than the interpreter.
+- Blocks continue in the next block when it is known at compile time and in
+  the same region (`RECOMP_CHAIN`, a guaranteed tail call), unless an
+  interrupt is due or `cpu.yield` is set (frame end; lockstep tests set it
+  to compare after every block).
+
+## DMA
+OAM DMA and DMC fetches halt the CPU on its next read; that read is the halt
+cycle and is repeated on cycles the DMA unit does not use (`run_dma`). This
+reproduces the hardware's extra $2007/$4016 reads during DMC fetches.
+
 ## Save states
 The whole machine is the `Nes` struct (CPU, PPU, APU, cartridge registers,
 RAM), plus CHR RAM. Recompiled code keeps no state of its own (each block
@@ -129,7 +143,8 @@ jumps, JMP through a RAM pointer, and runs code from RAM (see 06). Plan:
    session and no rebuild-and-retry rounds are needed. With
    `-DNES_AUTO_HINTS=ON` the build does this itself with scripted input
    (`--play`) before recompiling (M8a). Coverage is limited to what the
-   input reaches; your own recording (`--replay`) reaches further.
+   input reaches; your own play reaches further: recompiled games write
+   `<program>.misses` next to themselves, and the next build reads it.
 2. Later (stretch): a JIT for missed code, so targets found at run time get
    native speed without a rebuild. Not needed for speed in v1: a C 6502
    interpreter runs far faster than real time, and misses are rare after the

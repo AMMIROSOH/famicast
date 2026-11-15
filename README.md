@@ -27,7 +27,8 @@ the interpreter and recompile with bank-aware code (M7); one game per mapper
 is verified identical to the interpreter. The recompiler is plain C and runs
 inside the CMake build; it can trace a game first to find code by itself
 (M8a). Save states, a coverage report, frame-hash regression tests and
-display settings (fullscreen, scaling, TV frame) came with M8b. See
+display settings (fullscreen, scaling, TV frame) came with M8b. Recompiled
+Kirby's Adventure runs at about 33x real time, Battle City at 38x. See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
@@ -54,7 +55,9 @@ build/battle_city                # the ROM is embedded: no path needed
 ```
 The whole ROM is embedded in the executable (graphics and data are read
 through pointers no analysis can bound), so **do not share these builds**:
-they contain the game.
+they contain the game. With `-DNES_EMBED_ROM=OFF` the program asks for the
+ROM file instead; the generated code still contains the game's code bytes,
+so those builds are not for sharing either.
 
 Code the static decoder cannot find (jump tables, RTS used as a jump) runs in
 the interpreter. Two ways to recompile it too:
@@ -63,7 +66,10 @@ the interpreter. Two ways to recompile it too:
   play (`nes_headless --play 1`) and passes every address it ran to the
   recompiler. Merged hints are written to `build/gen/<name>.toml`; copy them
   to `games/` to keep them without tracing.
-- By hand, from your own session (reaches what the script cannot):
+- By playing: a recompiled game notes ROM code it had to interpret in
+  `build/<name>.misses` (setting `record_misses` in its `.ini`); the next
+  `cmake --build build` recompiles it.
+- By hand, from a recording (reaches what the script cannot):
   ```
   build/nes game.nes --record run.nesi
   build/nes_headless game.nes --replay run.nesi --misses --out misses.txt

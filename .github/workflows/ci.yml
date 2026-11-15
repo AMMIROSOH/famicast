@@ -1,0 +1,35 @@
+# Build and test on Linux (GCC, Clang) and Windows (MSVC). Public test ROMs
+# only (fetched by tests/fetch_test_roms.py); no game ROMs, so the tests of
+# recompiled games skip. SingleStepTests (~1 GB) are not downloaded here.
+name: ci
+on: [push, pull_request]
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, cc: gcc}
+          - {os: ubuntu-latest, cc: clang}
+          - {os: windows-latest, cc: cl}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Fetch public test ROMs
+        run: python tests/fetch_test_roms.py
+      - name: Configure
+        # headless: the SDL3 frontend needs X11/Wayland dev packages on Linux
+        run: cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DNES_FRONTEND=OFF
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: python -m unittest discover -s tests -t . -v
