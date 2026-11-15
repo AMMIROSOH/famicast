@@ -42,9 +42,14 @@ SPECIAL = {
             "c->pc = lo | pull(c) << 8;", "rd(c, c->pc);", "c->pc++;"],
     "RTI": ["rd(c, c->pc);", "rd(c, 0x100 | c->s);", "c->p = (pull(c) & ~FLAG_B) | FLAG_U;",
             "uint16_t lo = pull(c);", "c->pc = lo | pull(c) << 8;"],
+    # An NMI seen in BRK's first four cycles takes over its vector; B is still
+    # pushed set. The sequence does not poll at its end, so the handler's first
+    # instruction always runs (nesdev "CPU interrupts", cpu_interrupts_v2 2).
     "BRK": ["rd(c, c->pc++);", "push(c, c->pc >> 8);", "push(c, c->pc & 0xFF);",
+            "uint16_t vec = c->nmi ? 0xFFFA : 0xFFFE;", "if (vec == 0xFFFA) c->nmi = 0;",
             "push(c, c->p | FLAG_B | FLAG_U);", "c->p |= FLAG_I;",
-            "uint16_t lo = rd(c, 0xFFFE);", "c->pc = lo | rd(c, 0xFFFF) << 8;"],
+            "uint16_t lo = rd(c, vec);", "c->pc = lo | rd(c, vec + 1) << 8;",
+            "c->poll_prev = 0;"],
     "PHA": ["rd(c, c->pc);", "push(c, c->a);"],
     "PHP": ["rd(c, c->pc);", "push(c, c->p | FLAG_B | FLAG_U);"],
     "PLA": ["rd(c, c->pc);", "rd(c, 0x100 | c->s);", "c->a = pull(c);", "nz(c, c->a);"],
@@ -94,11 +99,17 @@ def body(op):
     if mn in SPECIAL:
         return list(SPECIAL[mn])
     if mn in BRANCHES:
-        return ["int8_t off = (int8_t)rd(c, c->pc++);",
+        # Branches poll interrupts before their 2nd cycle, and again before the
+        # page fix-up cycle; a taken branch with no page cross ignores
+        # interrupts that arrive during its last cycle (nesdev "CPU interrupts",
+        # blargg cpu_interrupts_v2 5-branch_delays_irq).
+        return ["uint8_t poll1 = c->poll;",
+                "int8_t off = (int8_t)rd(c, c->pc++);",
                 f"if ({BRANCH_COND[mn]}) {{",
                 "    rd(c, c->pc);",
                 "    uint16_t t = c->pc + off;",
                 "    if ((t ^ c->pc) & 0xFF00) rd(c, (c->pc & 0xFF00) | (t & 0xFF));",
+                "    else c->poll_prev = poll1;",
                 "    c->pc = t;",
                 "}"]
     if mn == "JMP":

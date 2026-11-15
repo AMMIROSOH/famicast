@@ -8,20 +8,32 @@
  * PPU acts on the CPU by itself is reached (vblank start: NMI, frame end).
  * Between those points nothing can observe the PPU, so running its dots later
  * in one batch gives the same result; checked by the test ROMs, frame hashes
- * and --diff (docs/06). Mapper IRQs (M7) will add their own catch-up point. */
+ * and --diff (docs/06). The APU (M6) is caught up the same way; its events
+ * are the frame IRQ and DMC sample fetches. Mapper IRQs (M7) will add theirs. */
 #include "nes.h"
 
 #include <string.h>
 
 enum { DOTS_BEFORE_ACCESS = 2, LINE = 341, VBLANK_POS = 241 * LINE + 1, FRAME_SHORT = 262 * LINE - 1 };
 
-/* PPU steps needed until vblank start (241, 1) has been processed. Assumes
- * the odd-frame skipped dot, so it can only be one dot early, never late. */
+/* How many dots may pile up before the bus must catch up: until vblank
+ * start (241, 1) has been processed (assuming the odd-frame skipped dot, so
+ * at most one dot early), or until the APU's next event, whichever is first. */
 static void plan_next_event(Nes *n) {
     int pos = n->ppu.scanline * LINE + n->ppu.dot;
-    int d = VBLANK_POS - pos + 1;
+    int64_t d = VBLANK_POS - pos + 1;
     if (d <= 0) d += FRAME_SHORT;
-    n->cpu.bus_budget = d;
+    int64_t apu = n->cpu.bus_pending + 3 * apu_cycles_to_event(&n->apu);
+    n->cpu.bus_budget = (int32_t)(apu < d ? apu : d);
+}
+
+/* APU order within CPU cycle N: the bus access sees the APU as of N-1, then
+ * the APU clocks cycle N, then the CPU samples IRQ. So catch-ups run the APU
+ * to N-1, and every slow-path access finishes with sync_apu() (through N). */
+static void sync_apu(Nes *n) {
+    apu_run(&n->apu, n->cpu.cycles - 1);
+    n->cpu.irq = apu_irq(&n->apu);  /* the IRQ line, like $4015, lags one cycle */
+    apu_run(&n->apu, n->cpu.cycles);
 }
 
 /* The NMI line only rises at vblank start (or on a $2000/$2002 access, which
@@ -32,6 +44,7 @@ static void catch_up(Nes *n) {
     if (n->ppu.nmi_out && !n->nmi_prev) n->cpu.nmi = 1;  /* NMI is edge-triggered */
     n->nmi_prev = n->ppu.nmi_out;
     n->cpu.bus_pending = 0;
+    apu_run(&n->apu, n->cpu.cycles - 1);
     plan_next_event(n);
 }
 
@@ -56,17 +69,44 @@ static uint8_t read_no_tick(Nes *n, uint16_t a) {
         else { bit = n->pad_shift[i] & 1; n->pad_shift[i] = (uint8_t)(n->pad_shift[i] >> 1 | 0x80); }
         return (uint8_t)((n->cpu.open_bus & 0xE0) | bit);
     }
-    if (a < 0x4020) return n->cpu.open_bus;  /* APU: not implemented yet (M6) */
+    if (a == 0x4015) {
+        /* sees the APU as of the previous cycle (blargg apu 07.irq_flag_timing:
+         * the flag set "at 29830" reads as set from 29831) */
+        apu_run(&n->apu, n->cpu.cycles - 1);
+        return apu_read_status(&n->apu, n->cpu.open_bus);
+    }
+    if (a < 0x4020) return n->cpu.open_bus;  /* write-only APU registers */
     return cart_cpu_read(&n->cart, a, n->cpu.open_bus);
 }
 
 static int is_ppu(uint16_t a) { return (a & 0xE000) == 0x2000; }
 
+/* DMC sample fetch: the CPU is halted on its next read cycle while the DMA
+ * unit reads the byte (nesdev "APU DMC", "DMA").
+ * shortcut: always 4 cycles (hardware: 2-4 depending on alignment and on
+ * OAM DMA), and the halted read is not repeated (that repeat is what
+ * corrupts $2007/$4016 reads on hardware). Check: dmc_dma_during_read4. */
+static void dmc_dma(Nes *n) {
+    n->cpu.cycles += 3;        /* stall cycles; the read itself moves 4 later */
+    n->cpu.bus_pending += 12;
+    catch_up(n);
+    uint8_t v = cart_cpu_read(&n->cart, n->apu.dmc.addr, n->cpu.open_bus);
+    n->cpu.open_bus = v;
+    apu_dmc_fill(&n->apu, v);
+    n->cpu.irq = apu_irq(&n->apu);
+    n->cpu.cycles += 1;
+    plan_next_event(n);
+}
+
 uint8_t cpu_read(Cpu *c, uint16_t a) {
     Nes *n = c->bus;
+    if (n->apu.dmc.dma_request) dmc_dma(n);
     if (!is_ppu(a)) {
         add_dots(n, 3);
-        return n->cpu.open_bus = read_no_tick(n, a);
+        n->cpu.open_bus = read_no_tick(n, a);
+        sync_apu(n);
+        plan_next_event(n);
+        return n->cpu.open_bus;
     }
     n->cpu.bus_pending += DOTS_BEFORE_ACCESS;
     catch_up(n);
@@ -76,11 +116,17 @@ uint8_t cpu_read(Cpu *c, uint16_t a) {
      * the NMI line, and the edge must be seen on the following dot */
     n->cpu.bus_pending += 3 - DOTS_BEFORE_ACCESS;
     catch_up(n);
+    sync_apu(n);
+    plan_next_event(n);
     return n->cpu.open_bus;
 }
 
 /* $4014: 256 read/write pairs, plus 1 idle cycle (+1 when starting on an odd
- * cycle): 513 or 514 cycles, CPU halted meanwhile (nesdev "PPU OAM"). */
+ * cycle): 513 or 514 cycles, CPU halted meanwhile (nesdev "PPU OAM").
+ * shortcut: interrupts are not polled during the DMA, and a DMC fetch cannot
+ * interrupt it. cpu_interrupts_v2 4-irq_and_dma (IRQ at the DMA's end, 2
+ * cycles off) and sprdma_and_dmc_dma fail; one more idle cycle fixes the
+ * former but breaks sprite_overflow 3.Timing, so the cause is elsewhere. */
 static void oam_dma(Nes *n, uint8_t page) {
     int idle = 1 + (int)(n->cpu.cycles & 1);
     for (int i = 0; i < idle; i++) { n->cpu.cycles++; add_dots(n, 3); }
@@ -106,7 +152,12 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
             if (n->strobe) { n->pad_shift[0] = n->pad[0]; n->pad_shift[1] = n->pad[1]; }
         }
         else if (a >= 0x4020) cart_cpu_write(&n->cart, a, v);
-        /* other $4000-$401F: APU, M6 */
+        else if (a <= 0x4017) {  /* APU registers ($4014/$4016 handled above) */
+            sync_apu(n);
+            apu_write(&n->apu, a, v);
+        }
+        sync_apu(n);
+        plan_next_event(n);
         return;
     }
     n->cpu.bus_pending += DOTS_BEFORE_ACCESS;
@@ -118,6 +169,8 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
      * the NMI line, and the edge must be seen on the following dot */
     n->cpu.bus_pending += 3 - DOTS_BEFORE_ACCESS;
     catch_up(n);
+    sync_apu(n);
+    plan_next_event(n);
 }
 
 /* Fast-path pages for the CPU (cpu.h): 2 KB RAM mirrored over $0000-$1FFF,
@@ -136,6 +189,7 @@ int nes_load(Nes *n, const uint8_t *rom, size_t size, char *err, size_t errlen) 
     if (cart_load(&n->cart, rom, size, err, errlen) != 0) return -1;
     ppu_reset(&n->ppu, &n->cart);
     n->cpu.bus = n;
+    apu_reset(&n->apu, &n->cart, 1);
     cpu_reset(&n->cpu);
     plan_next_event(n);
     map_memory(n);
@@ -149,7 +203,9 @@ void nes_reset(Nes *n) {
     catch_up(n);
     n->ppu.ctrl = n->ppu.mask = 0;
     n->ppu.w = 0;
+    apu_reset(&n->apu, &n->cart, 0);
     cpu_reset(&n->cpu);
+    plan_next_event(n);
 }
 
 /* Dispatcher: recompiled block when there is one, else the interpreter.

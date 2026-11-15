@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from tests.games import BATTLE_CITY, find_rom
-from tests.test_ppu import RUNNER
+from tests.test_roms import RUNNER
 
 START, SELECT, A = 0x08, 0x04, 0x01
 PRESSES = [(300, START), (700, START), (760, 0x10), (800, A)]  # menu, game, up, fire

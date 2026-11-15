@@ -1,15 +1,23 @@
 /* Reference 2A03 interpreter: one bus access per cycle (docs/02). */
 #include "cpu_ops.h"
 
+/* NMI/IRQ entry. An NMI seen in the first four cycles takes over an IRQ's
+ * vector; no polling at the end, so the handler's first instruction always
+ * runs (nesdev "CPU interrupts", cpu_interrupts_v2 3-nmi_and_irq). */
 static void enter_interrupt(Cpu *c, uint16_t vector) {
     rd(c, c->pc);
     rd(c, c->pc);
     push(c, c->pc >> 8);
     push(c, c->pc & 0xFF);
+    if (c->nmi) {
+        vector = 0xFFFA;
+        c->nmi = 0;
+    }
     push(c, (uint8_t)((c->p & ~FLAG_B) | FLAG_U));
     c->p |= FLAG_I;
     uint16_t lo = rd(c, vector);
     c->pc = lo | rd(c, vector + 1) << 8;
+    c->poll_prev = 0;
 }
 
 void cpu_reset(Cpu *c) {
@@ -31,10 +39,7 @@ void cpu_step(Cpu *c) {
         return;
     }
     if (c->poll_prev) {  /* sampled on the previous instruction's second-to-last cycle */
-        int nmi = c->nmi;
-        c->nmi = 0;
-        c->poll = c->poll_prev = 0;
-        enter_interrupt(c, nmi ? 0xFFFA : 0xFFFE);
+        enter_interrupt(c, c->nmi ? 0xFFFA : 0xFFFE);  /* NMI cleared inside */
         return;
     }
     switch (rd(c, c->pc++)) {

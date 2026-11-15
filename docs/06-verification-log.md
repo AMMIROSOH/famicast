@@ -3,6 +3,57 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M6: APU, audio, interrupt details
+First run of the APU: 9/40 of the new ROMs passed. Final: all fetched ROM
+tests pass except 7 listed as pending in `tests/test_roms.py`.
+
+| Suite | Result |
+|---|---|
+| apu_test 1-8 | 8/8 |
+| blargg_apu_2005.07.30 01-11 (result at $F0) | 11/11 |
+| apu_reset | 4/6 (reset case of 4017_written, len_ctrs_enabled pending) |
+| cpu_interrupts_v2 1-5 | 4/5 (4-irq_and_dma pending) |
+| cpu_dummy_writes oam, ppumem | 2/2 |
+| sprdma_and_dmc_dma, _512 | pending |
+| pitch (tests/test_apu.py): pulse and triangle 440.4 Hz | within 2 Hz |
+
+What it took, in order:
+- **Result protocol**: blargg_apu_2005 keeps its result at $F0 (screen
+  "$01"); dmc_dma_during_read4 prints CRCs without a pass/fail signal
+  (dropped for now).
+- **APU order within a CPU cycle**: the access sees the APU as of the
+  previous cycle, then the APU clocks this cycle, then the CPU samples IRQ.
+  Found by tracing 07.irq_flag_timing: a $4015 read on the event cycle saw
+  the flag because the generic catch-up had already run that cycle. This one
+  rule took the suite from 13 to 19 passing.
+- **IRQ line lag**: the CPU sees the APU IRQ one cycle late, like $4015.
+  Fixed 08.irq_timing.
+- **Frame-counter jitter**: $4017 applies at once on even CPU cycles, one
+  cycle later on odd ones (`FC_JITTER_PARITY = 0`; the other parity fails
+  4-jitter).
+- **Power/reset**: the effective $4017 write is 10 cycles before the first
+  instruction. Measured with apu_reset 4017_timing, which prints the delay
+  (8 − d for a delay d; started the counter at 2). Reset keeps the mode,
+  clears IRQ inhibit, zeroes and unhalts pulse/noise length counters and
+  leaves the triangle alone (as Mesen2). The remaining reset cases fail on a
+  read where our result matches that model; no test source to check.
+- **Branch interrupt polling**: polled before the 2nd cycle and before the
+  page fix-up; a taken branch without page cross ignores the last cycle
+  (5-branch_delays_irq).
+- **NMI hijack**: an NMI in the first four cycles of BRK or IRQ entry takes
+  over the vector; no polling at the end of the sequence (2-nmi_and_brk,
+  3-nmi_and_irq).
+- **OAM DMA length**: 514/515 cycles fixes 4-irq_and_dma but breaks
+  sprite_overflow 3.Timing; kept nesdev's 513/514 and marked 4-irq_and_dma
+  pending (needs polling during DMA).
+- Mistake on the way: a timing sweep with an unanchored `sed` rewrote the
+  $4017 jitter code too and made 12 tests fail; caught by the suite, fixed.
+- Battle City: frame hash changed (EBB97DBA → 3A8AD2AE for 6,000 frames)
+  because of the CPU interrupt fixes; 10-minute `--diff` identical, audio
+  hash identical in both modes (FE2A5DF2, 28.75 M samples), title silent and
+  stage-start music from Start onward. Speed: ~26x real time (APU stepped
+  per cycle in both modes).
+
 ## 2026-11-15 · M5b: speed
 Benchmark: `python tools/bench.py ROM EXE...` (Battle City, 6,000 frames of
 `tests/play_script.py` seed 1, best of 3; single runs vary by ±20%).
@@ -69,7 +120,7 @@ is run at once.
   player 1, plays).
 
 ## 2026-11-15 · M3: PPU, bus, NROM
-Run: `python -m unittest tests.test_ppu` (ROMs from the nes-test-roms mirror,
+Run: `python -m unittest tests.test_roms` (ROMs from the nes-test-roms mirror,
 commit `95d8f621`). First run of the new PPU: 33/50 passed. After the fixes
 below: **52/52**, and the CPU suites are still green.
 

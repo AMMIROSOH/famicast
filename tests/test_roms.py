@@ -1,4 +1,5 @@
-"""Whole-system test ROMs on the interpreter (docs/02, verification ladder 6).
+"""Whole-system test ROMs (CPU, PPU, APU, interrupts) on the interpreter
+(docs/02, verification ladder 6).
 
 Needs the C build (see tests/test_cpu.py). ROMs come from the pinned
 nes-test-roms mirror (tests/fetch_test_roms.py).
@@ -13,6 +14,12 @@ from tests.test_cpu import BUILD
 RUNNER = os.path.join(BUILD, "nes_headless.exe" if os.name == "nt" else "nes_headless")
 PENDING = {  # path -> why it is not expected to pass yet
     "ppu_read_buffer/test_ppu_read_buffer.nes": "mapper 3 (CNROM), M7",
+    "cpu_dummy_reads/cpu_dummy_reads.nes": "mapper 3 (CNROM), M7",
+    "cpu_interrupts_v2/rom_singles/4-irq_and_dma.nes": "no interrupt polling during OAM DMA (shortcut in nes.c)",
+    "sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes": "DMC DMA during OAM DMA not modelled (shortcut in nes.c)",
+    "sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes": "DMC DMA during OAM DMA not modelled (shortcut in nes.c)",
+    "apu_reset/4017_written.nes": "reset case #3 unclear without test source; power case passes (docs/06)",
+    "apu_reset/len_ctrs_enabled.nes": "reset case #3 unclear without test source; power case passes (docs/06)",
 }
 
 

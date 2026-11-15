@@ -65,7 +65,7 @@ nes/
 - [x] SDL3 frontend: ROM loading, keyboard, integer scaling, 60.1 Hz pacing.
 - [x] `nes_headless` runner: blargg $6000 protocol, zero-page result codes,
   PPM screenshots, frame hash, scripted input (`--press`).
-- [x] 52/52 test ROMs pass (`tests/test_ppu.py`, list in 06).
+- [x] 52/52 test ROMs pass (`tests/test_roms.py`, list in 06).
 - [x] Battle City: title screen and stage 1 render and play (interpreter).
 - [ ] `test_ppu_read_buffer` (needs mapper 3, M7).
 - **Exit:** met.
@@ -115,10 +115,21 @@ nes/
   against the per-dot PPU with the test ROMs and frame hashes.
 
 ## M6 · APU + audio
-- Pulse ×2, triangle, noise, DMC, frame counter + IRQ; SDL3 audio stream with
-  resampling.
-- **Exit:** blargg `apu_test` passes; Battle City sounds right by ear compared
-  with a reference emulator.
+- [x] `runtime/apu.c`: pulse ×2 (envelope, sweep), triangle, noise, DMC with
+  sample DMA and IRQ, frame counter (blargg 2005 timing, jitter), mixer
+  tables, 48 kHz box-filter resampling, NES output filters.
+- [x] Lazy like the PPU: frame-IRQ and DMC-fetch events in the bus budget.
+- [x] CPU interrupt details: NMI hijacks BRK/IRQ in their first four cycles,
+  no polling at the end of an interrupt sequence, branch polling rules.
+- [x] SDL3 audio stream with ±0.5% rate control; `--wav`, `--audio-hash`.
+- [x] Tests: apu_test 8/8, blargg_apu_2005 11/11, apu_reset 4/6,
+  cpu_interrupts_v2 4/5, cpu_dummy_writes 2/2; pitch test (`tests/test_apu.py`).
+- [ ] Pending, with reasons in `tests/test_roms.py`: apu_reset reset-case
+  (2), cpu_interrupts_v2 4-irq_and_dma and sprdma_and_dmc_dma (2): need
+  interrupt polling and DMC fetches during OAM DMA; dmc_dma_during_read4
+  (repeated halted read not modelled; prints CRCs only).
+- [ ] Battle City by ear vs a reference emulator (user).
+- **Exit:** met except the pending items above.
 
 ## M7 · More mappers and games
 - MMC1, UxROM, CNROM, then MMC3 (scanline IRQ). Bank-aware block keys.

@@ -93,6 +93,23 @@ NTR_FILES = {
         "01-basics", "02-implied", "03-immediate", "04-zero_page", "05-zp_xy", "06-absolute",
         "07-abs_xy", "08-ind_x", "09-ind_y", "10-branches", "11-stack", "12-jmp_jsr", "13-rts",
         "14-rti", "15-brk", "16-special")},
+    **{f"apu_test/rom_singles/{n}.nes": "6000" for n in (
+        "1-len_ctr", "2-len_table", "3-irq_flag", "4-jitter", "5-len_timing", "6-irq_flag_timing",
+        "7-dmc_basics", "8-dmc_rates")},
+    **{f"apu_reset/{n}.nes": "6000" for n in (
+        "4015_cleared", "4017_timing", "4017_written", "irq_flag_cleared", "len_ctrs_enabled",
+        "works_immediately")},
+    **{f"cpu_interrupts_v2/rom_singles/{n}.nes": "6000" for n in (
+        "1-cli_latency", "2-nmi_and_brk", "3-nmi_and_irq", "4-irq_and_dma", "5-branch_delays_irq")},
+    **{f"blargg_apu_2005.07.30/{n}.nes": "f0" for n in (
+        "01.len_ctr", "02.len_table", "03.irq_flag", "04.clock_jitter", "05.len_timing_mode0",
+        "06.len_timing_mode1", "07.irq_flag_timing", "08.irq_timing", "09.reset_timing",
+        "10.len_halt_timing", "11.len_reload_timing")},
+    "cpu_dummy_reads/cpu_dummy_reads.nes": "6000",
+    "cpu_dummy_writes/cpu_dummy_writes_oam.nes": "6000",
+    "cpu_dummy_writes/cpu_dummy_writes_ppumem.nes": "6000",
+    "sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes": "6000",
+    "sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes": "6000",
     "ppu_open_bus/ppu_open_bus.nes": "6000",
     "ppu_read_buffer/test_ppu_read_buffer.nes": "6000",
     "oam_read/oam_read.nes": "6000",

@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO)) {
         SDL_Log("SDL_Init: %s", SDL_GetError());
         return 1;
     }
@@ -133,6 +133,14 @@ int main(int argc, char **argv) {
     uint32_t palette[64];
     nes_palette_rgb(palette);
     static uint32_t fb[NES_W * NES_H];
+    /* Audio: mono float at the APU's 48 kHz. Video sets the pace (60.1 Hz);
+     * the playback rate is nudged (+-0.5%) to keep about 3 frames queued, so
+     * the two clocks never drift apart (no crackle, no growing latency). */
+    const SDL_AudioSpec spec = {SDL_AUDIO_F32, 1, APU_SAMPLE_RATE};
+    SDL_AudioStream *audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
+    if (audio) SDL_ResumeAudioStreamDevice(audio);
+    else SDL_Log("no audio: %s", SDL_GetError());
+    static float samples[APU_BUF];
     uint64_t next = SDL_GetTicksNS();
     int running = 1, reset_pressed = 0;
     for (long frame = 0; running && (max_frames <= 0 || frame < max_frames); frame++) {
@@ -158,6 +166,14 @@ int main(int argc, char **argv) {
         nes.pad[1] = in.pad[1];
 
         nes_run_frame(&nes);
+        int ns = apu_take_samples(&nes.apu, samples, APU_BUF);
+        if (audio) {
+            SDL_PutAudioStreamData(audio, samples, ns * (int)sizeof(float));
+            const float target = 3.0f * APU_SAMPLE_RATE / 60.0988f;
+            float queued = (float)SDL_GetAudioStreamQueued(audio) / sizeof(float);
+            float ratio = 1.0f + 0.005f * (queued - target) / target;
+            SDL_SetAudioStreamFrequencyRatio(audio, ratio < 0.995f ? 0.995f : ratio > 1.005f ? 1.005f : ratio);
+        }
         if (nes.cpu.jammed) {
             SDL_Log("CPU jammed at $%04X", nes.cpu.pc);
             break;
@@ -178,6 +194,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 2; i++)
         if (gamepads[i]) SDL_CloseGamepad(gamepads[i]);
     cart_free(&nes.cart);
+    if (audio) SDL_DestroyAudioStream(audio);
     SDL_DestroyTexture(tex);
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);

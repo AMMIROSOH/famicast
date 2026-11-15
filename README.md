@@ -22,7 +22,7 @@ M0-M3 done: verified opcode table and decoder, a reference interpreter (nestest,
 SingleStepTests) and a PPU passing 52 blargg-style test ROMs. Battle City runs
 on the interpreter and recompiled (M5: lockstep-identical to the interpreter
 over 10 minutes of play, no interpreted code left), about 30x faster than a
-real NES in both modes (M5b). Next: sound (M6). See
+real NES in both modes (M5b), with sound (M6). Next: more mappers (M7). See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).

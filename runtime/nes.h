@@ -2,6 +2,7 @@
 #ifndef NES_NES_H
 #define NES_NES_H
 
+#include "apu.h"
 #include "cart.h"
 #include "cpu.h"
 #include "ppu.h"
@@ -16,6 +17,7 @@ typedef struct Nes {
     Cpu cpu;
     Ppu ppu;
     Cart cart;
+    Apu apu;
     uint8_t ram[0x800];
     uint8_t pad[2];       /* buttons held, set by the frontend */
     uint8_t pad_shift[2], strobe;

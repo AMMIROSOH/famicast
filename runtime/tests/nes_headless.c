@@ -20,6 +20,8 @@
  *           state after every recompiled block; stop at the first difference.
  * --misses  print how many instructions were interpreted, and where.
  * --time    print the emulation time and speed relative to a real NES.
+ * --wav     write the audio output (48 kHz mono, 16-bit) to a WAV file.
+ * --audio-hash  print an FNV-1a hash of the 16-bit audio (regression tests).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -111,6 +113,37 @@ static void print_misses(Nes *n) {
         if (n->misses[a]) printf("MISS $%04X %u%s\n", a, n->misses[a], a < 0x8000 ? " (RAM)" : "");
 }
 
+/* ---- audio capture (--wav, --audio-hash) ---- */
+static int16_t *pcm;
+static size_t pcm_len, pcm_cap;
+
+static void collect_audio(Nes *n) {
+    float tmp[APU_BUF];
+    int k = apu_take_samples(&n->apu, tmp, APU_BUF);
+    if (pcm_len + (size_t)k > pcm_cap) {
+        pcm_cap = (pcm_len + (size_t)k) * 2;
+        pcm = realloc(pcm, pcm_cap * sizeof *pcm);
+    }
+    for (int i = 0; i < k; i++) {
+        float v = tmp[i] * 32767.0f;
+        pcm[pcm_len++] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+    }
+}
+
+static void put32(FILE *f, uint32_t v) { fwrite((uint8_t[4]){v, v >> 8, v >> 16, v >> 24}, 1, 4, f); }
+static void put16(FILE *f, uint16_t v) { fwrite((uint8_t[2]){v, v >> 8}, 1, 2, f); }
+
+static void write_wav(const char *path) {
+    FILE *f = fopen(path, "wb");
+    if (!f) { perror(path); exit(2); }
+    uint32_t bytes = (uint32_t)(pcm_len * 2);
+    fwrite("RIFF", 1, 4, f); put32(f, 36 + bytes); fwrite("WAVEfmt ", 1, 8, f);
+    put32(f, 16); put16(f, 1); put16(f, 1); put32(f, APU_SAMPLE_RATE); put32(f, APU_SAMPLE_RATE * 2);
+    put16(f, 2); put16(f, 16); fwrite("data", 1, 4, f); put32(f, bytes);
+    for (size_t i = 0; i < pcm_len; i++) put16(f, (uint16_t)pcm[i]);
+    fclose(f);
+}
+
 static int blargg_ready(Nes *n) {
     return nes_peek(n, 0x6001) == 0xDE && nes_peek(n, 0x6002) == 0xB0 && nes_peek(n, 0x6003) == 0x61;
 }
@@ -129,7 +162,8 @@ int main(int argc, char **argv) {
         return 2;
     }
     long frames = -1, peek = -1;
-    int blargg = 0, hash = 0, npress = 0, interp = 0, diff = 0, misses = 0, timing = 0;
+    int blargg = 0, hash = 0, npress = 0, interp = 0, diff = 0, misses = 0, timing = 0, audio_hash = 0;
+    const char *wav = NULL;
     long press_frame[64];
     unsigned press_mask[64];
     const char *ppm = NULL, *record = NULL, *replay = NULL;
@@ -143,6 +177,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--diff")) diff = 1;
         else if (!strcmp(argv[i], "--misses")) misses = 1;
         else if (!strcmp(argv[i], "--time")) timing = 1;
+        else if (!strcmp(argv[i], "--wav") && i + 1 < argc) wav = argv[++i];
+        else if (!strcmp(argv[i], "--audio-hash")) audio_hash = 1;
         else if (!strcmp(argv[i], "--record") && i + 1 < argc) record = argv[++i];
         else if (!strcmp(argv[i], "--replay") && i + 1 < argc) replay = argv[++i];
         else if (!strcmp(argv[i], "--press") && i + 1 < argc && npress < 64 &&
@@ -189,6 +225,8 @@ int main(int argc, char **argv) {
         if (rec) input_log_write(rec, in);
         if (in.flags & INPUT_RESET) { nes_reset(&nes); if (diff) nes_reset(&ref); }
         frames_run++;
+        if (wav || audio_hash) collect_audio(&nes);
+        else nes.apu.buf_len = 0;
         nes.pad[0] = ref.pad[0] = in.pad[0];
         nes.pad[1] = ref.pad[1] = in.pad[1];
         if (!diff) nes_run_frame(&nes);
@@ -232,6 +270,15 @@ int main(int argc, char **argv) {
     if (diff) printf("DIFF OK: %ld frames, recompiled and interpreter identical\n", frames);
     if (misses) print_misses(&nes);
     if (ppm) write_ppm(&nes, ppm);
+    if (wav) write_wav(wav);
+    if (audio_hash) {
+        uint32_t h = 2166136261u;
+        for (size_t i = 0; i < pcm_len; i++) {
+            h = (h ^ (uint8_t)pcm[i]) * 16777619u;
+            h = (h ^ (uint8_t)(pcm[i] >> 8)) * 16777619u;
+        }
+        printf("AUDIOHASH %08X (%zu samples)\n", h, pcm_len);
+    }
     if (rec) fclose(rec);
     input_log_free(&log);
     cart_free(&nes.cart);
