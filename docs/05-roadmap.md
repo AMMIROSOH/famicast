@@ -84,14 +84,28 @@ nes/
   was not tested with a physical pad on the dev machine (none connected).
 
 ## M5 · Recompiler v1 (NROM)
-- `emit_c.py`: one C function per block, all bus access through the runtime,
-  run-time penalty cycles, interrupt checkpoints (see 02).
-- Dispatch with interpreter fallback; log every fallback address.
-- Lockstep diff mode (`--diff`): recompiled vs interpreter, compare state +
-  RAM hash per block, stop at first difference with a readable report.
-- **Exit:** recompiled nestest matches the log; Battle City runs 10 minutes of
-  recorded input with zero divergences in `--diff` and zero fallbacks after
-  `game.toml` is filled in.
+- [x] `recomp/blocks.py`, `recomp/emit_c.py`, CLI `python -m recomp ROM -o OUT.c --hints`.
+- [x] Runtime dispatch (`nes_step`): block if recompiled, else interpreter;
+  PRG-hash check; fallback statistics.
+- [x] `nes_headless --diff` (lockstep vs interpreter: CPU, RAM, PRG RAM, PPU
+  state per block, frame image per frame) and `--misses`.
+- [x] Feedback loop: `python -m recomp.suggest`, `games/battle_city.toml`.
+- [x] CMake: `nes_recompile()`; nestest always, own ROMs via `-DNES_GAMES=`.
+- [x] Recompiled nestest: all 3,752 block-boundary states match nestest.log.
+- [x] Battle City: 10 minutes of scripted play (`tests/play_script.py`),
+  zero divergences, zero interpreted instructions.
+- **Exit:** met.
+
+## M5b · Speed (new)
+Recompiled code is correct but not yet faster than the interpreter (37 s vs
+29 s for 10 minutes of Battle City; both ~16-21x real time). Most time is
+the PPU stepped every CPU cycle plus per-block dispatch. Ideas, each to be
+checked with `--diff`:
+- [ ] PPU catch-up only when the CPU touches PPU registers or an event is due
+  (NMI, sprite 0, frame end), instead of every cycle (helps both modes).
+- [ ] Operand bytes as constants (`rd` still ticks the clock, value folded).
+- [ ] Jumps between blocks of the same function as `goto`; fewer returns.
+- [ ] Skip the per-instruction interrupt check where none can arrive.
 
 ## M6 · APU + audio
 - Pulse ×2, triangle, noise, DMC, frame counter + IRQ; SDL3 audio stream with

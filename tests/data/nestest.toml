@@ -1,0 +1,10 @@
+# Recompiler hints for nestest.nes: code reached only through dynamic jumps
+# (found by tests/test_decoder.py from nestest.log, see docs/06).
+entries = [
+    0xC000,  # automation-mode entry (not a vector; reset goes to the menu at $C004)
+    0xCE67,  # RTS used as a jump: PHA/PHA/RTS at $CE60-$CE66
+    0xCEAE,  # RTI used as a jump at $CEAD
+    0xCECE,  # RTI used as a jump at $CECD
+    0xDB7E,  # JMP ($0200) at $DB7B
+]
+# The JMP ($02FF) at $DBB5 goes to $0300 in RAM: interpreter only.

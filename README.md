@@ -20,7 +20,9 @@ See [docs/02-architecture.md](docs/02-architecture.md) and the plan in
 ## Status
 M0-M3 done: verified opcode table and decoder, a reference interpreter (nestest,
 SingleStepTests) and a PPU passing 52 blargg-style test ROMs. Battle City runs
-on the interpreter: `build/nes "Battle City.nes"`. Next: the recompiler (M5). See
+on the interpreter and recompiled (M5: lockstep-identical to the interpreter
+over 10 minutes of play, no interpreted code left). Next: speed (M5b), sound
+(M6). See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
@@ -34,6 +36,21 @@ cmake --build build
 build/nes path/to/game.nes      # NROM games for now
 ```
 Headless (no SDL3): add `-DNES_FRONTEND=OFF`.
+
+## Recompiling a game
+```
+cmake -S . -B build -DNES_GAMES="path/to/Battle City.nes"
+cmake --build build              # -> build/battle_city(.exe) and battle_city_headless
+build/battle_city "path/to/Battle City.nes"
+```
+The ROM is still needed at run time (graphics and data). Code the static
+decoder missed runs in the interpreter; to recompile it too:
+```
+build/battle_city_headless game.nes --replay session.nesi --misses > misses.txt
+python -m recomp.suggest game.nes misses.txt --hints games/battle_city.toml --write
+cmake --build build
+```
+`--diff` runs the interpreter in lockstep and reports the first difference.
 
 ## Controls
 Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =

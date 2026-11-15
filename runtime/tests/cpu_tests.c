@@ -2,6 +2,9 @@
  *
  *   cpu_tests nestest ROM N   print the state before each of N instructions,
  *                             starting at $C000 (nestest automation mode)
+ *   cpu_tests nestest-recomp ROM MAXCYC
+ *                             same, but through the linked recompiled code;
+ *                             prints the state after every block until MAXCYC
  *   cpu_tests sst FILE...     run SingleStepTests files converted by
  *                             tests/fetch_test_roms.py; one summary line each
  *
@@ -15,6 +18,7 @@
 #include <string.h>
 
 #include "cpu.h"
+#include "recomp_rt.h"
 
 static uint8_t mem[0x10000];
 typedef struct { uint16_t addr; uint8_t value, is_write; } Access;
@@ -45,7 +49,7 @@ static uint8_t *read_file(const char *path, long *size) {
     return buf;
 }
 
-static int nestest(const char *rom, long steps) {
+static int nestest(const char *rom, long steps, int recomp) {
     long size;
     uint8_t *d = read_file(rom, &size);
     if (size < 16 + 0x4000 || memcmp(d, "NES\x1a", 4) != 0) { fprintf(stderr, "bad ROM\n"); return 2; }
@@ -54,6 +58,20 @@ static int nestest(const char *rom, long steps) {
     Cpu c = {0};
     cpu_reset(&c);
     c.pc = 0xC000;  /* automation mode entry */
+    if (recomp) {  /* steps = last cycle count to run to */
+        if (!recomp_program || recomp_program->prg_hash != recomp_prg_hash(d + 16, 0x4000)) {
+            fprintf(stderr, "no recompiled code for this ROM\n");
+            return 2;
+        }
+        while (c.cycles <= (uint64_t)steps && !c.jammed) {
+            printf("%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%" PRIu64 "\n",
+                   c.pc, c.a, c.x, c.y, c.p, c.s, c.cycles);
+            RecompFn f = c.poll_prev ? NULL : recomp_program->lookup(c.pc);
+            if (f) f(&c);
+            else cpu_step(&c);
+        }
+        return 0;
+    }
     for (long i = 0; i < steps; i++) {
         printf("%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%" PRIu64 "\n",
                c.pc, c.a, c.x, c.y, c.p, c.s, c.cycles);
@@ -120,7 +138,8 @@ static int sst_file(const char *path) {
 }
 
 int main(int argc, char **argv) {
-    if (argc == 4 && !strcmp(argv[1], "nestest")) return nestest(argv[2], atol(argv[3]));
+    if (argc == 4 && !strcmp(argv[1], "nestest")) return nestest(argv[2], atol(argv[3]), 0);
+    if (argc == 4 && !strcmp(argv[1], "nestest-recomp")) return nestest(argv[2], atol(argv[3]), 1);
     if (argc >= 3 && !strcmp(argv[1], "sst")) {
         int bad = 0;
         for (int i = 2; i < argc; i++) bad |= sst_file(argv[i]);

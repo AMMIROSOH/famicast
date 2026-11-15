@@ -82,8 +82,11 @@ int nes_load(Nes *n, const uint8_t *rom, size_t size, char *err, size_t errlen) 
     ppu_reset(&n->ppu, &n->cart);
     n->cpu.bus = n;
     cpu_reset(&n->cpu);
+    if (recomp_program && recomp_program->prg_hash == recomp_prg_hash(n->cart.prg, n->cart.prg_size))
+        n->recomp = recomp_program->lookup;
     return 0;
 }
+
 
 void nes_reset(Nes *n) {
     n->ppu.ctrl = n->ppu.mask = 0;
@@ -91,9 +94,27 @@ void nes_reset(Nes *n) {
     cpu_reset(&n->cpu);
 }
 
+/* Dispatcher: recompiled block when there is one, else the interpreter.
+ * Interrupt entry and a jammed CPU always go through cpu_step. */
+void nes_step(Nes *n) {
+    Cpu *c = &n->cpu;
+    if (n->recomp && !c->poll_prev && !c->jammed) {
+        RecompFn f = n->recomp(c->pc);
+        if (f) {
+            f(c);
+            n->steps_native++;
+            return;
+        }
+        if (n->misses) n->misses[c->pc]++;
+    }
+    if (c->poll_prev) n->steps_interrupt++;
+    else n->steps_interp++;
+    cpu_step(c);
+}
+
 void nes_run_frame(Nes *n) {
     n->ppu.frame_done = 0;
-    while (!n->ppu.frame_done && !n->cpu.jammed) cpu_step(&n->cpu);
+    while (!n->ppu.frame_done && !n->cpu.jammed) nes_step(n);
 }
 
 uint8_t nes_peek(Nes *n, uint16_t a) {

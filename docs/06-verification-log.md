@@ -3,6 +3,28 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M5: recompiler v1
+- **nestest, recompiled** (`nestest_recomp_tests`, hints in
+  `tests/data/nestest.toml`): 7,404 instructions in 2,653 blocks. The CPU
+  state after each of the 3,752 block steps equals the nestest.log line with
+  the same cycle count; the run reaches the end of the log. Code at $0300
+  (RAM) runs in the interpreter, as planned. First build had only 478
+  instructions: nestest's automation entry $C000 is not a vector (reset is
+  $C004), so it had to be a hint.
+- **Battle City, recompiled**: 3,215 instructions found statically. 10
+  minutes of scripted play (seed 1) showed 1,301 interpreted ROM addresses
+  from the 8 indirect jumps; `recomp.suggest` reduced them to 28 entry points
+  (`games/battle_city.toml`), after which: 4,924 instructions, 1,467 blocks,
+  **0 interpreted instructions** in the same session (only the 35,656 NMI
+  entries go through the interpreter, by design).
+- **Lockstep** (`--diff`, 36,000 frames): CPU registers, cycle count, RAM,
+  PRG RAM and PPU state identical after every block, frame images identical;
+  final frame hash 9A346143 in both modes.
+- **Speed**: interpreter 28.8 s, recompiled 37.4 s for the 10-minute session
+  (Release, clang). Compiling the generated C with -Os/-O1 gives 32-35 s, so
+  code size is not the main cost. Logged as M5b.
+- Generated C compiles with -Wall -Wextra without warnings.
+
 ## 2026-11-15 · M4: input
 - Recording format (`runtime/input_log.h`): "NESI", version 1, then pad 1,
   pad 2, flags per frame. Emulation is deterministic from power-on, so
@@ -13,8 +35,9 @@ reproducible check is not "verified".
 - A recording written by Python (independent of the C writer) replays to the
   same hash as the `--press` run; a reset flag at frame 850 replays
   deterministically and changes the result.
-- Gamepads: built against SDL3 3.4.20; no pad was connected on the dev
-  machine, so button mapping and hot-plug are untested on hardware.
+- Gamepads: built against SDL3 3.4.20; no pad was connected at first.
+  Later confirmed by the user with an Xbox Series X controller (detected as
+  player 1, plays).
 
 ## 2026-11-15 · M3: PPU, bus, NROM
 Run: `python -m unittest tests.test_ppu` (ROMs from the nes-test-roms mirror,

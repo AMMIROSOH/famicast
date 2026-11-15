@@ -47,12 +47,18 @@ typedef struct { uint8_t a, x, y, s, p; uint16_t pc; uint64_t cycles; } Cpu;
 
 ## Recompiled code
 - **Decoder**: recursive descent from the reset/NMI/IRQ vectors plus extra
-  entry points from `game.toml`. Instructions are keyed by address, so
-  overlapping decodes are allowed.
-- **Blocks**: one C function per basic block, `void blk_C070(Cpu *c)`. It
-  executes its instructions, adds their cycles (including page-cross and
-  branch penalties computed at run time where they depend on X/Y), and sets
-  `c->pc` to the next address.
+  entry points from `games/<name>.toml`. Instructions are keyed by address,
+  so overlapping decodes are allowed.
+- **Blocks** (`recomp/blocks.py`, `recomp/emit_c.py`): one C function per
+  basic block, `static void b_C079(Cpu *c)`. Each instruction is the same C
+  the interpreter's switch is generated from (`recomp/c6502.py`), so bus
+  traffic and cycle counts are identical by construction; the recompiler
+  removes fetch/decode/dispatch. A `switch (c->pc)` at the top makes every
+  instruction start an entry point (resume after RTI without falling back).
+  After each instruction the block returns if an interrupt is due, so
+  interrupts happen on the same instruction as in the interpreter.
+- **Identity**: the generated code carries an FNV-1a hash of the PRG; the
+  runtime uses it only if the loaded ROM matches.
 - **Banked mappers**: blocks are keyed by (PRG bank, address). The dispatcher
   looks up the bank currently mapped at that address.
 - **Dispatch loop** (runtime):
@@ -85,10 +91,10 @@ three jobs:
 ## Missed code: feedback loop now, JIT later
 Static decoding cannot see every target. nestest alone uses RTS and RTI as
 jumps, JMP through a RAM pointer, and runs code from RAM (see 06). Plan:
-1. v1: the interpreter runs missed code and logs each target address.
-   `nes-recomp suggest` turns the log into `game.toml` entries; recompiling
-   then covers them. The decoder test already works this way on nestest
-   (decode → collect unpredicted targets → feed back → repeat until stable).
+1. v1 (done): the interpreter runs missed code; `nes_headless --misses`
+   lists it; `python -m recomp.suggest` keeps the chain starts and merges
+   them into `games/<name>.toml`; recompiling then covers them. For Battle
+   City one round (28 entries) brought a 10-minute session to zero misses.
 2. Later (stretch): a JIT for missed code, so targets found at run time get
    native speed without a rebuild. Not needed for speed in v1: a C 6502
    interpreter runs far faster than real time, and misses are rare after the
