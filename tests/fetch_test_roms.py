@@ -78,10 +78,57 @@ def fetch_sst(opcode):
     return path
 
 
+# blargg and other test ROMs from the christopherpow/nes-test-roms mirror,
+# pinned to a commit (raw files at a commit cannot change).
+NTR_COMMIT = "95d8f621ae55cee0d09b91519a8989ae0e64753b"
+NTR_URL = "https://raw.githubusercontent.com/christopherpow/nes-test-roms/%s/%s"
+# path -> how the ROM reports: "6000" (text + code at $6000), or the zero-page
+# address of its result code ("f8", "f0"; 1 = pass, checked against the screen)
+NTR_FILES = {
+    **{f"ppu_vbl_nmi/rom_singles/{n}.nes": "6000" for n in (
+        "01-vbl_basics", "02-vbl_set_time", "03-vbl_clear_time", "04-nmi_control", "05-nmi_timing",
+        "06-suppression", "07-nmi_on_timing", "08-nmi_off_timing", "09-even_odd_frames",
+        "10-even_odd_timing")},
+    **{f"instr_test-v5/rom_singles/{n}.nes": "6000" for n in (
+        "01-basics", "02-implied", "03-immediate", "04-zero_page", "05-zp_xy", "06-absolute",
+        "07-abs_xy", "08-ind_x", "09-ind_y", "10-branches", "11-stack", "12-jmp_jsr", "13-rts",
+        "14-rti", "15-brk", "16-special")},
+    "ppu_open_bus/ppu_open_bus.nes": "6000",
+    "ppu_read_buffer/test_ppu_read_buffer.nes": "6000",
+    "oam_read/oam_read.nes": "6000",
+    "oam_stress/oam_stress.nes": "6000",
+    **{f"blargg_ppu_tests_2005.09.15b/{n}.nes": "f0" for n in (
+        "palette_ram", "sprite_ram", "vbl_clear_time", "vram_access")},
+    **{f"sprite_hit_tests_2005.10.05/{n}.nes": "f8" for n in (
+        "01.basics", "02.alignment", "03.corners", "04.flip", "05.left_clip", "06.right_edge",
+        "07.screen_bottom", "08.double_height", "09.timing_basics", "10.timing_order",
+        "11.edge_timing")},
+    **{f"sprite_overflow_tests/{n}.nes": "f8" for n in (
+        "1.Basics", "2.Details", "3.Timing", "4.Obscure", "5.Emulator")},
+    **{f"vbl_nmi_timing/{n}.nes": "f8" for n in (
+        "1.frame_basics", "2.vbl_timing", "3.even_odd_frames", "4.vbl_clear_timing")},
+}
+
+
+def fetch_ntr(path):
+    """Return the local path of a test ROM from the pinned mirror."""
+    local = os.path.join(ROMS, "ntr", *path.split("/"))
+    if not os.path.exists(local):
+        os.makedirs(os.path.dirname(local), exist_ok=True)
+        req = urllib.request.Request(NTR_URL % (NTR_COMMIT, path), headers={"User-Agent": "nes-recomp-tests"})
+        data = urllib.request.urlopen(req, timeout=60).read()
+        with open(local + ".tmp", "wb") as f:
+            f.write(data)
+        os.replace(local + ".tmp", local)
+    return local
+
+
 if __name__ == "__main__":
     import sys
     for n in FILES:
         print(n, "->", fetch(n))
+    for p in NTR_FILES:
+        print(p, "->", fetch_ntr(p))
     if "--sst" in sys.argv:  # ~1 GB download, ~150 MB on disk after conversion
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(8) as ex:

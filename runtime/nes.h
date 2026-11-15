@@ -1,0 +1,31 @@
+/* The NES system: CPU + PPU + cartridge + RAM + controllers, and the CPU bus. */
+#ifndef NES_NES_H
+#define NES_NES_H
+
+#include "cart.h"
+#include "cpu.h"
+#include "ppu.h"
+
+enum {  /* controller bits, in the order the shift register reports them */
+    PAD_A = 0x01, PAD_B = 0x02, PAD_SELECT = 0x04, PAD_START = 0x08,
+    PAD_UP = 0x10, PAD_DOWN = 0x20, PAD_LEFT = 0x40, PAD_RIGHT = 0x80
+};
+
+typedef struct Nes {
+    Cpu cpu;
+    Ppu ppu;
+    Cart cart;
+    uint8_t ram[0x800];
+    uint8_t open_bus;     /* last value on the CPU data bus */
+    uint8_t pad[2];       /* buttons held, set by the frontend */
+    uint8_t pad_shift[2], strobe;
+    uint8_t nmi_prev;
+} Nes;
+
+/* Load an iNES image and power on. Returns 0, or -1 with a message in err. */
+int nes_load(Nes *n, const uint8_t *rom, size_t size, char *err, size_t errlen);
+void nes_reset(Nes *n);                /* reset button */
+void nes_run_frame(Nes *n);            /* run until the next vblank starts */
+uint8_t nes_peek(Nes *n, uint16_t a);  /* read without side effects (debug, tests) */
+
+#endif

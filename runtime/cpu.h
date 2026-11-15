@@ -17,6 +17,7 @@ typedef struct Cpu {
     uint8_t jammed;   /* a KIL opcode stopped the CPU */
     uint8_t nmi;      /* NMI edge seen, taken before the next instruction */
     uint8_t irq;      /* IRQ line level, nonzero = asserted */
+    uint8_t poll, poll_prev;  /* interrupt wanted, sampled after each cycle */
     uint64_t cycles;  /* CPU cycles since power-on; +1 per bus access */
     void *bus;        /* owner's context for cpu_read/cpu_write */
 } Cpu;

@@ -18,7 +18,11 @@ See [docs/02-architecture.md](docs/02-architecture.md) and the plan in
 [docs/05-roadmap.md](docs/05-roadmap.md).
 
 ## Status
-M0-M2 done: verified opcode table, decoder, and a reference CPU interpreter that passes nestest and SingleStepTests. Next: PPU (M3). See
+M0-M3 done: verified opcode table and decoder, a reference interpreter (nestest,
+SingleStepTests) and a PPU passing 52 blargg-style test ROMs. Battle City runs
+on the interpreter: `build/nes "Battle City.nes"` (arrows, X = A, Z = B,
+Enter = Start, Right Shift = Select, F5 = reset). Next: gamepads (M4), then
+the recompiler (M5). See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
@@ -29,7 +33,7 @@ SDL3 is downloaded and built by CMake.
 ```
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-build/nes --frames 120          # SDL3 window smoke test
+build/nes path/to/game.nes      # NROM games for now
 ```
 Headless (no SDL3): add `-DNES_FRONTEND=OFF`.
 

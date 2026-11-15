@@ -54,20 +54,25 @@ nes/
   `tests/test_cpu.py`.
 - [x] nestest: all 8,991 lines match, unofficial opcodes included.
 - [x] SingleStepTests: all 244 non-KIL opcodes pass 10,000/10,000, bus cycles included.
-- [ ] Interrupt polling on the exact cycle (shortcut noted in `cpu.c`).
-- **Exit:** met for nestest and SingleStepTests; interrupt timing moves to M3
-  where NMI/IRQ sources exist.
+- [x] Interrupt polling on the exact cycle (done in M3).
+- **Exit:** met.
 
 ## M3 · PPU + NROM + video (interpreter only)
-- Mapper interface + NROM. PPU: registers, VRAM/palette, background and
-  sprite rendering per dot or per scanline, vblank/NMI, sprite-0 hit, OAM DMA.
-- SDL3 window, 256×240 texture, integer scaling, 60.1 Hz pacing.
-- **Exit:** blargg `ppu_vbl_nmi` and `sprite_hit_tests` pass for the parts we
-  claim; Battle City title screen renders in `--interp` mode.
+- [x] `runtime/cart.c` (NROM), `ppu.c` (per-dot rendering, loopy scrolling,
+  per-dot sprite evaluation with the overflow bug, vblank/NMI races, open-bus
+  decay), `nes.c` (CPU bus, OAM DMA, controllers), `palette.c` (NTSC model).
+- [x] CPU interrupt polling on the second-to-last cycle (`cpu_ops.h`).
+- [x] SDL3 frontend: ROM loading, keyboard, integer scaling, 60.1 Hz pacing.
+- [x] `nes_headless` runner: blargg $6000 protocol, zero-page result codes,
+  PPM screenshots, frame hash, scripted input (`--press`).
+- [x] 52/52 test ROMs pass (`tests/test_ppu.py`, list in 06).
+- [x] Battle City: title screen and stage 1 render and play (interpreter).
+- [ ] `test_ppu_read_buffer` (needs mapper 3, M7).
+- **Exit:** met.
 
 ## M4 · Input
-- $4016/$4017 controller shift registers; SDL3 keyboard mapping + gamepad
-  (hot-plug, two players).
+- [x] $4016/$4017 controller shift registers, keyboard (done in M3).
+- [ ] SDL3 gamepads (hot-plug, two players), configurable keys.
 - **Exit:** Battle City playable in `--interp` mode with keyboard and a pad.
   Record/replay of input to a file (needed for the regression tests below).
 

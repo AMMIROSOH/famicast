@@ -6,8 +6,24 @@
 
 #include "cpu.h"
 
-static inline uint8_t rd(Cpu *c, uint16_t a) { c->cycles++; return cpu_read(c, a); }
-static inline void wr(Cpu *c, uint16_t a, uint8_t v) { c->cycles++; cpu_write(c, a, v); }
+/* After every cycle the interrupt lines are sampled; an instruction ends by
+ * checking the sample from its second-to-last cycle, as the 6502 does
+ * (nesdev "CPU interrupts"). This also delays CLI/SEI/PLP by one instruction. */
+static inline void poll_interrupts(Cpu *c) {
+    c->poll_prev = c->poll;
+    c->poll = c->nmi || (c->irq && !(c->p & FLAG_I));
+}
+static inline uint8_t rd(Cpu *c, uint16_t a) {
+    c->cycles++;
+    uint8_t v = cpu_read(c, a);
+    poll_interrupts(c);
+    return v;
+}
+static inline void wr(Cpu *c, uint16_t a, uint8_t v) {
+    c->cycles++;
+    cpu_write(c, a, v);
+    poll_interrupts(c);
+}
 static inline void push(Cpu *c, uint8_t v) { wr(c, 0x100 | c->s, v); c->s--; }
 static inline uint8_t pull(Cpu *c) { c->s++; return rd(c, 0x100 | c->s); }
 
@@ -55,10 +71,12 @@ static inline void op_ARR(Cpu *c, uint8_t v) {
 static inline void op_AXS(Cpu *c, uint8_t v) {
     uint8_t t = c->a & c->x; set_c(c, t >= v); c->x = (uint8_t)(t - v); nz(c, c->x);
 }
-/* $8B XAA and $AB LXA are unstable on hardware; 0xEE is the "magic" constant
- * most test suites assume. shortcut: one constant; upgrade if a game needs it. */
+/* $8B XAA and $AB LXA are unstable on hardware (result depends on the chip).
+ * XAA: magic 0xEE, matches SingleStepTests. LXA: A = X = operand (magic 0xFF),
+ * matches blargg instr_test-v5, which was verified on a real NES; SingleStepTests
+ * assumes 0xEE here, see docs/06. */
 static inline void op_XAA(Cpu *c, uint8_t v) { c->a = (c->a | 0xEE) & c->x & v; nz(c, c->a); }
-static inline void op_LXA(Cpu *c, uint8_t v) { c->a = c->x = (c->a | 0xEE) & v; nz(c, c->a); }
+static inline void op_LXA(Cpu *c, uint8_t v) { c->a = c->x = v; nz(c, c->a); }
 
 /* ---- read-modify-write: return the new memory value ---- */
 static inline uint8_t op_ASL(Cpu *c, uint8_t v) { set_c(c, v & 0x80); v <<= 1; nz(c, v); return v; }

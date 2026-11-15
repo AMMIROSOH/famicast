@@ -12,12 +12,15 @@ detail yet.
 |--------|----------|--------|
 | [nesdev wiki](https://www.nesdev.org/wiki/Nesdev_Wiki) (CPU, PPU, APU, mapper pages) | Main hardware reference for everything in 03/04 | read (in part) |
 | [nesdev wiki · Emulator tests](https://www.nesdev.org/wiki/Emulator_tests) | Test ROM list; nestest automation mode (start at $C000, compare to log made with Nintendulator) | read |
+| nesdev wiki: PPU registers, PPU scrolling (loopy v/t/x/w), PPU rendering, PPU sprite evaluation, PPU frame timing, Open bus behavior, CPU interrupts, CPU memory map, NTSC video | PPU, bus and interrupt design in `runtime/`; behaviour then checked by the test ROMs | from memory, not re-read this session |
+| Bisqwit's NTSC palette model (as described on nesdev "NTSC video") | `runtime/palette.c` signal levels and method | from memory |
+| Mesen2's delayed rendering-enable flag | idea for the odd-frame skip timing (confirmed by blargg 10-even_odd_timing) | from memory |
 
 ## Test suites (downloaded by `tests/fetch_test_roms.py`, not committed)
 | Source | Used for | License | Status |
 |--------|----------|---------|--------|
 | nestest.nes + nestest.log (Kevin Horton), from [qmtpro.com](https://www.qmtpro.com/~nes/misc/) (original) and the [christopherpow/nes-test-roms](https://github.com/christopherpow/nes-test-roms) mirror | Decoder test (M1); CPU trace comparison (M2/M5) | freely distributed test ROM | read |
-| blargg test ROMs (instr_test-v5, cpu_interrupts_v2, ppu_vbl_nmi, sprite_hit_tests, apu_test) | CPU/PPU/APU checks | check per archive | listed |
+| blargg and other test ROMs via [christopherpow/nes-test-roms](https://github.com/christopherpow/nes-test-roms), pinned at commit `95d8f621`: ppu_vbl_nmi, vbl_nmi_timing, sprite_hit_tests_2005, sprite_overflow_tests, blargg_ppu_tests_2005, ppu_open_bus, oam_read, oam_stress, instr_test-v5 (readmes and the 2005 test sources read for result protocols) | PPU/system checks (M3) | freely distributed test ROMs; check per archive before redistributing | read |
 | [SingleStepTests/65x02 `nes6502/v1`](https://github.com/SingleStepTests/65x02/tree/main/nes6502), pinned at commit `b9cfa8b2` | 10,000 tests per opcode with the bus access of every cycle; interpreter check (M2) | MIT | read |
 
 ## Prior art

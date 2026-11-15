@@ -25,6 +25,16 @@ target_include_directories(nescpu PUBLIC runtime PRIVATE ${GEN_DIR})
 add_executable(cpu_tests runtime/tests/cpu_tests.c)
 target_link_libraries(cpu_tests PRIVATE nescpu)
 
+# The NES system: bus, PPU, cartridge (implements cpu_read/cpu_write).
+add_library(nescore STATIC runtime/nes.c runtime/ppu.c runtime/cart.c runtime/palette.c)
+target_link_libraries(nescore PUBLIC nescpu)
+if(NOT MSVC)
+    target_link_libraries(nescore PUBLIC m)
+endif()
+
+add_executable(nes_headless runtime/tests/nes_headless.c)
+target_link_libraries(nes_headless PRIVATE nescore)
+
 # SDL3 frontend (zlib license). Fetched and built statically; turn off with
 # -DNES_FRONTEND=OFF for headless builds (CI, tests).
 option(NES_FRONTEND "Build the SDL3 frontend" ON)
@@ -39,5 +49,5 @@ if(NES_FRONTEND)
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(SDL3)
     add_executable(nes runtime/platform/sdl3_main.c)
-    target_link_libraries(nes PRIVATE nescpu SDL3::SDL3-static)
+    target_link_libraries(nes PRIVATE nescore SDL3::SDL3-static)
 endif()

@@ -3,6 +3,49 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M3: PPU, bus, NROM
+Run: `python -m unittest tests.test_ppu` (ROMs from the nes-test-roms mirror,
+commit `95d8f621`). First run of the new PPU: 33/50 passed. After the fixes
+below: **52/52**, and the CPU suites are still green.
+
+| Suite | Result |
+|---|---|
+| ppu_vbl_nmi 01-10 | 10/10 |
+| vbl_nmi_timing 1-4 | 4/4 |
+| sprite_hit_tests_2005 01-11 | 11/11 (first try) |
+| sprite_overflow_tests 1-5 | 5/5 |
+| blargg_ppu_tests_2005 (palette_ram, sprite_ram, vbl_clear_time, vram_access) | 4/4 |
+| ppu_open_bus, oam_read, oam_stress | 3/3 |
+| instr_test-v5 singles 01-16 (CPU, in the full system) | 16/16 |
+| test_ppu_read_buffer | pending, mapper 3 |
+
+What it took:
+- **Interrupt polling**: the CPU now samples NMI/IRQ after every cycle and
+  acts on the sample from the instruction's second-to-last cycle (removes the
+  M2 shortcut). Fixed 07-nmi_on_timing.
+- **PPU dots per CPU cycle**: tried 0, 1, 2 and 3 of the 3 dots before the
+  bus access. Only 2 passes 05-nmi_timing; kept 2 before, 1 after.
+- **Vblank races** (nesdev "PPU frame timing"): $2002 read one dot before
+  vblank → flag never set, no NMI; read on the set dot or the next → flag set,
+  NMI dropped; NMI disabled in that window → no NMI. Fixed 02, 06, 08.
+- **Odd-frame dot skip** uses the rendering-enable state of the previous dot.
+  Fixed 10-even_odd_timing.
+- **Open bus**: each latch bit decays after ~600 ms (36 frames) unless driven;
+  $2002 drives bits 7-5 only, palette reads bits 5-0.
+- **Sprite evaluation** per dot with the hardware overflow bug (m incremented
+  with n). Fixed sprite_overflow 3.Timing and 4.Obscure.
+- **Result locations**: the 2005 sprite tests keep the result at $F8 (checked:
+  screen "FAILED: #5" ↔ $F8 = 5); the 2005 PPU tests use **$F0** (screen "$01"
+  ↔ $F0 = 1).
+- **$AB LXA disagreement**: instr_test-v5 (verified on a real NES by its
+  author) needs A = X = operand; SingleStepTests expects (A | $EE) & operand
+  (4,422/10,000 fail with ours). LXA is unstable on real chips; we follow the
+  hardware-verified test and skip $AB in the SST test, with the reason.
+- **Palette**: generated from the NTSC signal model; hue offset 3.9 chosen
+  by checking $16 = red, $12 = blue, $1A = green, $2C = cyan.
+- Battle City (interpreter): title screen at frame 400 and stage 1 after two
+  Start presses (frames 300, 700) checked by screenshot.
+
 ## 2026-11-15 · M2: reference interpreter
 Design: every `rd()`/`wr()` is one CPU cycle, including the dummy reads and
 writes of real hardware, so cycle counts are not taken from a table. The
@@ -21,9 +64,9 @@ per-opcode C code is generated from `recomp/ops.py` by `recomp/c6502.py`
   not modelled, those 12 opcodes are skipped in the test.
 - Runner self-check: corrupting one expected value in a test file makes the
   runner report exactly that test as failed.
-- Known shortcut: interrupts are polled before each instruction instead of on
-  the last cycle of the previous one (`runtime/cpu.c`); to be checked with
-  blargg `cpu_interrupts_v2` once the PPU/APU exist.
+- Interrupts were first polled before each instruction (shortcut); replaced
+  by cycle-exact polling in M3, still to be checked with `cpu_interrupts_v2`
+  once the APU (IRQ source) exists.
 
 ## 2026-11-15 · M1: opcode table, iNES parser, decoder
 Run: `python -m unittest discover -s tests -t .` → 10 tests OK.

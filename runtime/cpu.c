@@ -30,15 +30,11 @@ void cpu_step(Cpu *c) {
         c->cycles++;
         return;
     }
-    /* shortcut: interrupts are polled before each instruction, not on the
-     * last cycle of the previous one; upgrade when cpu_interrupts_v2 needs it. */
-    if (c->nmi) {
+    if (c->poll_prev) {  /* sampled on the previous instruction's second-to-last cycle */
+        int nmi = c->nmi;
         c->nmi = 0;
-        enter_interrupt(c, 0xFFFA);
-        return;
-    }
-    if (c->irq && !(c->p & FLAG_I)) {
-        enter_interrupt(c, 0xFFFE);
+        c->poll = c->poll_prev = 0;
+        enter_interrupt(c, nmi ? 0xFFFA : 0xFFFE);
         return;
     }
     switch (rd(c, c->pc++)) {
