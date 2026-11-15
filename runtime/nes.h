@@ -2,6 +2,8 @@
 #ifndef NES_NES_H
 #define NES_NES_H
 
+#include <stdio.h>
+
 #include "apu.h"
 #include "cart.h"
 #include "cpu.h"
@@ -45,6 +47,13 @@ uint32_t nes_prg_bank(Nes *n, uint16_t a);  /* 8 KB PRG bank mapped at a ($8000+
  * $8000 + ((bank * 4 + window) << 13 | (a & $1FFF)); see nes_miss_slot(). */
 size_t nes_miss_slots(Nes *n);
 size_t nes_miss_slot(Nes *n, uint16_t a);
+/* Misses as text, the input of nesrecomp --misses: "MISS $ADDR COUNT bank B"
+ * (ROM, 8 KB bank) or "MISS $ADDR COUNT (RAM)". */
+void nes_misses_write(Nes *n, FILE *f);
+/* Adds the counts of such a file to n->misses. Returns how many ROM
+ * addresses of n->misses (count > 0) the file did not list, or -1 if it
+ * cannot be read. */
+long nes_misses_merge(Nes *n, const char *path);
 void nes_sync(Nes *n);                 /* run the PPU up to the CPU (before inspecting it) */
 /* Save states (between frames or steps). Interpreter and recompiled builds
  * of the same version share the format. Return 0, or -1 (load: message in err;

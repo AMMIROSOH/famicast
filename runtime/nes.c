@@ -334,6 +334,41 @@ uint32_t nes_prg_bank(Nes *n, uint16_t a) { return n->cart.prg_off[(a >> 13) & 3
 
 size_t nes_miss_slots(Nes *n) { return 0x8000u + (size_t)n->cart.prg_size * 4; }
 
+void nes_misses_write(Nes *n, FILE *f) {
+    for (uint32_t a = 0; a < 0x8000; a++)
+        if (n->misses[a]) fprintf(f, "MISS $%04X %u (RAM)\n", a, n->misses[a]);
+    for (size_t slot = 0x8000; slot < nes_miss_slots(n); slot++) {
+        if (!n->misses[slot]) continue;
+        size_t key = (slot - 0x8000) >> 13;  /* bank * 4 + window */
+        unsigned addr = 0x8000u + (unsigned)(key & 3) * 0x2000u + (unsigned)((slot - 0x8000) & 0x1FFF);
+        fprintf(f, "MISS $%04X %u bank %u\n", addr, n->misses[slot], (unsigned)(key >> 2));
+    }
+}
+
+long nes_misses_merge(Nes *n, const char *path) {
+    size_t slots = nes_miss_slots(n);
+    uint8_t *listed = calloc(slots, 1);
+    FILE *f = fopen(path, "r");
+    char line[96];
+    while (f && fgets(line, sizeof line, f)) {
+        unsigned a, count, bank;
+        size_t slot = SIZE_MAX;
+        if (sscanf(line, "MISS $%4x %u bank %u", &a, &count, &bank) == 3 && a >= 0x8000)
+            slot = 0x8000u + (((size_t)bank * 4 + ((a >> 13) & 3)) << 13 | (a & 0x1FFF));
+        else if (sscanf(line, "MISS $%4x %u (RAM", &a, &count) == 2 && a < 0x8000)
+            slot = a;
+        if (slot >= slots) continue;  /* another dump, or a damaged line */
+        n->misses[slot] += count;
+        listed[slot] = 1;
+    }
+    long fresh = 0;
+    for (size_t slot = 0x8000; slot < slots; slot++) fresh += n->misses[slot] && !listed[slot];
+    free(listed);
+    if (!f) return -1;
+    fclose(f);
+    return fresh;
+}
+
 size_t nes_miss_slot(Nes *n, uint16_t a) {
     if (a < 0x8000) return a;
     return 0x8000u + (((size_t)nes_prg_bank(n, a) * 4 + ((a >> 13) & 3)) << 13 | (a & 0x1FFF));

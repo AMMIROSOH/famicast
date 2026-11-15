@@ -81,7 +81,15 @@ endif()
 # (nes_headless --play) and give every address it ran to nesrecomp, so code
 # reached in that session is recompiled without hand-made hints. The merged
 # hints are written to ${GEN_DIR}/NAME.toml; copy them to games/ to keep them.
+#
+# NAME.misses next to the program: ROM code your own sessions had to
+# interpret (the frontend writes it, setting record_misses); always passed to
+# nesrecomp, so playing and rebuilding recompiles what you reached.
+#
+# NES_EMBED_ROM=OFF: the program carries no ROM and needs the file at start
+# (the generated code still holds the game's code bytes: not for sharing either).
 option(NES_AUTO_HINTS "Trace each game in the interpreter before recompiling it" OFF)
+option(NES_EMBED_ROM "Embed the ROM in recompiled programs" ON)
 set(NES_AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by NES_AUTO_HINTS")
 function(nes_recompile name rom)
     set(out ${GEN_DIR}/${name}.c)
@@ -101,10 +109,18 @@ function(nes_recompile name rom)
             COMMENT "Tracing ${name} in the interpreter (${NES_AUTO_HINTS_FRAMES} frames)")
         list(APPEND hint_args --misses ${trace} --save-hints ${GEN_DIR}/${name}.toml)
     endif()
+    set(played ${CMAKE_BINARY_DIR}/${name}.misses)
+    if(NOT EXISTS ${played})
+        file(TOUCH ${played})
+    endif()
+    list(APPEND hint_args --misses ${played})
+    if(NOT NES_EMBED_ROM)
+        list(APPEND hint_args --no-rom)
+    endif()
     add_custom_command(
         OUTPUT ${out}
         COMMAND nesrecomp "${rom}" -o ${out} ${hint_args}
-        DEPENDS "${rom}" ${hints} ${trace} nesrecomp
+        DEPENDS "${rom}" ${hints} ${trace} ${played} nesrecomp
         COMMENT "Recompiling ${name}")
     add_library(${name}_code STATIC ${out})
     target_link_libraries(${name}_code PUBLIC nescpu)

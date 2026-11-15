@@ -1,6 +1,7 @@
 /* nesrecomp: recompile an NES ROM to C (docs/02).
  *
  *   nesrecomp ROM -o OUT.c [--hints GAME.toml] [--misses RUN.txt]... [--save-hints OUT.toml]
+ *             [--no-rom]               do not embed the ROM (the program then needs the file)
  *   nesrecomp --cpu-switch OUT.inc     the interpreter's opcode switch (runtime/cpu.c)
  *   nesrecomp --ops                    the opcode table, one line per opcode (tests)
  *   nesrecomp --info ROM               iNES header summary (tests)
@@ -338,12 +339,13 @@ int main(int argc, char **argv) {
     if (argc < 2 || argv[1][0] == '-') return usage();
     const char *rom_path = argv[1], *output = NULL, *hints_path = NULL, *save_hints = NULL;
     const char *misses[64];
-    int nmisses = 0;
+    int nmisses = 0, embed = 1;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "-o") && i + 1 < argc) output = argv[++i];
         else if (!strcmp(argv[i], "--hints") && i + 1 < argc) hints_path = argv[++i];
         else if (!strcmp(argv[i], "--misses") && i + 1 < argc && nmisses < 64) misses[nmisses++] = argv[++i];
         else if (!strcmp(argv[i], "--save-hints") && i + 1 < argc) save_hints = argv[++i];
+        else if (!strcmp(argv[i], "--no-rom")) embed = 0;
         else return usage();
     }
     if (!output && !save_hints) return usage();
@@ -373,7 +375,7 @@ int main(int argc, char **argv) {
     int n = explore_regions(&rom, &hints, &regions);
     const char *name = basename_of(rom_path);
     emit_program(&o, regions, n, name, prg_hash, (int)(cart.prg_size / 0x2000), cart.mapper != 0 && cart.mapper != 3,
-                 file, size);
+                 embed ? file : NULL, embed ? size : 0);
     write_file(output, &o);
     long ninstr = 0, nindirect = 0;
     for (int i = 0; i < n; i++)

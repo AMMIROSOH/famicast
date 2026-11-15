@@ -21,7 +21,12 @@ static const char DEFAULT_FILE[] =
     "tv_frame = 0\n"
     "\n"
     "# window_scale: starting window size, in multiples of the picture (1-8)\n"
-    "window_scale = 3\n";
+    "window_scale = 3\n"
+    "\n"
+    "# record_misses: 1 = remember game code that ran in the interpreter because\n"
+    "# the recompiler had not found it, in <program>.misses next to the program;\n"
+    "# the next build of this game recompiles it (recompiled games only)\n"
+    "record_misses = 1\n";
 
 static int parse_bool(const char *v, int *out) {
     if (!strcmp(v, "1") || !strcmp(v, "on") || !strcmp(v, "yes") || !strcmp(v, "true")) return *out = 1, 1;
@@ -30,7 +35,7 @@ static int parse_bool(const char *v, int *out) {
 }
 
 void settings_load(Settings *s, const char *path) {
-    *s = (Settings){0, SCALE_FIT, 0, 3};
+    *s = (Settings){0, SCALE_FIT, 0, 3, 1};
     FILE *f = fopen(path, "r");
     if (!f) {
         if ((f = fopen(path, "w"))) {
@@ -51,6 +56,7 @@ void settings_load(Settings *s, const char *path) {
         int ok = 0;
         if (!strcmp(key, "fullscreen")) ok = parse_bool(val, &s->fullscreen);
         else if (!strcmp(key, "tv_frame")) ok = parse_bool(val, &s->tv_frame);
+        else if (!strcmp(key, "record_misses")) ok = parse_bool(val, &s->record_misses);
         else if (!strcmp(key, "scale")) {
             static const char *const NAMES[] = {"fit", "integer", "stretch"};
             for (int i = 0; i < 3; i++)

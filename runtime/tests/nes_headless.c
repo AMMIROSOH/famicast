@@ -132,15 +132,7 @@ static void print_misses(Nes *n) {
            (unsigned long long)n->steps_native, (unsigned long long)n->steps_interp,
            (unsigned long long)n->steps_interrupt);
     print_coverage(n);
-    /* input for nesrecomp --misses; ROM misses carry their 8 KB bank */
-    for (uint32_t a = 0; a < 0x8000; a++)
-        if (n->misses[a]) printf("MISS $%04X %u (RAM)\n", a, n->misses[a]);
-    for (size_t slot = 0x8000; slot < nes_miss_slots(n); slot++) {
-        if (!n->misses[slot]) continue;
-        size_t key = (slot - 0x8000) >> 13;  /* bank * 4 + window */
-        unsigned addr = 0x8000u + (unsigned)(key & 3) * 0x2000u + (unsigned)((slot - 0x8000) & 0x1FFF);
-        printf("MISS $%04X %u bank %u\n", addr, n->misses[slot], (unsigned)(key >> 2));
-    }
+    nes_misses_write(n, stdout);
 }
 
 /* ---- audio capture (--wav, --audio-hash) ---- */

@@ -8,6 +8,8 @@
  * Select, F5 = reset, Esc = quit. F2 = save state, F4 = load state,
  * F10 = TV frame on/off, F11 or Alt+Enter = fullscreen on/off.
  * Display settings: <program>.ini next to the program (settings.c).
+ * Recompiled games note ROM code that had to be interpreted in
+ * <program>.misses; the build reads it (CMakeLists.txt, nes_recompile).
  * Gamepads: first connected = player 1, second = player 2; hot-plug works.
  * D-pad or left stick; East = A, South = B (NES layout: B left of A),
  * Back = Select, Start = Start.
@@ -163,6 +165,9 @@ int main(int argc, char **argv) {
     SDL_snprintf(ini_path, sizeof ini_path, "%s%s.ini", SDL_GetBasePath(), NES_APP_NAME);
     Settings cfg;
     settings_load(&cfg, ini_path);
+    char misses_path[1024];
+    SDL_snprintf(misses_path, sizeof misses_path, "%s%s.misses", SDL_GetBasePath(), NES_APP_NAME);
+    if (nes.recomp && cfg.record_misses) nes.misses = SDL_calloc(nes_miss_slots(&nes), sizeof *nes.misses);
     if (nes.cart.battery) {
         size_t sav_size;
         void *sav = SDL_LoadFile(sav_path, &sav_size);
@@ -291,6 +296,14 @@ int main(int argc, char **argv) {
         if (gamepads[i]) SDL_CloseGamepad(gamepads[i]);
     if (nes.cart.battery && !SDL_SaveFile(sav_path, nes.cart.prg_ram, sizeof nes.cart.prg_ram))
         SDL_Log("%s: %s", sav_path, SDL_GetError());
+    /* rewrite the misses file only when this session found new ROM code, so
+     * the next build does not rerun the recompiler for nothing */
+    if (nes.misses && nes_misses_merge(&nes, misses_path) != 0) {
+        FILE *f = fopen(misses_path, "w");
+        if (f) nes_misses_write(&nes, f), fclose(f);
+        else SDL_Log("%s: cannot write", misses_path);
+    }
+    SDL_free(nes.misses);
     cart_free(&nes.cart);
     if (audio) SDL_DestroyAudioStream(audio);
     SDL_DestroyTexture(tex);

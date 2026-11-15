@@ -219,13 +219,15 @@ void emit_program(Buf *o, Region *regions, int nregions, const char *rom_name, u
     bprintf(o, "    const RecompFn *r = regions[bank][(pc >> 13) & 3];\n");
     bprintf(o, "    return r ? r[pc & 0x1FFF] : 0;\n}\n\n");
     /* The whole iNES file: data is read through pointers the analysis cannot
-     * bound, so no part of the ROM can be left out safely. */
-    bprintf(o, "static const uint8_t rom_image[%zu] = {", rom_size);
-    for (size_t i = 0; i < rom_size; i++) bprintf(o, i % 16 ? "0x%02X," : "\n    0x%02X,", rom[i]);
-    bprintf(o, "\n};\n\n");
+     * bound, so no part of the ROM can be left out safely. NULL: not embedded. */
+    if (rom) {
+        bprintf(o, "static const uint8_t rom_image[%zu] = {", rom_size);
+        for (size_t i = 0; i < rom_size; i++) bprintf(o, i % 16 ? "0x%02X," : "\n    0x%02X,", rom[i]);
+        bprintf(o, "\n};\n\n");
+    }
     bprintf(o, "static const RecompProgram program = {\n    0x%08Xu, ", prg_hash);
     c_string(o, rom_name);
-    bprintf(o, ", lookup, rom_image, sizeof rom_image,\n};\n");
+    bprintf(o, rom ? ", lookup, rom_image, sizeof rom_image,\n};\n" : ", lookup, 0, 0,\n};\n");
     bprintf(o, "const RecompProgram *const recomp_program = &program;\n");
     for (int key = 0; key < nbanks * 4; key++) free(tables[key]);
     free(tables);
