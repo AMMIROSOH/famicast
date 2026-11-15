@@ -16,7 +16,7 @@ detail yet.
 ## Test suites (downloaded by `tests/fetch_test_roms.py`, not committed)
 | Source | Used for | License | Status |
 |--------|----------|---------|--------|
-| nestest.nes + nestest.log (Kevin Horton) | CPU trace comparison, M1/M2/M5 | freely distributed test ROM | listed |
+| nestest.nes + nestest.log (Kevin Horton), from [qmtpro.com](https://www.qmtpro.com/~nes/misc/) (original) and the [christopherpow/nes-test-roms](https://github.com/christopherpow/nes-test-roms) mirror | Decoder test (M1); CPU trace comparison (M2/M5) | freely distributed test ROM | read |
 | blargg test ROMs (instr_test-v5, cpu_interrupts_v2, ppu_vbl_nmi, sprite_hit_tests, apu_test) | CPU/PPU/APU checks | check per archive | listed |
 | SingleStepTests 6502 JSON tests (2A03 set) | Per-opcode state + cycle tests | check repo license | listed |
 
@@ -30,6 +30,8 @@ detail yet.
 | [SuperMarioBros-C](https://github.com/MitchellSternke/SuperMarioBros-C) | Example of a game as readable C | check | listed |
 | [N64Recomp](https://github.com/N64Recomp/N64Recomp) | Emit-C recompiler design on another system | check | listed |
 | [FOSDEM 2026 talk, "The joys and horrors of NES dynamic recompilation"](https://fosdem.org/schedule/event/ETLVUA-the_joys_and_horrors_of_nes_dynamic_recompilation) | Context on dynarec pitfalls | — | listed |
+| [RustyNES](https://github.com/doublegate/RustyNES): [testing-strategy.md](https://github.com/doublegate/RustyNES/blob/main/docs/testing-strategy.md), [scheduler.md](https://github.com/doublegate/RustyNES/blob/main/docs/scheduler.md) | Test harness protocol (nestest, blargg $6000), timing model | GPL-3.0-or-later | summary read |
+| radare2 6502 + 65816 tables (`libr/arch/p/6502/6502dis.inc.c`, `libr/arch/p/snes/optable.h`) | Independent opcode table; extracted to `tests/data/r2_6502.json` | LGPL-3.0 | read |
 | Mesen2 | PPU/APU/mapper reference; may adapt code | GPL-3.0 | listed |
 | FCEUX | Second reference | GPL (check version) | listed |
 

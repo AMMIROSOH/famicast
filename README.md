@@ -18,9 +18,17 @@ See [docs/02-architecture.md](docs/02-architecture.md) and the plan in
 [docs/05-roadmap.md](docs/05-roadmap.md).
 
 ## Status
-Planning / restart. The first prototype (hand-written x86-64 output) was
-retired after it turned out to be incorrect; see
-[docs/06-verification-log.md](docs/06-verification-log.md).
+M1 (opcode table, iNES parser, decoder) mostly done; see
+[docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
+x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
+see [docs/06-verification-log.md](docs/06-verification-log.md).
+
+## Tests
+```
+python -m unittest discover -s tests -t .
+```
+Python 3.11+, no packages needed. The first run downloads nestest into
+`tests/roms/` (hash-checked).
 
 ## ROMs
 No ROMs are included or will ever be committed. Bring your own legally dumped

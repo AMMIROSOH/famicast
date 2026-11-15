@@ -12,3 +12,4 @@ __pycache__/
 *.exe
 *.i64
 *.idb
+tests/roms/

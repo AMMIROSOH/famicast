@@ -32,13 +32,16 @@ nes/
   CI is green.
 
 ## M1 · Opcode table and decoder (Python)
-- Re-check `ops.py` against an independent table for all 256 opcodes (official
-  151 + illegal ones marked). Fix modes: separate `IND` (JMP) from `IZY`
-  (`(zp),Y`) and `IZX` (`(zp,X)`).
-- Decoder: recursive descent from vectors + `game.toml`, overlapping decodes
-  allowed, data/code map output for debugging.
-- **Exit:** unit tests for table and decoder; decoding nestest.nes from $C000
-  reproduces the instruction addresses in `nestest.log`.
+- [x] `recomp/ops.py`: all 256 opcodes, checked against radare2's tables
+  (254/256 agree; the 2 differences are radare2 errors, see 06).
+- [x] `recomp/ines.py`: iNES / NES 2.0 header, rewritten from the spec.
+- [x] `recomp/decoder.py`: recursive descent, overlapping decodes allowed,
+  records indirect jumps and out-of-ROM targets.
+- [x] Test: with the dynamic targets fed back, every ROM instruction in
+  `nestest.log` is decoded with the same bytes and mnemonic.
+- [ ] `game.toml` loader (entry points, `no_return` dispatchers).
+- [ ] Battle City: inspect its 8 `JMP (ind)` sites and write its `game.toml`.
+- **Exit:** the above, plus a decode listing tool for debugging.
 
 ## M2 · Reference interpreter (C)
 - `interp6502.c` over `bus.c`, flat 64 KB test bus for unit tests.

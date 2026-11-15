@@ -41,6 +41,26 @@ first-hand yet; check them before relying on the detail.
 - **FCEUX** (GPL). Second reference; check its exact GPL version before
   copying any code (GPL-2.0-only code cannot be combined with GPL-3.0).
 
+- **RustyNES** (doublegate, GPL-3.0-or-later). Accurate interpreter in Rust,
+  no JIT or recompiler; says it derives from Mesen2 and others. Read via a
+  summary of its README and docs. Worth taking: the test harness design
+  (`docs/testing-strategy.md`: nestest from $C000, blargg result protocol
+  = poll $6000 until it leaves $80, $81 = press reset, text at $6004) and its
+  timing model (`docs/scheduler.md`: one master clock, PPU caught up at each
+  CPU half-cycle). Be careful with its accuracy numbers: they are self-reported
+  and changed between releases, many "oracle" tests are snapshots of its own
+  output, and the project says it is AI-assisted.
+
+## Disassemblers used as an independent check
+- **radare2** (LGPL-3.0), `libr/arch/p/6502` + `libr/arch/p/snes/optable.h`.
+  Its 6502 decoder = own list of unofficial opcodes, falling back to the 65816
+  table in 8-bit mode. We extract it into `tests/data/r2_6502.json`
+  (`tools/import_r2_6502.py`) and compare our table to it. It agrees on
+  254/256 opcodes; the two differences are radare2 mistakes (see 06).
+  radare2's code analysis cannot resolve the jumps that really hurt static
+  recompilation (RTS/RTI used as jumps, JMP through RAM pointers); those come
+  from the runtime feedback loop (02).
+
 ## Corrections to the earlier version of this file
 The first draft of these docs was produced by another AI model and contained
 errors. Fixed here and in [06](06-verification-log.md):

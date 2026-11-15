@@ -82,6 +82,18 @@ three jobs:
 3. Run the whole game on its own (`--interp`), which gives a working emulator
    before the recompiler exists.
 
+## Missed code: feedback loop now, JIT later
+Static decoding cannot see every target. nestest alone uses RTS and RTI as
+jumps, JMP through a RAM pointer, and runs code from RAM (see 06). Plan:
+1. v1: the interpreter runs missed code and logs each target address.
+   `nes-recomp suggest` turns the log into `game.toml` entries; recompiling
+   then covers them. The decoder test already works this way on nestest
+   (decode → collect unpredicted targets → feed back → repeat until stable).
+2. Later (stretch): a JIT for missed code, so targets found at run time get
+   native speed without a rebuild. Not needed for speed in v1: a C 6502
+   interpreter runs far faster than real time, and misses are rare after the
+   feedback loop. Code in RAM always stays interpreted or JIT-compiled.
+
 ## Verification ladder (each rung must pass before the next)
 1. Opcode table matches an independent table (all 256 entries: mnemonic, mode,
    size, base cycles).

@@ -3,6 +3,31 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M1: opcode table, iNES parser, decoder
+Run: `python -m unittest discover -s tests -t .` → 10 tests OK.
+- **Opcode table vs radare2** (`tests/test_ops.py`): 254/256 identical in
+  mnemonic, mode and size. The two differences are radare2 errors, kept as a
+  named list in the test so it fails if either side changes:
+  - `$93` SHA/AHX: radare2 says `abs,X`, 3 bytes; it is `(zp),Y`, 2 bytes.
+  - `$CB` AXS/SBX: radare2 prints it without `#`; it is immediate.
+- Naming: nestest calls `$E3/$E7/...` **ISB** (not ISC); our table follows
+  nestest so the logs compare directly.
+- **iNES**: the prototype parser read the wrong header bytes (byte 5 as flags,
+  mapper from the wrong bits) and only worked on Battle City by chance.
+  Rewritten from the nesdev spec, tested with synthetic headers.
+- **Decoder vs nestest.log** (`tests/test_decoder.py`): 7,045 instructions
+  decoded. Transfers the decoder cannot predict, found by comparing the log
+  with static successors: 600 RTS (all normal returns except one, PHA/PHA/RTS
+  to $CE67), 2 RTI used as jumps ($CEAD→$CEAE, $CECD→$CECE), 2 JMP (ind)
+  ($DB7B→$DB7E, $DBB5→$0300 in RAM). After feeding the ROM targets back as
+  entries, every ROM instruction in the log matches in bytes, mnemonic and
+  official/unofficial flag. No other kind of missed transfer exists.
+- nestest files: identical ROM from qmtpro.com and the christopherpow mirror;
+  the logs differ only in line endings (CRLF vs LF). Hashes pinned in
+  `tests/fetch_test_roms.py`.
+- Battle City first look: 3,215 instructions, 8 `JMP (ind)` sites, 3
+  unofficial opcodes reached (to check: real or data decoded as code).
+
 ## 2026-11-15 · Audit of the first prototype (x86-64 asm backend)
 Context: an earlier AI-driven session reported Battle City "running 60 frames
 with zero halts". Re-checked by running the build and reading the generated

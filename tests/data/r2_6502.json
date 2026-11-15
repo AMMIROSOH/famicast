@@ -1,0 +1,1542 @@
+{
+ "_license": "LGPL-3.0 (radare2); data extracted by tools/import_r2_6502.py",
+ "_source": "radare2 libr/arch/p/6502/6502dis.inc.c + libr/arch/p/snes/optable.h (M=X=1)",
+ "ops": {
+  "00": {
+   "mn": "brk",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "01": {
+   "mn": "ora",
+   "mode": "IZX",
+   "size": 2,
+   "src": "snes"
+  },
+  "02": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "03": {
+   "mn": "slo",
+   "mode": "IZX",
+   "size": 2,
+   "src": "6502"
+  },
+  "04": {
+   "mn": "nop",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "05": {
+   "mn": "ora",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "06": {
+   "mn": "asl",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "07": {
+   "mn": "slo",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "08": {
+   "mn": "php",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "09": {
+   "mn": "ora",
+   "mode": "IMM",
+   "size": 2,
+   "src": "snes"
+  },
+  "0A": {
+   "mn": "asl",
+   "mode": "ACC",
+   "size": 1,
+   "src": "snes"
+  },
+  "0B": {
+   "mn": "anc",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "0C": {
+   "mn": "nop",
+   "mode": "ABS",
+   "size": 3,
+   "src": "6502"
+  },
+  "0D": {
+   "mn": "ora",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "0E": {
+   "mn": "asl",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "0F": {
+   "mn": "slo",
+   "mode": "ABS",
+   "size": 3,
+   "src": "6502"
+  },
+  "10": {
+   "mn": "bpl",
+   "mode": "REL",
+   "size": 2,
+   "src": "snes"
+  },
+  "11": {
+   "mn": "ora",
+   "mode": "IZY",
+   "size": 2,
+   "src": "snes"
+  },
+  "12": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "13": {
+   "mn": "slo",
+   "mode": "IZY",
+   "size": 2,
+   "src": "6502"
+  },
+  "14": {
+   "mn": "nop",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "15": {
+   "mn": "ora",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "16": {
+   "mn": "asl",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "17": {
+   "mn": "slo",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "18": {
+   "mn": "clc",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "19": {
+   "mn": "ora",
+   "mode": "ABY",
+   "size": 3,
+   "src": "snes"
+  },
+  "1A": {
+   "mn": "nop",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "1B": {
+   "mn": "slo",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "1C": {
+   "mn": "nop",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "1D": {
+   "mn": "ora",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "1E": {
+   "mn": "asl",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "1F": {
+   "mn": "slo",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "20": {
+   "mn": "jsr",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "21": {
+   "mn": "and",
+   "mode": "IZX",
+   "size": 2,
+   "src": "snes"
+  },
+  "22": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "23": {
+   "mn": "rla",
+   "mode": "IZX",
+   "size": 2,
+   "src": "6502"
+  },
+  "24": {
+   "mn": "bit",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "25": {
+   "mn": "and",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "26": {
+   "mn": "rol",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "27": {
+   "mn": "rla",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "28": {
+   "mn": "plp",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "29": {
+   "mn": "and",
+   "mode": "IMM",
+   "size": 2,
+   "src": "snes"
+  },
+  "2A": {
+   "mn": "rol",
+   "mode": "ACC",
+   "size": 1,
+   "src": "snes"
+  },
+  "2B": {
+   "mn": "anc",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "2C": {
+   "mn": "bit",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "2D": {
+   "mn": "and",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "2E": {
+   "mn": "rol",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "2F": {
+   "mn": "rla",
+   "mode": "ABS",
+   "size": 3,
+   "src": "6502"
+  },
+  "30": {
+   "mn": "bmi",
+   "mode": "REL",
+   "size": 2,
+   "src": "snes"
+  },
+  "31": {
+   "mn": "and",
+   "mode": "IZY",
+   "size": 2,
+   "src": "snes"
+  },
+  "32": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "33": {
+   "mn": "rla",
+   "mode": "IZY",
+   "size": 2,
+   "src": "6502"
+  },
+  "34": {
+   "mn": "nop",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "35": {
+   "mn": "and",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "36": {
+   "mn": "rol",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "37": {
+   "mn": "rla",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "38": {
+   "mn": "sec",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "39": {
+   "mn": "and",
+   "mode": "ABY",
+   "size": 3,
+   "src": "snes"
+  },
+  "3A": {
+   "mn": "nop",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "3B": {
+   "mn": "rla",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "3C": {
+   "mn": "nop",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "3D": {
+   "mn": "and",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "3E": {
+   "mn": "rol",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "3F": {
+   "mn": "rla",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "40": {
+   "mn": "rti",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "41": {
+   "mn": "eor",
+   "mode": "IZX",
+   "size": 2,
+   "src": "snes"
+  },
+  "42": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "43": {
+   "mn": "sre",
+   "mode": "IZX",
+   "size": 2,
+   "src": "6502"
+  },
+  "44": {
+   "mn": "nop",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "45": {
+   "mn": "eor",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "46": {
+   "mn": "lsr",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "47": {
+   "mn": "sre",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "48": {
+   "mn": "pha",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "49": {
+   "mn": "eor",
+   "mode": "IMM",
+   "size": 2,
+   "src": "snes"
+  },
+  "4A": {
+   "mn": "lsr",
+   "mode": "ACC",
+   "size": 1,
+   "src": "snes"
+  },
+  "4B": {
+   "mn": "asr",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "4C": {
+   "mn": "jmp",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "4D": {
+   "mn": "eor",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "4E": {
+   "mn": "lsr",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "4F": {
+   "mn": "sre",
+   "mode": "ABS",
+   "size": 3,
+   "src": "6502"
+  },
+  "50": {
+   "mn": "bvc",
+   "mode": "REL",
+   "size": 2,
+   "src": "snes"
+  },
+  "51": {
+   "mn": "eor",
+   "mode": "IZY",
+   "size": 2,
+   "src": "snes"
+  },
+  "52": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "53": {
+   "mn": "sre",
+   "mode": "IZY",
+   "size": 2,
+   "src": "6502"
+  },
+  "54": {
+   "mn": "nop",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "55": {
+   "mn": "eor",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "56": {
+   "mn": "lsr",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "57": {
+   "mn": "sre",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "58": {
+   "mn": "cli",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "59": {
+   "mn": "eor",
+   "mode": "ABY",
+   "size": 3,
+   "src": "snes"
+  },
+  "5A": {
+   "mn": "nop",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "5B": {
+   "mn": "sre",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "5C": {
+   "mn": "nop",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "5D": {
+   "mn": "eor",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "5E": {
+   "mn": "lsr",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "5F": {
+   "mn": "sre",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "60": {
+   "mn": "rts",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "61": {
+   "mn": "adc",
+   "mode": "IZX",
+   "size": 2,
+   "src": "snes"
+  },
+  "62": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "63": {
+   "mn": "rra",
+   "mode": "IZX",
+   "size": 2,
+   "src": "6502"
+  },
+  "64": {
+   "mn": "nop",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "65": {
+   "mn": "adc",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "66": {
+   "mn": "ror",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "67": {
+   "mn": "rra",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "68": {
+   "mn": "pla",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "69": {
+   "mn": "adc",
+   "mode": "IMM",
+   "size": 2,
+   "src": "snes"
+  },
+  "6A": {
+   "mn": "ror",
+   "mode": "ACC",
+   "size": 1,
+   "src": "snes"
+  },
+  "6B": {
+   "mn": "arr",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "6C": {
+   "mn": "jmp",
+   "mode": "IND",
+   "size": 3,
+   "src": "snes"
+  },
+  "6D": {
+   "mn": "adc",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "6E": {
+   "mn": "ror",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "6F": {
+   "mn": "rra",
+   "mode": "ABS",
+   "size": 3,
+   "src": "6502"
+  },
+  "70": {
+   "mn": "bvs",
+   "mode": "REL",
+   "size": 2,
+   "src": "snes"
+  },
+  "71": {
+   "mn": "adc",
+   "mode": "IZY",
+   "size": 2,
+   "src": "snes"
+  },
+  "72": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "73": {
+   "mn": "rra",
+   "mode": "IZY",
+   "size": 2,
+   "src": "6502"
+  },
+  "74": {
+   "mn": "nop",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "75": {
+   "mn": "adc",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "76": {
+   "mn": "ror",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "77": {
+   "mn": "rra",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "78": {
+   "mn": "sei",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "79": {
+   "mn": "adc",
+   "mode": "ABY",
+   "size": 3,
+   "src": "snes"
+  },
+  "7A": {
+   "mn": "nop",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "7B": {
+   "mn": "rra",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "7C": {
+   "mn": "nop",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "7D": {
+   "mn": "adc",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "7E": {
+   "mn": "ror",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "7F": {
+   "mn": "rra",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "80": {
+   "mn": "nop",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "81": {
+   "mn": "sta",
+   "mode": "IZX",
+   "size": 2,
+   "src": "snes"
+  },
+  "82": {
+   "mn": "nop",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "83": {
+   "mn": "sax",
+   "mode": "IZX",
+   "size": 2,
+   "src": "6502"
+  },
+  "84": {
+   "mn": "sty",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "85": {
+   "mn": "sta",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "86": {
+   "mn": "stx",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "87": {
+   "mn": "sax",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "88": {
+   "mn": "dey",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "89": {
+   "mn": "nop",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "8A": {
+   "mn": "txa",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "8B": {
+   "mn": "ane",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "8C": {
+   "mn": "sty",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "8D": {
+   "mn": "sta",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "8E": {
+   "mn": "stx",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "8F": {
+   "mn": "sax",
+   "mode": "ABS",
+   "size": 3,
+   "src": "6502"
+  },
+  "90": {
+   "mn": "bcc",
+   "mode": "REL",
+   "size": 2,
+   "src": "snes"
+  },
+  "91": {
+   "mn": "sta",
+   "mode": "IZY",
+   "size": 2,
+   "src": "snes"
+  },
+  "92": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "93": {
+   "mn": "sha",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "94": {
+   "mn": "sty",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "95": {
+   "mn": "sta",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "96": {
+   "mn": "stx",
+   "mode": "ZPY",
+   "size": 2,
+   "src": "snes"
+  },
+  "97": {
+   "mn": "sax",
+   "mode": "ZPY",
+   "size": 2,
+   "src": "6502"
+  },
+  "98": {
+   "mn": "tya",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "99": {
+   "mn": "sta",
+   "mode": "ABY",
+   "size": 3,
+   "src": "snes"
+  },
+  "9A": {
+   "mn": "txs",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "9B": {
+   "mn": "shs",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "9C": {
+   "mn": "shy",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "9D": {
+   "mn": "sta",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "9E": {
+   "mn": "shx",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "9F": {
+   "mn": "sha",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "A0": {
+   "mn": "ldy",
+   "mode": "IMM",
+   "size": 2,
+   "src": "snes"
+  },
+  "A1": {
+   "mn": "lda",
+   "mode": "IZX",
+   "size": 2,
+   "src": "snes"
+  },
+  "A2": {
+   "mn": "ldx",
+   "mode": "IMM",
+   "size": 2,
+   "src": "snes"
+  },
+  "A3": {
+   "mn": "lax",
+   "mode": "IZX",
+   "size": 2,
+   "src": "6502"
+  },
+  "A4": {
+   "mn": "ldy",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "A5": {
+   "mn": "lda",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "A6": {
+   "mn": "ldx",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "A7": {
+   "mn": "lax",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "A8": {
+   "mn": "tay",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "A9": {
+   "mn": "lda",
+   "mode": "IMM",
+   "size": 2,
+   "src": "snes"
+  },
+  "AA": {
+   "mn": "tax",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "AB": {
+   "mn": "lxa",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "AC": {
+   "mn": "ldy",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "AD": {
+   "mn": "lda",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "AE": {
+   "mn": "ldx",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "AF": {
+   "mn": "lax",
+   "mode": "ABS",
+   "size": 3,
+   "src": "6502"
+  },
+  "B0": {
+   "mn": "bcs",
+   "mode": "REL",
+   "size": 2,
+   "src": "snes"
+  },
+  "B1": {
+   "mn": "lda",
+   "mode": "IZY",
+   "size": 2,
+   "src": "snes"
+  },
+  "B2": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "B3": {
+   "mn": "lax",
+   "mode": "IZY",
+   "size": 2,
+   "src": "6502"
+  },
+  "B4": {
+   "mn": "ldy",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "B5": {
+   "mn": "lda",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "B6": {
+   "mn": "ldx",
+   "mode": "ZPY",
+   "size": 2,
+   "src": "snes"
+  },
+  "B7": {
+   "mn": "lax",
+   "mode": "ZPY",
+   "size": 2,
+   "src": "6502"
+  },
+  "B8": {
+   "mn": "clv",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "B9": {
+   "mn": "lda",
+   "mode": "ABY",
+   "size": 3,
+   "src": "snes"
+  },
+  "BA": {
+   "mn": "tsx",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "BB": {
+   "mn": "lae",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "BC": {
+   "mn": "ldy",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "BD": {
+   "mn": "lda",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "BE": {
+   "mn": "ldx",
+   "mode": "ABY",
+   "size": 3,
+   "src": "snes"
+  },
+  "BF": {
+   "mn": "lax",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "C0": {
+   "mn": "cpy",
+   "mode": "IMM",
+   "size": 2,
+   "src": "snes"
+  },
+  "C1": {
+   "mn": "cmp",
+   "mode": "IZX",
+   "size": 2,
+   "src": "snes"
+  },
+  "C2": {
+   "mn": "nop",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "C3": {
+   "mn": "dcp",
+   "mode": "IZX",
+   "size": 2,
+   "src": "6502"
+  },
+  "C4": {
+   "mn": "cpy",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "C5": {
+   "mn": "cmp",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "C6": {
+   "mn": "dec",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "C7": {
+   "mn": "dcp",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "C8": {
+   "mn": "iny",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "C9": {
+   "mn": "cmp",
+   "mode": "IMM",
+   "size": 2,
+   "src": "snes"
+  },
+  "CA": {
+   "mn": "dex",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "CB": {
+   "mn": "sbx",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "CC": {
+   "mn": "cpy",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "CD": {
+   "mn": "cmp",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "CE": {
+   "mn": "dec",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "CF": {
+   "mn": "dcp",
+   "mode": "ABS",
+   "size": 3,
+   "src": "6502"
+  },
+  "D0": {
+   "mn": "bne",
+   "mode": "REL",
+   "size": 2,
+   "src": "snes"
+  },
+  "D1": {
+   "mn": "cmp",
+   "mode": "IZY",
+   "size": 2,
+   "src": "snes"
+  },
+  "D2": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "D3": {
+   "mn": "dcp",
+   "mode": "IZY",
+   "size": 2,
+   "src": "6502"
+  },
+  "D4": {
+   "mn": "nop",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "D5": {
+   "mn": "cmp",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "D6": {
+   "mn": "dec",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "D7": {
+   "mn": "dcp",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "D8": {
+   "mn": "cld",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "D9": {
+   "mn": "cmp",
+   "mode": "ABY",
+   "size": 3,
+   "src": "snes"
+  },
+  "DA": {
+   "mn": "nop",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "DB": {
+   "mn": "dcp",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "DC": {
+   "mn": "nop",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "DD": {
+   "mn": "cmp",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "DE": {
+   "mn": "dec",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "DF": {
+   "mn": "dcp",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "E0": {
+   "mn": "cpx",
+   "mode": "IMM",
+   "size": 2,
+   "src": "snes"
+  },
+  "E1": {
+   "mn": "sbc",
+   "mode": "IZX",
+   "size": 2,
+   "src": "6502"
+  },
+  "E2": {
+   "mn": "nop",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "E3": {
+   "mn": "isb",
+   "mode": "IZX",
+   "size": 2,
+   "src": "6502"
+  },
+  "E4": {
+   "mn": "cpx",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "E5": {
+   "mn": "sbc",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "E6": {
+   "mn": "inc",
+   "mode": "ZP",
+   "size": 2,
+   "src": "snes"
+  },
+  "E7": {
+   "mn": "isb",
+   "mode": "ZP",
+   "size": 2,
+   "src": "6502"
+  },
+  "E8": {
+   "mn": "inx",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "E9": {
+   "mn": "sbc",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "EA": {
+   "mn": "nop",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "EB": {
+   "mn": "sbc",
+   "mode": "IMM",
+   "size": 2,
+   "src": "6502"
+  },
+  "EC": {
+   "mn": "cpx",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "ED": {
+   "mn": "sbc",
+   "mode": "ABS",
+   "size": 3,
+   "src": "6502"
+  },
+  "EE": {
+   "mn": "inc",
+   "mode": "ABS",
+   "size": 3,
+   "src": "snes"
+  },
+  "EF": {
+   "mn": "isb",
+   "mode": "ABS",
+   "size": 3,
+   "src": "6502"
+  },
+  "F0": {
+   "mn": "beq",
+   "mode": "REL",
+   "size": 2,
+   "src": "snes"
+  },
+  "F1": {
+   "mn": "sbc",
+   "mode": "IZY",
+   "size": 2,
+   "src": "6502"
+  },
+  "F2": {
+   "mn": "hlt",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "F3": {
+   "mn": "isb",
+   "mode": "IZY",
+   "size": 2,
+   "src": "6502"
+  },
+  "F4": {
+   "mn": "nop",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "F5": {
+   "mn": "sbc",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "F6": {
+   "mn": "inc",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "snes"
+  },
+  "F7": {
+   "mn": "isb",
+   "mode": "ZPX",
+   "size": 2,
+   "src": "6502"
+  },
+  "F8": {
+   "mn": "sed",
+   "mode": "IMP",
+   "size": 1,
+   "src": "snes"
+  },
+  "F9": {
+   "mn": "sbc",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "FA": {
+   "mn": "nop",
+   "mode": "IMP",
+   "size": 1,
+   "src": "6502"
+  },
+  "FB": {
+   "mn": "isb",
+   "mode": "ABY",
+   "size": 3,
+   "src": "6502"
+  },
+  "FC": {
+   "mn": "nop",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "FD": {
+   "mn": "sbc",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  },
+  "FE": {
+   "mn": "inc",
+   "mode": "ABX",
+   "size": 3,
+   "src": "snes"
+  },
+  "FF": {
+   "mn": "isb",
+   "mode": "ABX",
+   "size": 3,
+   "src": "6502"
+  }
+ }
+}
