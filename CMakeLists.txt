@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(nes_recomp C)
 
+# Release unless asked otherwise: tests, timings and playable speed assume it.
+# (Multi-config generators such as Visual Studio: cmake --build build --config Release.)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
@@ -56,8 +62,15 @@ if(NES_FRONTEND)
         GIT_TAG release-3.4.20
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(SDL3)
-    add_executable(nes runtime/platform/sdl3_main.c)
-    target_link_libraries(nes PRIVATE nescore recomp_none SDL3::SDL3-static)
+    # A game window (no console window on Windows); display settings are read
+    # from TARGET.ini next to the program, created on first run.
+    function(nes_frontend target code)
+        add_executable(${target} WIN32 runtime/platform/sdl3_main.c runtime/platform/settings.c
+            runtime/platform/tv_frame.c)
+        target_compile_definitions(${target} PRIVATE NES_APP_NAME="${target}")
+        target_link_libraries(${target} PRIVATE nescore ${code} SDL3::SDL3-static)
+    endfunction()
+    nes_frontend(nes recomp_none)
 endif()
 
 # ---- Recompiled programs (M5) ----
@@ -98,8 +111,7 @@ function(nes_recompile name rom)
     add_executable(${name}_headless runtime/tests/nes_headless.c)
     target_link_libraries(${name}_headless PRIVATE nescore ${name}_code)
     if(NES_FRONTEND)
-        add_executable(${name} runtime/platform/sdl3_main.c)
-        target_link_libraries(${name} PRIVATE nescore ${name}_code SDL3::SDL3-static)
+        nes_frontend(${name} ${name}_code)
     endif()
 endfunction()
 
@@ -124,4 +136,8 @@ foreach(rom IN LISTS NES_GAMES)
     string(REGEX REPLACE "[^a-z0-9]+" "_" name "${name}")
     string(REGEX REPLACE "^_+|_+$" "" name "${name}")
     nes_recompile(${name} "${rom}" ${CMAKE_SOURCE_DIR}/games/${name}.toml)
+    list(APPEND game_names ${name})
 endforeach()
+# for tests/test_regression.py: the games this build recompiles
+list(JOIN game_names "\n" game_lines)
+file(WRITE ${CMAKE_BINARY_DIR}/nes_games.txt "${game_lines}\n")

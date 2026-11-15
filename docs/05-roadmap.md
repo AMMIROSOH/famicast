@@ -177,9 +177,20 @@ M8a (recompiler in the build):
 - **Exit:** met (06).
 
 M8b:
-- Coverage report (share of cycles in recompiled vs fallback code).
-- Save states (interpreter and recompiled share one state format).
-- Optional: frame-hash regression suite for several games.
+- [x] Coverage report: `nes_headless --coverage` (and in `--misses`): CPU
+  cycles in recompiled code vs interpreted ROM, RAM code and interrupt
+  entries.
+- [x] Save states: `nes_state_save/load` (runtime/nes.c), one format for
+  interpreter and recompiled builds; `--save-state/--load-state` in
+  nes_headless (also with `--diff`), F2/F4 in the frontend. Shortcut: the
+  struct is stored raw, so states do not survive a change of its layout.
+- [x] Frame-hash regression suite (`tests/test_regression.py`): frame, CPU
+  cycles and audio after 3,000 scripted frames, per configured game.
+- [x] Frontend: no console window on Windows; `<program>.ini` settings
+  (fullscreen, fit/integer/stretch scaling, TV frame, window size); TV frame
+  drawn procedurally (`runtime/platform/tv_frame.c`).
+- [x] Release is the default build type.
+- **Exit:** met (06).
 
 ## Stretch
 - Direct block-to-block jumps to cut dispatch overhead.

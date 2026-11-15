@@ -26,7 +26,8 @@ real NES in both modes (M5b), with sound (M6). Mappers 0-4, 7, 11, 66 run in
 the interpreter and recompile with bank-aware code (M7); one game per mapper
 is verified identical to the interpreter. The recompiler is plain C and runs
 inside the CMake build; it can trace a game first to find code by itself
-(M8a). See
+(M8a). Save states, a coverage report, frame-hash regression tests and
+display settings (fullscreen, scaling, TV frame) came with M8b. See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
@@ -35,11 +36,15 @@ see [docs/06-verification-log.md](docs/06-verification-log.md).
 Needs CMake ≥ 3.20, a C11 compiler (clang/gcc/MSVC) and Ninja. SDL3 is
 downloaded and built by CMake. Python ≥ 3.11 is only needed for the tests.
 ```
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -G Ninja
 cmake --build build
 build/nes path/to/game.nes      # any game on a supported mapper, interpreted
 ```
-Headless (no SDL3): add `-DNES_FRONTEND=OFF`.
+The build type defaults to **Release**; tests, timings and full-speed play
+assume it. With a multi-config generator (Visual Studio), build with
+`cmake --build build --config Release`. Headless (no SDL3): add
+`-DNES_FRONTEND=OFF`. On Windows the game programs open no console window;
+use the `_headless` programs for text output.
 
 ## Recompiling a game
 ```
@@ -76,6 +81,24 @@ Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =
 Select, F5 = reset, Esc = quit. Gamepads: first = player 1, second = player 2,
 hot-plug; D-pad or left stick, East = A, South = B, Back = Select, Start.
 
+| Key | Action |
+|-----|--------|
+| F2 / F4 | save / load state (`ROM.state`; one slot) |
+| F10 | TV frame on/off |
+| F11 or Alt+Enter | fullscreen on/off |
+
+Display settings live in `<program>.ini` next to the program
+(`build/battle_city.ini`, `build/nes.ini`), written with defaults and
+comments on first run:
+```
+fullscreen = 0      # 1 = fullscreen at desktop resolution
+scale = fit         # fit (keep aspect), integer (sharp pixels), stretch
+tv_frame = 0        # 1 = picture inside a TV-like frame
+window_scale = 3    # starting window size
+```
+Save states work across builds of the same version: a state saved by the
+interpreter (`build/nes`) loads in the recompiled program and the reverse.
+
 Record and replay input: `build/nes game.nes --record run.nesi`, then
 `build/nes game.nes --replay run.nesi` (live input resumes at the end).
 
@@ -86,6 +109,14 @@ python -m unittest discover -s tests -t .
 ```
 No Python packages needed. nestest is downloaded on first run (hash-checked).
 CPU tests need the C build; SingleStepTests files not downloaded are skipped.
+Tests for recompiled games (lockstep, save states across builds, frame
+hashes in `tests/data/frame_hashes.json`) run for the games the build was
+configured with and are skipped otherwise. After an intended output change:
+`NES_UPDATE_HASHES=1 python -m unittest tests.test_regression`.
+
+Coverage of a recompiled game: `build/battle_city_headless --play 1 --coverage`
+(share of CPU cycles in recompiled code; `--misses` also lists the
+addresses that were interpreted).
 
 ## ROMs
 No ROMs are included or will ever be committed. Bring your own legally dumped

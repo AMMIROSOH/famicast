@@ -27,7 +27,11 @@ typedef struct Nes {
     uint32_t *misses;     /* optional [nes_miss_slots()]: interpreted instructions
                              per (PRG bank, address); see nes_miss_slot() */
     uint64_t steps_native, steps_interp, steps_interrupt;
+    /* coverage: CPU cycles in recompiled code, and in the interpreter by kind */
+    uint64_t cycles_native, cycles_fallback[3];
 } Nes;
+
+enum { FALLBACK_ROM, FALLBACK_RAM, FALLBACK_INTERRUPT };  /* cycles_fallback[] */
 
 /* Load an iNES image and power on. Returns 0, or -1 with a message in err.
  * Recompiled code linked into the program is used if its PRG hash matches. */
@@ -42,5 +46,10 @@ uint32_t nes_prg_bank(Nes *n, uint16_t a);  /* 8 KB PRG bank mapped at a ($8000+
 size_t nes_miss_slots(Nes *n);
 size_t nes_miss_slot(Nes *n, uint16_t a);
 void nes_sync(Nes *n);                 /* run the PPU up to the CPU (before inspecting it) */
+/* Save states (between frames or steps). Interpreter and recompiled builds
+ * of the same version share the format. Return 0, or -1 (load: message in err;
+ * the machine is left unchanged). */
+int nes_state_save(Nes *n, const char *path);
+int nes_state_load(Nes *n, const char *path, char *err, size_t errlen);
 
 #endif

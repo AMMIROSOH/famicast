@@ -19,6 +19,7 @@ detail yet.
 | nesdev wiki: MMC1, UxROM, CNROM, MMC3 (IRQ counter, A12 filter, "cycle 260"), AxROM, Color Dreams, GxROM, PPU sprite fetches | `runtime/cart.c`, sprite fetch timing | from memory |
 | Mesen2 APU reset behaviour (keep $4017 mode, clear IRQ inhibit; pulse/noise length counters zeroed and unhalted, triangle unaffected) | `apu_reset()` | from memory |
 | nesdev wiki "INES" (DiskDude! junk in bytes 7-15) | header check in `runtime/cart.c`, used by `nesrecomp` too | from memory |
+| Inigo Quilez, "2D distance functions" (rounded box SDF) | `runtime/platform/tv_frame.c` shapes | from memory |
 | George Marsaglia, "Xorshift RNGs" (J. Stat. Software, 2003), the 13/17/5 xorshift32 | `nes_headless --play` input generator | from memory |
 | nesdev wiki: APU, APU Frame Counter, Length Counter, Envelope, Sweep, Triangle, Noise, DMC, Mixer (output filters), CPU interrupts (branch polling, hijacking), DMA | `runtime/apu.c`, interrupt details | from memory |
 

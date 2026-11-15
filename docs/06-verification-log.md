@@ -3,6 +3,35 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M8b: coverage, save states, frame hashes, frontend settings
+- **Coverage** (`--play 1 --coverage`, 6,000 frames, share of CPU cycles):
+
+| Game | Recompiled | Interpreted ROM | RAM code | Interrupt entry |
+|---|---|---|---|---|
+| Battle City, Metroid, Mega Man, Chiller, Arkista's Ring | 99.977% | 0.000% | 0.000% | 0.023% |
+| Kirby's Adventure | 99.912% | 0.000% | 0.045% | 0.043% |
+| Solstice | 99.967% | 0.000% | 0.010% | 0.023% |
+| SMB / Duck Hunt | 99.972% | 0.000% | 0.005% | 0.023% |
+
+  Interrupt entries (7 cycles each) always run in the interpreter, which is
+  the floor here.
+- **Save states** (`tests/test_states.py`): 250 frames + save, then load +
+  150 frames gives the same frame and CPU cycle count as 400 frames in one
+  go (vbl_nmi_timing/2, CHR RAM). The test's strength was checked by
+  breaking the CHR RAM restore: a first version (instr_test-v5, CHR ROM; then
+  saving before the font upload) still passed, so the ROM and save point
+  were changed until the broken build failed. Battle City: a state saved by
+  the interpreter (`--interp`) resumes in the recompiled build in lockstep
+  (`--diff`, 600 frames) and ends on the uninterrupted run's frame. A state
+  of another game is refused.
+- **Frame hashes** (`tests/test_regression.py`): 8 games, 3,000 frames each,
+  frame + cycles + audio recorded in `tests/data/frame_hashes.json`; 18 s.
+- **Frontend**: game programs built as GUI programs on Windows (PE
+  subsystem checked: 2 for the games and `nes`, 3 for `_headless`). Ran with
+  TV frame + integer scale + fullscreen, and with bad `.ini` lines (reported,
+  ignored). The TV frame was checked as an image (rendered over a Battle City
+  frame); a seam at mid-height from a hard light switch was smoothed.
+
 ## 2026-11-15 · M8a: recompiler in C, embedded ROM, auto hints
 - **Port check**: before deleting the Python recompiler, both versions
   generated code for nestest and the 8 games of the M7b table with the same

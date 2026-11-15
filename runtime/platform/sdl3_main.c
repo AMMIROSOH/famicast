@@ -5,11 +5,14 @@
  *   --record     save the input of every frame (runtime/input_log.h)
  *   --replay     play a recording back; live input resumes when it ends
  * Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =
- * Select, F5 = reset, Esc = quit.
+ * Select, F5 = reset, Esc = quit. F2 = save state, F4 = load state,
+ * F10 = TV frame on/off, F11 or Alt+Enter = fullscreen on/off.
+ * Display settings: <program>.ini next to the program (settings.c).
  * Gamepads: first connected = player 1, second = player 2; hot-plug works.
  * D-pad or left stick; East = A, South = B (NES layout: B left of A),
  * Back = Select, Start = Start.
- * Battery saves are kept next to the ROM as ROM.sav. */
+ * Battery saves are kept next to the ROM as ROM.sav, save states as
+ * ROM.state (for an embedded ROM: next to the program). */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <stdlib.h>
@@ -18,8 +21,14 @@
 #include "input_log.h"
 #include "nes.h"
 #include "recomp_rt.h"
+#include "settings.h"
+#include "tv_frame.h"
 
-enum { NES_W = 256, NES_H = 240, SCALE = 3, STICK_DEADZONE = 16000 };
+#ifndef NES_APP_NAME
+#define NES_APP_NAME "nes"  /* CMake sets the game's name: the settings file is NAME.ini */
+#endif
+
+enum { NES_W = 256, NES_H = 240, STICK_DEADZONE = 16000 };
 static const double FRAME_NS = 1e9 / 60.0988;  /* NTSC frame rate, docs/04 */
 
 static SDL_Gamepad *gamepads[2];
@@ -30,7 +39,7 @@ static uint8_t keyboard_buttons(void) {
     if (k[SDL_SCANCODE_X]) b |= PAD_A;
     if (k[SDL_SCANCODE_Z]) b |= PAD_B;
     if (k[SDL_SCANCODE_RSHIFT]) b |= PAD_SELECT;
-    if (k[SDL_SCANCODE_RETURN]) b |= PAD_START;
+    if (k[SDL_SCANCODE_RETURN] && !(SDL_GetModState() & SDL_KMOD_ALT)) b |= PAD_START;  /* Alt+Enter: fullscreen */
     if (k[SDL_SCANCODE_UP]) b |= PAD_UP;
     if (k[SDL_SCANCODE_DOWN]) b |= PAD_DOWN;
     if (k[SDL_SCANCODE_LEFT]) b |= PAD_LEFT;
@@ -79,6 +88,40 @@ static void gamepad_event(const SDL_Event *e) {
     }
 }
 
+static SDL_Texture *make_tv_frame(SDL_Renderer *ren) {
+    const int w = TV_W * TV_RES, h = TV_H * TV_RES;
+    uint8_t *px = SDL_malloc((size_t)w * h * 4);
+    tv_frame_render(px);
+    SDL_Texture *t = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, w, h);
+    if (t) {
+        SDL_UpdateTexture(t, NULL, px, w * 4);
+        SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(t, SDL_SCALEMODE_LINEAR);
+    }
+    SDL_free(px);
+    return t;
+}
+
+/* Draw the picture (and the frame over it) scaled into the output. */
+static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int scale) {
+    int W, H;
+    SDL_GetCurrentRenderOutputSize(ren, &W, &H);
+    float cw = frame ? TV_W : NES_W, ch = frame ? TV_H : NES_H;  /* content, in NES pixels */
+    float sx = W / cw, sy = H / ch;
+    if (scale != SCALE_STRETCH) {
+        sx = sy = SDL_min(sx, sy);
+        if (scale == SCALE_INTEGER && sx >= 1) sx = sy = SDL_floorf(sx);
+    }
+    SDL_FRect content = {SDL_floorf((W - cw * sx) / 2), SDL_floorf((H - ch * sy) / 2), cw * sx, ch * sy};
+    SDL_FRect picture = {content.x + (frame ? TV_LEFT * sx : 0), content.y + (frame ? TV_TOP * sy : 0),
+                         NES_W * sx, NES_H * sy};
+    SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
+    SDL_RenderClear(ren);
+    SDL_RenderTexture(ren, pic, NULL, &picture);
+    if (frame) SDL_RenderTexture(ren, frame, NULL, &content);
+    SDL_RenderPresent(ren);
+}
+
 int main(int argc, char **argv) {
     const char *rom_path = argc > 1 && argv[1][0] != '-' ? argv[1] : NULL;
     const int embedded = !rom_path && recomp_program && recomp_program->rom;
@@ -109,9 +152,17 @@ int main(int argc, char **argv) {
     SDL_free(rom);
     /* battery-backed PRG RAM (saves): ROM path + ".sav", 8 KB; for the
      * embedded ROM, its file name + ".sav" next to the program */
-    char sav_path[1024];
-    if (embedded) SDL_snprintf(sav_path, sizeof sav_path, "%s%s.sav", SDL_GetBasePath(), recomp_program->rom_name);
-    else SDL_snprintf(sav_path, sizeof sav_path, "%s.sav", rom_path);
+    char sav_path[1024], state_path[1024], ini_path[1024], title[256];
+    const char *name = embedded ? recomp_program->rom_name : rom_path;
+    if (embedded) SDL_snprintf(sav_path, sizeof sav_path, "%s%s", SDL_GetBasePath(), recomp_program->rom_name);
+    else SDL_snprintf(sav_path, sizeof sav_path, "%s", rom_path);
+    SDL_snprintf(state_path, sizeof state_path, "%s.state", sav_path);
+    SDL_strlcat(sav_path, ".sav", sizeof sav_path);
+    for (const char *p = name; *p; p++)
+        if (*p == '/' || *p == '\\') name = p + 1;
+    SDL_snprintf(ini_path, sizeof ini_path, "%s%s.ini", SDL_GetBasePath(), NES_APP_NAME);
+    Settings cfg;
+    settings_load(&cfg, ini_path);
     if (nes.cart.battery) {
         size_t sav_size;
         void *sav = SDL_LoadFile(sav_path, &sav_size);
@@ -136,12 +187,19 @@ int main(int argc, char **argv) {
     }
     SDL_Window *win;
     SDL_Renderer *ren;
-    if (!SDL_CreateWindowAndRenderer("nes-recomp", NES_W * SCALE, NES_H * SCALE,
-                                     SDL_WINDOW_RESIZABLE, &win, &ren)) {
+    /* starting size: window_scale x the content, smaller if the screen is */
+    int k = cfg.window_scale, cw = cfg.tv_frame ? TV_W : NES_W, ch = cfg.tv_frame ? TV_H : NES_H;
+    SDL_Rect usable;
+    if (SDL_GetDisplayUsableBounds(SDL_GetPrimaryDisplay(), &usable))
+        while (k > 1 && (cw * k > usable.w || ch * k > usable.h - 40)) k--;
+    SDL_snprintf(title, sizeof title, "%s", name);
+    if (!SDL_CreateWindowAndRenderer(title, cw * k, ch * k, SDL_WINDOW_RESIZABLE, &win, &ren)) {
         SDL_Log("window: %s", SDL_GetError());
         return 1;
     }
-    SDL_SetRenderLogicalPresentation(ren, NES_W, NES_H, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
+    if (cfg.fullscreen) SDL_SetWindowFullscreen(win, true);
+    SDL_Texture *frame_tex = cfg.tv_frame ? make_tv_frame(ren) : NULL;
+    uint64_t message_until = 0;  /* a short message in the title bar */
     SDL_Texture *tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_XRGB8888,
                                          SDL_TEXTUREACCESS_STREAMING, NES_W, NES_H);
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
@@ -164,7 +222,27 @@ int main(int argc, char **argv) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT) running = 0;
             if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) running = 0;
-            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_F5 && !e.key.repeat) reset_pressed = 1;
+            if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
+                const char *msg = NULL;
+                char err[128], text[160];
+                if (e.key.key == SDLK_F5) reset_pressed = 1;
+                if (e.key.key == SDLK_F11 || (e.key.key == SDLK_RETURN && (e.key.mod & SDL_KMOD_ALT)))
+                    SDL_SetWindowFullscreen(win, !(SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN));
+                if (e.key.key == SDLK_F10) {
+                    if (frame_tex) SDL_DestroyTexture(frame_tex), frame_tex = NULL;
+                    else frame_tex = make_tv_frame(ren);
+                }
+                if (e.key.key == SDLK_F2) msg = nes_state_save(&nes, state_path) == 0 ? "state saved" : "could not save state";
+                if (e.key.key == SDLK_F4) {
+                    if (nes_state_load(&nes, state_path, err, sizeof err) == 0) msg = "state loaded";
+                    else SDL_snprintf(text, sizeof text, "no state loaded (%s)", err), msg = text;
+                }
+                if (msg) {
+                    SDL_snprintf(title, sizeof title, "%s - %s", name, msg);
+                    SDL_SetWindowTitle(win, title);
+                    message_until = SDL_GetTicks() + 2000;
+                }
+            }
             gamepad_event(&e);
         }
         InputFrame in;
@@ -196,9 +274,11 @@ int main(int argc, char **argv) {
         }
         for (int i = 0; i < NES_W * NES_H; i++) fb[i] = palette[nes.ppu.fb[i] & 0x3F];
         SDL_UpdateTexture(tex, NULL, fb, NES_W * sizeof fb[0]);
-        SDL_RenderClear(ren);
-        SDL_RenderTexture(ren, tex, NULL, NULL);
-        SDL_RenderPresent(ren);
+        present(ren, tex, frame_tex, cfg.scale);
+        if (message_until && SDL_GetTicks() > message_until) {
+            SDL_SetWindowTitle(win, name);
+            message_until = 0;
+        }
 
         next += (uint64_t)FRAME_NS;  /* pace to 60.1 Hz regardless of monitor rate */
         uint64_t now = SDL_GetTicksNS();
@@ -214,6 +294,7 @@ int main(int argc, char **argv) {
     cart_free(&nes.cart);
     if (audio) SDL_DestroyAudioStream(audio);
     SDL_DestroyTexture(tex);
+    if (frame_tex) SDL_DestroyTexture(frame_tex);
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
     SDL_Quit();

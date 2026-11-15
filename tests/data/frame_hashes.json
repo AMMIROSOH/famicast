@@ -1,0 +1,58 @@
+{
+  "arkista_s_ring": {
+    "audio": "F6662F63",
+    "cycles": 89339241,
+    "frame": "857D31B7",
+    "frames": 3000,
+    "prg_fnv1a": "C1C5F0D0"
+  },
+  "battle_city": {
+    "audio": "5077F29C",
+    "cycles": 89339238,
+    "frame": "CA0130E3",
+    "frames": 3000,
+    "prg_fnv1a": "65D2E392"
+  },
+  "chiller": {
+    "audio": "4D680D6E",
+    "cycles": 89339232,
+    "frame": "05EF1057",
+    "frames": 3000,
+    "prg_fnv1a": "35FD1B7C"
+  },
+  "kirby_s_adventure": {
+    "audio": "12AF7928",
+    "cycles": 89339239,
+    "frame": "46DDCB02",
+    "frames": 3000,
+    "prg_fnv1a": "88D0CE0B"
+  },
+  "mega_man": {
+    "audio": "62DA355F",
+    "cycles": 89339234,
+    "frame": "716EB6B8",
+    "frames": 3000,
+    "prg_fnv1a": "44EB2517"
+  },
+  "metroid": {
+    "audio": "A3832A12",
+    "cycles": 89339237,
+    "frame": "71C3B5AF",
+    "frames": 3000,
+    "prg_fnv1a": "B3C0A87F"
+  },
+  "solstice": {
+    "audio": "B0FE7310",
+    "cycles": 89339283,
+    "frame": "A9302B1C",
+    "frames": 3000,
+    "prg_fnv1a": "DD4EFEE4"
+  },
+  "super_mario_bros_duck_hunt": {
+    "audio": "5ED5D8A0",
+    "cycles": 89339244,
+    "frame": "1C5D8B74",
+    "frames": 3000,
+    "prg_fnv1a": "5F6F1687"
+  }
+}

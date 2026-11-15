@@ -89,6 +89,23 @@ typedef struct { uint8_t a, x, y, s, p; uint16_t pc; uint64_t cycles; } Cpu;
   not delayed by a whole block. Exact per-instruction NMI timing is only needed
   by a few games; the interpreter fallback can provide it if one needs it.
 
+## Save states
+The whole machine is the `Nes` struct (CPU, PPU, APU, cartridge registers,
+RAM), plus CHR RAM. Recompiled code keeps no state of its own (each block
+resumes from `c->pc` through its entry switch), so interpreter and
+recompiled builds share one format: header (magic, version, struct size,
+PRG hash), the struct, CHR RAM. Pointers (ROM data, bus, fast-path pages,
+linked code) are re-created on load. Shortcut: the raw struct ties a state to
+one build layout; a field-wise format is needed once states must survive
+program updates.
+
+## Frontend
+SDL3 window, audio and gamepads (`runtime/platform/`). Display settings come
+from `<program>.ini` next to the program (`settings.c`). Scaling is done by
+the frontend (fit, integer or stretch), so the optional TV frame
+(`tv_frame.c`, drawn procedurally at 4x and filtered) and the picture
+(nearest-neighbour) scale together.
+
 ## Fallback interpreter (`interp6502`)
 A plain switch-based 6502 core sharing the same `Cpu` struct and bus. It has
 three jobs:

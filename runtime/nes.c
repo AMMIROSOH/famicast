@@ -14,6 +14,8 @@
  * the sprite fetches (dots 255-330 of rendering lines). */
 #include "nes.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 enum { DOTS_BEFORE_ACCESS = 2, LINE = 341, VBLANK_POS = 241 * LINE + 1, FRAME_SHORT = 262 * LINE - 1 };
@@ -240,14 +242,17 @@ void nes_reset(Nes *n) {
  * Interrupt entry and a jammed CPU always go through cpu_step. */
 void nes_step(Nes *n) {
     Cpu *c = &n->cpu;
+    uint64_t before = c->cycles;
     if (n->recomp && !c->poll_prev && !c->jammed) {
         RecompFn f = n->recomp(c->pc, nes_prg_bank(n, c->pc));
         if (f) {
             f(c);
             n->steps_native++;
+            n->cycles_native += c->cycles - before;
             return;
         }
     }
+    int kind = c->poll_prev ? FALLBACK_INTERRUPT : c->pc < 0x8000 ? FALLBACK_RAM : FALLBACK_ROM;
     if (c->poll_prev) {
         n->steps_interrupt++;
     } else {
@@ -256,6 +261,68 @@ void nes_step(Nes *n) {
         if (n->misses && !c->jammed) n->misses[nes_miss_slot(n, c->pc)]++;
     }
     cpu_step(c);
+    n->cycles_fallback[kind] += c->cycles - before;
+}
+
+/* ---- save states ----
+ * The whole machine is one struct, the same in interpreter and recompiled
+ * builds (recompiled code keeps no state of its own), so a state from one
+ * loads in the other. File: header, the Nes struct, then CHR RAM if any.
+ * shortcut: the struct is stored raw, so a state only loads in builds with
+ * the same layout (checked by size and version); write fields one by one
+ * when states must survive program updates. */
+enum { STATE_VERSION = 1 };
+
+typedef struct {
+    char magic[4];  /* "NESS" */
+    uint32_t version, size, prg_hash;
+} StateHeader;
+
+int nes_state_save(Nes *n, const char *path) {
+    StateHeader h = {{'N', 'E', 'S', 'S'}, STATE_VERSION, (uint32_t)sizeof *n,
+                     recomp_prg_hash(n->cart.prg, n->cart.prg_size)};
+    FILE *f = fopen(path, "wb");
+    if (!f) return -1;
+    int ok = fwrite(&h, sizeof h, 1, f) == 1 && fwrite(n, sizeof *n, 1, f) == 1 &&
+             (!n->cart.chr_ram || fwrite(n->cart.chr, n->cart.chr_size, 1, f) == 1);
+    return (fclose(f) == 0 && ok) ? 0 : -1;
+}
+
+int nes_state_load(Nes *n, const char *path, char *err, size_t errlen) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { snprintf(err, errlen, "cannot open"); return -1; }
+    StateHeader h;
+    Nes *s = malloc(sizeof *s);
+    uint8_t *chr = malloc(n->cart.chr_size);
+    int ok = fread(&h, sizeof h, 1, f) == 1 && !memcmp(h.magic, "NESS", 4);
+    if (!ok) snprintf(err, errlen, "not a save state");
+    else if (h.version != STATE_VERSION || h.size != sizeof *n)
+        ok = 0, snprintf(err, errlen, "saved by a different version of the program");
+    else if (h.prg_hash != recomp_prg_hash(n->cart.prg, n->cart.prg_size))
+        ok = 0, snprintf(err, errlen, "saved with a different game");
+    else if (fread(s, sizeof *s, 1, f) != 1 || s->cart.chr_size != n->cart.chr_size ||
+             (n->cart.chr_ram && fread(chr, n->cart.chr_size, 1, f) != 1))
+        ok = 0, snprintf(err, errlen, "file is truncated");
+    fclose(f);
+    if (ok) {
+        /* the state, except what belongs to this process: memory, linked
+         * code, statistics */
+        s->cart.prg = n->cart.prg;
+        s->cart.chr = n->cart.chr;
+        s->recomp = n->recomp;
+        s->misses = n->misses;
+        s->steps_native = n->steps_native, s->steps_interp = n->steps_interp;
+        s->steps_interrupt = n->steps_interrupt, s->cycles_native = n->cycles_native;
+        memcpy(s->cycles_fallback, n->cycles_fallback, sizeof s->cycles_fallback);
+        *n = *s;
+        if (n->cart.chr_ram) memcpy(n->cart.chr, chr, n->cart.chr_size);
+        n->ppu.cart = n->apu.cart = &n->cart;
+        n->cpu.bus = n;
+        map_memory(n);
+    }
+    free(s);
+    free(chr);
+    return ok ? 0 : -1;
 }
 
 void nes_run_frame(Nes *n) {

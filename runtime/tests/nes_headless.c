@@ -2,7 +2,8 @@
  *
  *   nes_headless [ROM] [--frames N] [--blargg] [--peek ADDR] [--ppm FILE] [--hash]
  *                      [--press F:MASK]... [--record FILE] [--replay FILE] [--play SEED]
- *                      [--interp] [--diff] [--misses] [--out FILE]
+ *                      [--interp] [--diff] [--misses] [--coverage] [--out FILE]
+ *                      [--load-state FILE] [--save-state FILE]
  *
  * ROM may be left out in recompiled builds: the ROM they embed is used.
  *
@@ -12,7 +13,8 @@
  * --peek    after N frames print the byte at ADDR (hex), e.g. $F8 for the
  *           2005 blargg tests, which store their result code there.
  * --ppm     write the last frame as a PPM image.
- * --hash    print an FNV-1a hash of the last frame (regression tests).
+ * --hash    print an FNV-1a hash of the last frame and the CPU cycle count
+ *           (regression tests).
  * --press F:MASK  hold controller-1 buttons MASK (hex, see nes.h) during
  *           frames F..F+5; may be repeated (scripted input for tests).
  * --record  save the input of every frame (runtime/input_log.h).
@@ -24,6 +26,9 @@
  *           state after every recompiled block; stop at the first difference.
  * --misses  print how many instructions were interpreted, and where (input
  *           for nesrecomp --misses; without recompiled code, a full trace).
+ * --coverage  print the share of CPU cycles run by recompiled code.
+ * --load-state  start from a save state (runtime/nes.h; also for --diff).
+ * --save-state  write a save state after the last frame.
  * --out     write the report to FILE instead of standard output (build steps).
  * --time    print the emulation time and speed relative to a real NES.
  * --wav     write the audio output (48 kHz mono, 16-bit) to a WAV file.
@@ -111,11 +116,23 @@ static int run_frame_diff(Nes *n, Nes *ref, long frame) {
     return 0;
 }
 
+/* Share of CPU cycles spent in recompiled code, and where the rest went.
+ * Interrupt entries (7 cycles each) always run in the interpreter. */
+static void print_coverage(Nes *n) {
+    const uint64_t *f = n->cycles_fallback;
+    double total = (double)(n->cycles_native + f[0] + f[1] + f[2]);
+    if (total == 0) total = 1;
+    printf("COVERAGE %.3f%% of CPU cycles recompiled; interpreted: ROM %.3f%%, RAM %.3f%%, "
+           "interrupt entry %.3f%%\n", 100 * n->cycles_native / total, 100 * f[FALLBACK_ROM] / total,
+           100 * f[FALLBACK_RAM] / total, 100 * f[FALLBACK_INTERRUPT] / total);
+}
+
 static void print_misses(Nes *n) {
     printf("STEPS native=%llu interpreted=%llu interrupt-entries=%llu\n",
            (unsigned long long)n->steps_native, (unsigned long long)n->steps_interp,
            (unsigned long long)n->steps_interrupt);
-    /* input for python -m recomp.suggest; ROM misses carry their 8 KB bank */
+    print_coverage(n);
+    /* input for nesrecomp --misses; ROM misses carry their 8 KB bank */
     for (uint32_t a = 0; a < 0x8000; a++)
         if (n->misses[a]) printf("MISS $%04X %u (RAM)\n", a, n->misses[a]);
     for (size_t slot = 0x8000; slot < nes_miss_slots(n); slot++) {
@@ -211,11 +228,11 @@ int main(int argc, char **argv) {
         return 2;
     }
     long frames = -1, peek = -1, play_seed = -1;
-    int blargg = 0, hash = 0, npress = 0, interp = 0, diff = 0, misses = 0, timing = 0, audio_hash = 0;
+    int blargg = 0, hash = 0, npress = 0, interp = 0, diff = 0, misses = 0, timing = 0, audio_hash = 0, coverage = 0;
     const char *wav = NULL;
     long press_frame[64];
     unsigned press_mask[64];
-    const char *ppm = NULL, *record = NULL, *replay = NULL;
+    const char *ppm = NULL, *record = NULL, *replay = NULL, *load_state = NULL, *save_state = NULL;
     for (int i = rom_path ? 2 : 1; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]);
         else if (!strcmp(argv[i], "--peek") && i + 1 < argc) peek = strtol(argv[++i], NULL, 16);
@@ -225,6 +242,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--interp")) interp = 1;
         else if (!strcmp(argv[i], "--diff")) diff = 1;
         else if (!strcmp(argv[i], "--misses")) misses = 1;
+        else if (!strcmp(argv[i], "--coverage")) coverage = 1;
+        else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) load_state = argv[++i];
+        else if (!strcmp(argv[i], "--save-state") && i + 1 < argc) save_state = argv[++i];
         else if (!strcmp(argv[i], "--time")) timing = 1;
         else if (!strcmp(argv[i], "--wav") && i + 1 < argc) wav = argv[++i];
         else if (!strcmp(argv[i], "--audio-hash")) audio_hash = 1;
@@ -259,6 +279,11 @@ int main(int argc, char **argv) {
         if (!nes.recomp) { fprintf(stderr, "--diff needs matching recompiled code\n"); return 2; }
         nes_load(&ref, rom, size, err, sizeof err);
         ref.recomp = NULL;
+    }
+    if (load_state && (nes_state_load(&nes, load_state, err, sizeof err) != 0 ||
+                       (diff && nes_state_load(&ref, load_state, err, sizeof err) != 0))) {
+        fprintf(stderr, "%s: %s\n", load_state, err);
+        return 2;
     }
     InputLog log = {0};
     if (replay && input_log_load(replay, &log) != 0) {
@@ -320,7 +345,7 @@ int main(int argc, char **argv) {
     if (hash) {
         uint32_t h = 2166136261u;
         for (int i = 0; i < 256 * 240; i++) h = (h ^ nes.ppu.fb[i]) * 16777619u;
-        printf("HASH %08X\n", h);
+        printf("HASH %08X cycles=%llu\n", h, (unsigned long long)nes.cpu.cycles);
     }
     timespec_get(&t1, TIME_UTC);
     if (timing) {
@@ -329,6 +354,8 @@ int main(int argc, char **argv) {
     }
     if (diff) printf("DIFF OK: %ld frames, recompiled and interpreter identical\n", frames);
     if (misses) print_misses(&nes);
+    else if (coverage) print_coverage(&nes);
+    if (save_state && nes_state_save(&nes, save_state) != 0) { perror(save_state); return 2; }
     if (ppm) write_ppm(&nes, ppm);
     if (wav) write_wav(wav);
     if (audio_hash) {
