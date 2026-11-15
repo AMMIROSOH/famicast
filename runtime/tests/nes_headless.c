@@ -27,6 +27,7 @@
  * --misses  print how many instructions were interpreted, and where (input
  *           for nesrecomp --misses; without recompiled code, a full trace).
  * --coverage  print the share of CPU cycles run by recompiled code.
+ * --text    after the last frame, print the screen's text (first nametable).
  * --load-state  start from a save state (runtime/nes.h; also for --diff).
  * --save-state  write a save state after the last frame.
  * --out     write the report to FILE instead of standard output (build steps).
@@ -206,6 +207,22 @@ static int blargg_ready(Nes *n) {
     return nes_peek(n, 0x6001) == 0xDE && nes_peek(n, 0x6002) == 0xB0 && nes_peek(n, 0x6003) == 0x61;
 }
 
+/* --text: the first nametable as text, for test ROMs that only print to
+ * the screen (blargg's font has tiles at their ASCII codes). */
+static void print_screen_text(Nes *n) {
+    for (int row = 0; row < 30; row++) {
+        char line[33];
+        int end = 0;
+        for (int col = 0; col < 32; col++) {
+            uint8_t t = n->ppu.nt[cart_nt_index(&n->cart, (uint16_t)(0x2000 + row * 32 + col))];
+            line[col] = t >= 0x20 && t < 0x7F ? (char)t : ' ';
+            if (line[col] != ' ') end = col + 1;
+        }
+        line[end] = 0;
+        if (end) printf("%s\n", line);
+    }
+}
+
 static void print_blargg_text(Nes *n) {
     for (uint16_t a = 0x6004; a < 0x8000; a++) {
         uint8_t ch = nes_peek(n, a);
@@ -221,7 +238,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     long frames = -1, peek = -1, play_seed = -1;
-    int blargg = 0, hash = 0, npress = 0, interp = 0, diff = 0, misses = 0, timing = 0, audio_hash = 0, coverage = 0;
+    int blargg = 0, hash = 0, npress = 0, interp = 0, diff = 0, misses = 0, timing = 0, audio_hash = 0, coverage = 0, text = 0;
     const char *wav = NULL;
     long press_frame[64];
     unsigned press_mask[64];
@@ -236,6 +253,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--diff")) diff = 1;
         else if (!strcmp(argv[i], "--misses")) misses = 1;
         else if (!strcmp(argv[i], "--coverage")) coverage = 1;
+        else if (!strcmp(argv[i], "--text")) text = 1;
         else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) load_state = argv[++i];
         else if (!strcmp(argv[i], "--save-state") && i + 1 < argc) save_state = argv[++i];
         else if (!strcmp(argv[i], "--time")) timing = 1;
@@ -346,6 +364,7 @@ int main(int argc, char **argv) {
         printf("TIME %.2f s for %ld frames (%.1fx real time)\n", sec, frames_run, frames_run / 60.0988 / sec);
     }
     if (diff) printf("DIFF OK: %ld frames, recompiled and interpreter identical\n", frames);
+    if (text) print_screen_text(&nes);
     if (misses) print_misses(&nes);
     else if (coverage) print_coverage(&nes);
     if (save_state && nes_state_save(&nes, save_state) != 0) { perror(save_state); return 2; }

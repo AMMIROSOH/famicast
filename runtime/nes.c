@@ -47,6 +47,7 @@ static void plan_next_event(Nes *n) {
         m += n->cpu.bus_pending;
         if (m < d) d = m;
     }
+    if (n->oam_dma_pending) d = n->cpu.bus_pending;  /* next access: slow path, which runs the DMA */
     n->cpu.bus_budget = (int32_t)d;
 }
 
@@ -107,26 +108,9 @@ static uint8_t read_no_tick(Nes *n, uint16_t a) {
 static int is_ppu(uint16_t a) { return (a & 0xE000) == 0x2000; }
 static void map_memory(Nes *n);
 
-/* DMC sample fetch: the CPU is halted on its next read cycle while the DMA
- * unit reads the byte (nesdev "APU DMC", "DMA").
- * shortcut: always 4 cycles (hardware: 2-4 depending on alignment and on
- * OAM DMA), and the halted read is not repeated (that repeat is what
- * corrupts $2007/$4016 reads on hardware). Check: dmc_dma_during_read4. */
-static void dmc_dma(Nes *n) {
-    n->cpu.cycles += 3;        /* stall cycles; the read itself moves 4 later */
-    n->cpu.bus_pending += 12;
-    catch_up(n);
-    uint8_t v = cart_cpu_read(&n->cart, n->apu.dmc.addr, n->cpu.open_bus);
-    n->cpu.open_bus = v;
-    apu_dmc_fill(&n->apu, v);
-    n->cpu.irq = apu_irq(&n->apu);
-    n->cpu.cycles += 1;
-    plan_next_event(n);
-}
-
-uint8_t cpu_read(Cpu *c, uint16_t a) {
-    Nes *n = c->bus;
-    if (n->apu.dmc.dma_request) dmc_dma(n);
+/* One bus read in the current cycle (n->cpu.cycles already counts it), with
+ * every side effect a CPU read has. The CPU and the DMA unit both use it. */
+static uint8_t read_cycle(Nes *n, uint16_t a) {
     if (!is_ppu(a)) {
         add_dots(n, 3);
         n->cpu.open_bus = read_no_tick(n, a);
@@ -147,23 +131,63 @@ uint8_t cpu_read(Cpu *c, uint16_t a) {
     return n->cpu.open_bus;
 }
 
-/* $4014: 256 read/write pairs, plus 1 idle cycle (+1 when starting on an odd
- * cycle): 513 or 514 cycles, CPU halted meanwhile (nesdev "PPU OAM").
- * Interrupts arriving during the DMA are seen by the next instruction's poll
- * (cpu_interrupts_v2 4-irq_and_dma).
- * shortcut: a DMC fetch cannot interrupt it (sprdma_and_dmc_dma fails). */
-static void oam_dma(Nes *n, uint8_t page) {
-    int idle = 1 + (int)(n->cpu.cycles & 1);
-    for (int i = 0; i < idle; i++) { n->cpu.cycles++; add_dots(n, 3); }
-    for (int i = 0; i < 256; i++) {
+/* DMA (nesdev "DMA"; the same model as Mesen2). OAM DMA ($4014) and DMC
+ * sample fetches halt the CPU on its next read cycle. That read is performed
+ * (the halt cycle) and repeated on every later cycle the DMA unit does not
+ * use, then once more for real when the CPU resumes; repeated $4016/$4017
+ * reads do not clock the controller again. The DMA unit reads on "get"
+ * cycles (even cycle numbers here) and OAM DMA writes on "put" cycles:
+ * OAM DMA = halt + optional alignment + 256 get/put pairs = 513 or 514
+ * cycles; a DMC fetch alone = halt + dummy + optional alignment + get = 3
+ * or 4. During OAM DMA, OAM cycles stand in for the DMC's halt and dummy
+ * cycles, so its fetch usually costs 2 more. Interrupts arriving meanwhile
+ * are seen by the resumed instruction's poll (cpu_interrupts_v2
+ * 4-irq_and_dma). Checked by sprdma_and_dmc_dma and dmc_dma_during_read4. */
+static void run_dma(Nes *n, uint16_t a) {
+    int dmc = n->apu.dmc.dma_request, dmc_halt = 0, dmc_dummy = dmc;
+    int oam = n->oam_dma_pending, count = 0;  /* count: OAM bytes read + written */
+    int quiet = a == 0x4016 || a == 0x4017;
+    uint8_t value = 0;
+    n->oam_dma_pending = 0;
+    read_cycle(n, a);  /* halt cycle */
+    while (dmc || oam || n->apu.dmc.dma_request) {  /* a request in the last cycle joins in */
         n->cpu.cycles++;
-        add_dots(n, 3);
-        uint8_t v = n->cpu.open_bus = read_no_tick(n, (uint16_t)(page << 8 | i));
-        n->cpu.cycles++;
-        n->cpu.bus_pending += 3;
-        catch_up(n);  /* OAM is read by sprite evaluation: write at the exact dot */
-        ppu_oam_dma_write(&n->ppu, v);
+        int get = !(n->cpu.cycles & 1);
+        if (!dmc && n->apu.dmc.dma_request) dmc = dmc_halt = dmc_dummy = 1;  /* request during OAM DMA */
+        int ready = dmc && !dmc_halt && !dmc_dummy;
+        if (dmc_halt) dmc_halt = 0;    /* this cycle serves as the DMC's halt... */
+        else if (dmc_dummy) dmc_dummy = 0;  /* ...or its dummy cycle */
+        if (get && ready) {
+            uint8_t v = read_cycle(n, n->apu.dmc.addr);
+            apu_dmc_fill(&n->apu, v);
+            n->cpu.irq = apu_irq(&n->apu) || n->cart.irq_line;
+            plan_next_event(n);
+            dmc = 0;
+        } else if (get && oam) {
+            value = read_cycle(n, (uint16_t)(n->oam_dma_page << 8 | count / 2));
+            count++;
+        } else if (!get && oam && (count & 1)) {
+            n->cpu.bus_pending += 3;
+            catch_up(n);  /* OAM is read by sprite evaluation: write at the exact dot */
+            ppu_oam_dma_write(&n->ppu, value);
+            sync_apu(n);
+            plan_next_event(n);
+            if (++count == 512) oam = 0;
+        } else if (quiet) {  /* alignment / dummy cycle, controller not clocked again */
+            add_dots(n, 3);
+            sync_apu(n);
+            plan_next_event(n);
+        } else {
+            read_cycle(n, a);  /* alignment / dummy cycle: the halted read again */
+        }
     }
+    n->cpu.cycles++;  /* the CPU's own read, done by the caller */
+}
+
+uint8_t cpu_read(Cpu *c, uint16_t a) {
+    Nes *n = c->bus;
+    if (n->apu.dmc.dma_request || n->oam_dma_pending) run_dma(n, a);
+    return read_cycle(n, a);
 }
 
 void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
@@ -188,7 +212,7 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
     }
     n->cpu.bus_pending += DOTS_BEFORE_ACCESS;
     catch_up(n);
-    if (a == 0x4014) oam_dma(n, v);
+    if (a == 0x4014) n->oam_dma_page = v, n->oam_dma_pending = 1;  /* runs at the next read (run_dma) */
     else if (mapper_reg) {  /* bank switches can be raster effects: PPU caught up first */
         if (cart_cpu_write(&n->cart, a, v, n->cpu.cycles)) map_memory(n);
     }

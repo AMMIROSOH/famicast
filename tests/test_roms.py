@@ -14,8 +14,11 @@ from tests.test_cpu import BUILD
 RUNNER = os.path.join(BUILD, "nes_headless.exe" if os.name == "nt" else "nes_headless")
 PENDING = {  # path -> why it is not expected to pass yet
     "mmc3_test_2/rom_singles/6-MMC3_alt.nes": "MMC3 rev A behaviour; we emulate rev B (5-MMC3 passes), the common chip",
-    "sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes": "DMC DMA during OAM DMA not modelled (shortcut in nes.c)",
-    "sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes": "DMC DMA during OAM DMA not modelled (shortcut in nes.c)",
+    "sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes": "DMC DMA during OAM DMA modelled (nes.c run_dma) but the "
+        "table is off by 1-2 clocks; expected table unknown (one known value: 512 test, row 0B = 527)",
+    "sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes": "as sprdma_and_dmc_dma",
+    "dmc_dma_during_read4/double_2007_read.nes": "two $2007 reads on consecutive cycles: PPU read-buffer "
+        "timing not modelled (2nd row prints 33 44 55 66 77)",
     "apu_reset/4017_written.nes": "reset case #3 unclear without test source; power case passes (docs/06)",
     "apu_reset/len_ctrs_enabled.nes": "reset case #3 unclear without test source; power case passes (docs/06)",
 }
@@ -32,6 +35,10 @@ class TestRoms(unittest.TestCase):
                     r = subprocess.run([RUNNER, fetch_ntr(path), "--blargg"],
                                        capture_output=True, text=True, timeout=300)
                     self.assertEqual(r.returncode, 0, r.stdout)
+                elif kind.startswith("text:"):
+                    r = subprocess.run([RUNNER, fetch_ntr(path), "--frames", "300", "--text"],
+                                       capture_output=True, text=True, timeout=300)
+                    self.assertTrue(any(t in r.stdout for t in kind[5:].split("|")), r.stdout)
                 else:  # result code in zero page after the test finished (1 = pass)
                     r = subprocess.run([RUNNER, fetch_ntr(path), "--frames", "600", "--peek", kind],
                                        capture_output=True, text=True, timeout=300)

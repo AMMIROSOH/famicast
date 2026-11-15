@@ -24,6 +24,7 @@ typedef struct Nes {
     uint8_t pad[2];       /* buttons held, set by the frontend */
     uint8_t pad_shift[2], strobe;
     uint8_t nmi_prev;
+    uint8_t oam_dma_pending, oam_dma_page;  /* $4014 written: DMA at the next read */
     /* recompiled code (NULL: interpret everything) and fallback statistics */
     RecompFn (*recomp)(uint16_t pc, uint32_t bank);
     uint32_t *misses;     /* optional [nes_miss_slots()]: interpreted instructions

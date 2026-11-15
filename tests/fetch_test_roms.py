@@ -107,6 +107,13 @@ NTR_FILES = {
         "10.len_halt_timing", "11.len_reload_timing")},
     "cpu_dummy_writes/cpu_dummy_writes_oam.nes": "6000",
     "cpu_dummy_writes/cpu_dummy_writes_ppumem.nes": "6000",
+    # these print only to the screen: "text:" = one of these strings must show
+    # (expected outputs from the test sources' comments)
+    "dmc_dma_during_read4/dma_2007_read.nes": "text:159A7A8F|5E3DF9C4",
+    "dmc_dma_during_read4/dma_2007_write.nes": "text:Passed",
+    "dmc_dma_during_read4/dma_4016_read.nes": "text:Passed",
+    "dmc_dma_during_read4/double_2007_read.nes": "text:85CFD627|F018C287|440EF923|E52F41A5",
+    "dmc_dma_during_read4/read_write_2007.nes": "text:Passed",
     "sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes": "6000",
     "sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes": "6000",
     "ppu_open_bus/ppu_open_bus.nes": "6000",
