@@ -1,0 +1,81 @@
+/* Instruction semantics shared by the interpreter and recompiled code.
+ * Flag rules: docs/03-6502-traps.md. Unofficial opcodes: nesdev wiki
+ * "CPU unofficial opcodes"; all checked against SingleStepTests. */
+#ifndef NES_CPU_OPS_H
+#define NES_CPU_OPS_H
+
+#include "cpu.h"
+
+static inline uint8_t rd(Cpu *c, uint16_t a) { c->cycles++; return cpu_read(c, a); }
+static inline void wr(Cpu *c, uint16_t a, uint8_t v) { c->cycles++; cpu_write(c, a, v); }
+static inline void push(Cpu *c, uint8_t v) { wr(c, 0x100 | c->s, v); c->s--; }
+static inline uint8_t pull(Cpu *c) { c->s++; return rd(c, 0x100 | c->s); }
+
+static inline void nz(Cpu *c, uint8_t v) {
+    c->p = (uint8_t)((c->p & ~(FLAG_Z | FLAG_N)) | (v ? 0 : FLAG_Z) | (v & FLAG_N));
+}
+static inline void set_c(Cpu *c, int on) { c->p = (uint8_t)((c->p & ~FLAG_C) | (on ? FLAG_C : 0)); }
+
+/* ---- reads: consume an operand value ---- */
+static inline void op_LDA(Cpu *c, uint8_t v) { c->a = v; nz(c, v); }
+static inline void op_LDX(Cpu *c, uint8_t v) { c->x = v; nz(c, v); }
+static inline void op_LDY(Cpu *c, uint8_t v) { c->y = v; nz(c, v); }
+static inline void op_AND(Cpu *c, uint8_t v) { c->a &= v; nz(c, c->a); }
+static inline void op_ORA(Cpu *c, uint8_t v) { c->a |= v; nz(c, c->a); }
+static inline void op_EOR(Cpu *c, uint8_t v) { c->a ^= v; nz(c, c->a); }
+static inline void op_ADC(Cpu *c, uint8_t v) {
+    unsigned s = c->a + v + (c->p & FLAG_C);  /* 2A03: no decimal mode */
+    c->p = (uint8_t)((c->p & ~(FLAG_C | FLAG_V)) | (s > 0xFF ? FLAG_C : 0) |
+                     ((~(c->a ^ v) & (c->a ^ s) & 0x80) ? FLAG_V : 0));
+    c->a = (uint8_t)s;
+    nz(c, c->a);
+}
+static inline void op_SBC(Cpu *c, uint8_t v) { op_ADC(c, (uint8_t)~v); }
+static inline void compare(Cpu *c, uint8_t r, uint8_t v) { set_c(c, r >= v); nz(c, (uint8_t)(r - v)); }
+static inline void op_CMP(Cpu *c, uint8_t v) { compare(c, c->a, v); }
+static inline void op_CPX(Cpu *c, uint8_t v) { compare(c, c->x, v); }
+static inline void op_CPY(Cpu *c, uint8_t v) { compare(c, c->y, v); }
+static inline void op_BIT(Cpu *c, uint8_t v) {
+    c->p = (uint8_t)((c->p & ~(FLAG_Z | FLAG_V | FLAG_N)) | ((c->a & v) ? 0 : FLAG_Z) |
+                     (v & (FLAG_V | FLAG_N)));
+}
+static inline void op_NOP(Cpu *c, uint8_t v) { (void)c; (void)v; }
+static inline void op_LAX(Cpu *c, uint8_t v) { c->a = c->x = v; nz(c, v); }
+static inline void op_LAS(Cpu *c, uint8_t v) { c->a = c->x = c->s = v & c->s; nz(c, c->a); }
+static inline void op_ANC(Cpu *c, uint8_t v) { op_AND(c, v); set_c(c, c->a & 0x80); }
+static inline void op_ALR(Cpu *c, uint8_t v) {
+    c->a &= v; set_c(c, c->a & 1); c->a >>= 1; nz(c, c->a);
+}
+static inline void op_ARR(Cpu *c, uint8_t v) {
+    c->a = (uint8_t)(((c->a & v) >> 1) | ((c->p & FLAG_C) << 7));
+    nz(c, c->a);
+    set_c(c, c->a & 0x40);
+    c->p = (uint8_t)((c->p & ~FLAG_V) | (((c->a >> 6) ^ (c->a >> 5)) & 1 ? FLAG_V : 0));
+}
+static inline void op_AXS(Cpu *c, uint8_t v) {
+    uint8_t t = c->a & c->x; set_c(c, t >= v); c->x = (uint8_t)(t - v); nz(c, c->x);
+}
+/* $8B XAA and $AB LXA are unstable on hardware; 0xEE is the "magic" constant
+ * most test suites assume. shortcut: one constant; upgrade if a game needs it. */
+static inline void op_XAA(Cpu *c, uint8_t v) { c->a = (c->a | 0xEE) & c->x & v; nz(c, c->a); }
+static inline void op_LXA(Cpu *c, uint8_t v) { c->a = c->x = (c->a | 0xEE) & v; nz(c, c->a); }
+
+/* ---- read-modify-write: return the new memory value ---- */
+static inline uint8_t op_ASL(Cpu *c, uint8_t v) { set_c(c, v & 0x80); v <<= 1; nz(c, v); return v; }
+static inline uint8_t op_LSR(Cpu *c, uint8_t v) { set_c(c, v & 1); v >>= 1; nz(c, v); return v; }
+static inline uint8_t op_ROL(Cpu *c, uint8_t v) {
+    uint8_t r = (uint8_t)((v << 1) | (c->p & FLAG_C)); set_c(c, v & 0x80); nz(c, r); return r;
+}
+static inline uint8_t op_ROR(Cpu *c, uint8_t v) {
+    uint8_t r = (uint8_t)((v >> 1) | ((c->p & FLAG_C) << 7)); set_c(c, v & 1); nz(c, r); return r;
+}
+static inline uint8_t op_INC(Cpu *c, uint8_t v) { v++; nz(c, v); return v; }
+static inline uint8_t op_DEC(Cpu *c, uint8_t v) { v--; nz(c, v); return v; }
+static inline uint8_t op_SLO(Cpu *c, uint8_t v) { v = op_ASL(c, v); op_ORA(c, v); return v; }
+static inline uint8_t op_RLA(Cpu *c, uint8_t v) { v = op_ROL(c, v); op_AND(c, v); return v; }
+static inline uint8_t op_SRE(Cpu *c, uint8_t v) { v = op_LSR(c, v); op_EOR(c, v); return v; }
+static inline uint8_t op_RRA(Cpu *c, uint8_t v) { v = op_ROR(c, v); op_ADC(c, v); return v; }
+static inline uint8_t op_DCP(Cpu *c, uint8_t v) { v = op_DEC(c, v); op_CMP(c, v); return v; }
+static inline uint8_t op_ISB(Cpu *c, uint8_t v) { v = op_INC(c, v); op_SBC(c, v); return v; }
+
+#endif

@@ -18,7 +18,7 @@ detail yet.
 |--------|----------|---------|--------|
 | nestest.nes + nestest.log (Kevin Horton), from [qmtpro.com](https://www.qmtpro.com/~nes/misc/) (original) and the [christopherpow/nes-test-roms](https://github.com/christopherpow/nes-test-roms) mirror | Decoder test (M1); CPU trace comparison (M2/M5) | freely distributed test ROM | read |
 | blargg test ROMs (instr_test-v5, cpu_interrupts_v2, ppu_vbl_nmi, sprite_hit_tests, apu_test) | CPU/PPU/APU checks | check per archive | listed |
-| SingleStepTests 6502 JSON tests (2A03 set) | Per-opcode state + cycle tests | check repo license | listed |
+| [SingleStepTests/65x02 `nes6502/v1`](https://github.com/SingleStepTests/65x02/tree/main/nes6502), pinned at commit `b9cfa8b2` | 10,000 tests per opcode with the bus access of every cycle; interpreter check (M2) | MIT | read |
 
 ## Prior art
 | Source | What we took | License | Status |
@@ -38,4 +38,4 @@ detail yet.
 ## Libraries
 | Library | Used for | License |
 |---------|----------|---------|
-| [SDL3](https://libsdl.org) | Window, audio, keyboard, gamepad | zlib |
+| [SDL3](https://libsdl.org), tag `release-3.4.20` via CMake FetchContent | Window, audio, keyboard, gamepad | zlib |

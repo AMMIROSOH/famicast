@@ -18,17 +18,28 @@ See [docs/02-architecture.md](docs/02-architecture.md) and the plan in
 [docs/05-roadmap.md](docs/05-roadmap.md).
 
 ## Status
-M1 (opcode table, iNES parser, decoder) mostly done; see
+M0-M2 done: verified opcode table, decoder, and a reference CPU interpreter that passes nestest and SingleStepTests. Next: PPU (M3). See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
 
+## Build
+Needs CMake ≥ 3.20, a C11 compiler (clang/gcc/MSVC), Ninja, Python ≥ 3.11.
+SDL3 is downloaded and built by CMake.
+```
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+build/nes --frames 120          # SDL3 window smoke test
+```
+Headless (no SDL3): add `-DNES_FRONTEND=OFF`.
+
 ## Tests
 ```
+python tests/fetch_test_roms.py --sst      # optional: ~1 GB download, per-opcode CPU tests
 python -m unittest discover -s tests -t .
 ```
-Python 3.11+, no packages needed. The first run downloads nestest into
-`tests/roms/` (hash-checked).
+No Python packages needed. nestest is downloaded on first run (hash-checked).
+CPU tests need the C build; SingleStepTests files not downloaded are skipped.
 
 ## ROMs
 No ROMs are included or will ever be committed. Bring your own legally dumped

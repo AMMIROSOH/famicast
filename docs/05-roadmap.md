@@ -9,11 +9,14 @@ only when that test passes in CI.
 ```
 nes/
   CMakeLists.txt
-  recomp/            Python: ines.py, ops.py, decoder.py, blocks.py, emit_c.py, cli.py
+  recomp/            Python: ines.py, ops.py, decoder.py, c6502.py (C per opcode),
+                     blocks.py, emit_c.py, cli.py
+  tools/             gen_cpu_switch.py, import_r2_6502.py
   runtime/
-    cpu.h  interp6502.c  bus.c  ppu.c  apu.c  input.c  dispatch.c
+    cpu.h cpu_ops.h cpu.c  bus.c  ppu.c  apu.c  input.c  dispatch.c
     mappers/  nrom.c mmc1.c uxrom.c cnrom.c ...
     platform/ sdl3_main.c
+    tests/    cpu_tests.c
   games/battlecity.toml   per-game hints (extra entry points, jump tables)
   tests/
     fetch_test_roms.py    downloads public test ROMs into tests/roms/ (ignored)
@@ -23,13 +26,14 @@ nes/
 ```
 
 ## M0 · Repo and build skeleton
-- git, GPL-3.0, corrected docs, `.gitignore` for ROMs. *(done 2026-11-15)*
-- CMake project: `runtime` static lib, `nes` executable, SDL3 via FetchContent.
-- GitHub Actions: build on Windows + Linux, run Python and C tests.
-- Move the old prototype to `legacy/` (or delete it) so it is not confused with
-  the new code.
-- **Exit:** `cmake --build` produces an SDL3 window that opens and closes;
-  CI is green.
+- [x] git, GPL-3.0, corrected docs, `.gitignore` for ROMs.
+- [x] CMake project: `nescpu` static lib, `nes` executable, SDL3 3.4.20 via
+  FetchContent (static), `-DNES_FRONTEND=OFF` for headless builds.
+- [x] Old prototype moved to `legacy/`.
+- [ ] GitHub Actions (Windows + Linux build, Python + C tests) once the repo
+  has a GitHub remote.
+- **Exit:** `build/nes --frames 120` opens the window and exits 0 (done
+  locally); CI green (pending remote).
 
 ## M1 · Opcode table and decoder (Python)
 - [x] `recomp/ops.py`: all 256 opcodes, checked against radare2's tables
@@ -44,10 +48,15 @@ nes/
 - **Exit:** the above, plus a decode listing tool for debugging.
 
 ## M2 · Reference interpreter (C)
-- `interp6502.c` over `bus.c`, flat 64 KB test bus for unit tests.
-- **Exit:** `nestest.log` matches line for line (official opcodes first,
-  then illegal ones); SingleStepTests 2A03 JSON set passes for every
-  official opcode, cycle counts included.
+- [x] `runtime/cpu.c` + `cpu_ops.h`, opcode switch generated from
+  `recomp/ops.py`; one bus access per cycle.
+- [x] `runtime/tests/cpu_tests.c` on a flat 64 KB bus; driven by
+  `tests/test_cpu.py`.
+- [x] nestest: all 8,991 lines match, unofficial opcodes included.
+- [x] SingleStepTests: all 244 non-KIL opcodes pass 10,000/10,000, bus cycles included.
+- [ ] Interrupt polling on the exact cycle (shortcut noted in `cpu.c`).
+- **Exit:** met for nestest and SingleStepTests; interrupt timing moves to M3
+  where NMI/IRQ sources exist.
 
 ## M3 · PPU + NROM + video (interpreter only)
 - Mapper interface + NROM. PPU: registers, VRAM/palette, background and

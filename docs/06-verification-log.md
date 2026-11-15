@@ -3,6 +3,28 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M2: reference interpreter
+Design: every `rd()`/`wr()` is one CPU cycle, including the dummy reads and
+writes of real hardware, so cycle counts are not taken from a table. The
+per-opcode C code is generated from `recomp/ops.py` by `recomp/c6502.py`
+(the recompiler will reuse it); semantics helpers are in `runtime/cpu_ops.h`.
+- **nestest**: `build/cpu_tests nestest` matches all 8,991 lines of
+  `nestest.log` (PC, A, X, Y, P, SP and cycle count), including the
+  unofficial-opcode section. Passed on the first run.
+- **SingleStepTests** (`nes6502/v1`, 10,000 tests per opcode): registers,
+  memory and the exact bus access of every cycle are compared. Result:
+  **all 244 non-KIL opcodes pass 10,000/10,000**, including the unstable
+  unofficial ones (XAA/LXA with magic 0xEE, SHA/SHX/SHY/TAS with the
+  high-byte AND and page-cross address quirk). Full suite runs in ~1.5 s.
+- `KIL` opcodes: registers now match SST (PC ends after the opcode; the
+  first version rewound PC). SST also records 11 bus cycles of the jammed CPU;
+  not modelled, those 12 opcodes are skipped in the test.
+- Runner self-check: corrupting one expected value in a test file makes the
+  runner report exactly that test as failed.
+- Known shortcut: interrupts are polled before each instruction instead of on
+  the last cycle of the previous one (`runtime/cpu.c`); to be checked with
+  blargg `cpu_interrupts_v2` once the PPU/APU exist.
+
 ## 2026-11-15 · M1: opcode table, iNES parser, decoder
 Run: `python -m unittest discover -s tests -t .` → 10 tests OK.
 - **Opcode table vs radare2** (`tests/test_ops.py`): 254/256 identical in
