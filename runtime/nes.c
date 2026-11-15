@@ -149,10 +149,9 @@ uint8_t cpu_read(Cpu *c, uint16_t a) {
 
 /* $4014: 256 read/write pairs, plus 1 idle cycle (+1 when starting on an odd
  * cycle): 513 or 514 cycles, CPU halted meanwhile (nesdev "PPU OAM").
- * shortcut: interrupts are not polled during the DMA, and a DMC fetch cannot
- * interrupt it. cpu_interrupts_v2 4-irq_and_dma (IRQ at the DMA's end, 2
- * cycles off) and sprdma_and_dmc_dma fail; one more idle cycle fixes the
- * former but breaks sprite_overflow 3.Timing, so the cause is elsewhere. */
+ * Interrupts arriving during the DMA are seen by the next instruction's poll
+ * (cpu_interrupts_v2 4-irq_and_dma).
+ * shortcut: a DMC fetch cannot interrupt it (sprdma_and_dmc_dma fails). */
 static void oam_dma(Nes *n, uint8_t page) {
     int idle = 1 + (int)(n->cpu.cycles & 1);
     for (int i = 0; i < idle; i++) { n->cpu.cycles++; add_dots(n, 3); }

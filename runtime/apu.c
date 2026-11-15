@@ -265,7 +265,10 @@ int64_t apu_cycles_to_event(const Apu *a) {
     if (a->fc_delay) best = a->fc_delay;
     else if (a->fc_mode == 0 && !a->fc_inhibit) {
         int32_t c = a->fc_count;
-        best = (c < 29830 ? 29830 - c : 1) + 1;  /* +1: the CPU sees the IRQ a cycle later */
+        /* the CPU sees the flag a cycle after the APU sets it; at 29830-29832
+         * it is (re)set now, so visible next cycle (seen after OAM DMA:
+         * cpu_interrupts_v2 4-irq_and_dma) */
+        best = c < 29830 ? 29830 - c + 1 : 1;
     }
     const Dmc *d = &a->dmc;
     if (d->remaining) {  /* the buffer empties when the shift register reloads */

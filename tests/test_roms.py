@@ -14,7 +14,6 @@ from tests.test_cpu import BUILD
 RUNNER = os.path.join(BUILD, "nes_headless.exe" if os.name == "nt" else "nes_headless")
 PENDING = {  # path -> why it is not expected to pass yet
     "mmc3_test_2/rom_singles/6-MMC3_alt.nes": "MMC3 rev A behaviour; we emulate rev B (5-MMC3 passes), the common chip",
-    "cpu_interrupts_v2/rom_singles/4-irq_and_dma.nes": "no interrupt polling during OAM DMA (shortcut in nes.c)",
     "sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes": "DMC DMA during OAM DMA not modelled (shortcut in nes.c)",
     "sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes": "DMC DMA during OAM DMA not modelled (shortcut in nes.c)",
     "apu_reset/4017_written.nes": "reset case #3 unclear without test source; power case passes (docs/06)",
