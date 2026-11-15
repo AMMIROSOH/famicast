@@ -13,7 +13,9 @@ typedef void (*RecompFn)(Cpu *c);
 typedef struct {
     uint32_t prg_hash;      /* FNV-1a of the PRG data the code was made from */
     const char *rom_name;
-    RecompFn (*lookup)(uint16_t pc);  /* NULL when pc has no recompiled code */
+    /* NULL when there is no recompiled code for pc with this 8 KB PRG bank
+     * mapped in pc's window (recomp/banks.py) */
+    RecompFn (*lookup)(uint16_t pc, uint32_t bank);
 } RecompProgram;
 
 /* Defined by the generated code; NULL in builds without it (recomp_none.c). */

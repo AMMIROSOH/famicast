@@ -43,6 +43,12 @@ class TestBlocks(unittest.TestCase):
         mem[0x8000:0x8007] = bytes([0xA9, 0x01, 0xD0, 0x02, 0xEA, 0xEA, 0x60])
         self.assertEqual(chain_starts(mem, {0x8000, 0x8002, 0x8006}), [0x8000])
 
+    def test_suggest_finds_loops_entered_from_elsewhere(self):
+        mem = bytearray(0x10000)
+        # $8000: BIT $2002 / BVC $8000  (entered from RAM code, e.g. an NMI handler)
+        mem[0x8000:0x8005] = bytes([0x2C, 0x02, 0x20, 0x50, 0xFB])
+        self.assertEqual(chain_starts(mem, {0x8000, 0x8003}), [0x8000])
+
 
 @unittest.skipUnless(os.path.exists(NESTEST_RECOMP), "configure CMake after fetching nestest, then build")
 class TestNestestRecompiled(unittest.TestCase):

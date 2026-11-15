@@ -89,7 +89,10 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         snprintf(err, errlen, "not an iNES file");
         return -1;
     }
-    c->mapper = (d[6] >> 4) | (d[7] & 0xF0);
+    /* Old dumps have junk ("DiskDude!") in bytes 7-15; if bytes 12-15 are not
+     * zero and it is not NES 2.0, byte 7 is junk too (nesdev "INES"). */
+    int junk = (d[7] & 0x0C) != 0x08 && (d[12] | d[13] | d[14] | d[15]);
+    c->mapper = (d[6] >> 4) | (junk ? 0 : (d[7] & 0xF0));
     c->four_screen = (d[6] & 0x08) != 0;
     c->mirroring = c->four_screen ? MIRROR_FOUR : (d[6] & 0x01) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
     c->battery = (d[6] & 0x02) != 0;

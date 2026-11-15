@@ -3,6 +3,38 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-15 · M7b: bank-aware recompiler
+Scripted play (`tests/play_script.py`, 6,000 frames, seed 1), feedback loop
+(`--misses` → `recomp.suggest` → rebuild) until stable, then `--diff`:
+
+| Mapper | Game (local dump) | Regions | Instructions | `--diff` | Interpreted steps |
+|---|---|---|---|---|---|
+| 0 | Battle City | 1 | 4,924 | identical | 0 |
+| 1 | Metroid (E) | 3 | 8,239 | identical | 0 |
+| 2 | Mega Man (E) | 4 | 8,556 | identical | 0 |
+| 3 | Arkista's Ring (U) | 1 | 7,101 | identical | 0 |
+| 4 | Kirby's Adventure (U) | 18 | 13,129 | identical | 25,118 (RAM code, 18 straddling) |
+| 7 | Solstice (E) | 4 | 10,141 | identical | 5,996 = its NMI handler, in RAM |
+| 11 | Chiller (U) | 1 | 3,614 | identical | 0 |
+| 66 | Super Mario Bros / Duck Hunt (U) | 2 | 8,192 | identical | 1,785 (RAM code) |
+
+Findings on the way:
+- **Window-straddling instructions**: with 8 KB regions everywhere, Battle
+  City's instruction at $DFFF (operand in the next window) went to the
+  interpreter and 599,288 steps with it. NROM/CNROM now use one region;
+  16/32 KB mappers use units of 2/4 windows (they switch together with
+  consecutive banks). Only MMC3 keeps 8 KB units.
+- **Loops entered from RAM**: Solstice's sprite-0 wait loop is entered from
+  its NMI handler in RAM; every instruction of the loop is the target or
+  fall-through of another, so `suggest` found no start. Fixed: unreached
+  misses add their lowest address as a start (unit test added).
+- **Header junk**: "Jackal (U) [T-Port]" has "DiskDude!" in bytes 7-15, which
+  made mapper 2 look like 66. Byte 7 is now ignored when bytes 12-15 are not
+  zero (nesdev "INES"); 1,356 of the 1,460 local ROMs use supported mappers.
+- Build: CMake target names drop "(...)"/"[...]" tags; with Git Bash, pass
+  Windows paths (`pwd -W`) in `NES_GAMES`, POSIX paths fail in Ninja.
+- Speed (Kirby, best of 3): interpreter 22.1x, recompiled 19.2x real time.
+
 ## 2026-11-15 · M7a: mappers
 - mmc3_test_2: 1-clocking, 2-details, 3-A12_clocking, 4-scanline_timing,
   5-MMC3 pass; 6-MMC3_alt (rev A behaviour) pending, it contradicts rev B.

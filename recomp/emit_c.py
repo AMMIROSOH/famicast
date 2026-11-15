@@ -75,37 +75,74 @@ def static_body(ins, mem):
     return lines
 
 
-def emit(blocks, mem, rom_name, prg_hash):
-    out = [HEADER.format(rom=rom_name, nblocks=len(blocks),
-                         ninstrs=sum(len(b.instrs) for b in blocks), prg_hash=prg_hash)]
-    for blk in blocks:
-        out.append(f"static void b_{blk.start:04X}(Cpu *c) {{")
-        out.append("    switch (c->pc) {")
-        out += [f"    case 0x{i.pc:04X}: goto i_{i.pc:04X};" for i in blk.instrs]
-        out.append("    default: return;")
-        out.append("    }")
-        for ins in blk.instrs:
-            out.append(f"i_{ins.pc:04X}: /* {disasm(ins, mem)} */")
-            out.append(f"    fetch_k(c, 0x{ins.pc:04X}, 0x{mem[ins.pc]:02X});")
-            out.append("    {")
-            out += ["        " + s for s in static_body(ins, mem) if s]
-            out.append("    }")
-            if ins.op.mn == "KIL":
-                out.append("    return;")
-            elif ins is not blk.instrs[-1]:
-                out.append("    if (c->poll_prev) return;")
-        out.append("}")
-        out.append("")
+MAPPER_STORES = {"STA", "STX", "STY", "SAX", "AHX", "SHX", "SHY", "TAS",
+                 "ASL", "LSR", "ROL", "ROR", "INC", "DEC", "SLO", "RLA", "SRE", "RRA", "DCP", "ISB"}
 
-    # pc -> block function, for every instruction start in $8000-$FFFF
-    out.append("static const RecompFn table[0x8000] = {")
-    for blk in blocks:
-        for ins in blk.instrs:
-            if ins.pc >= 0x8000:
-                out.append(f"    [0x{ins.pc - 0x8000:04X}] = b_{blk.start:04X},")
+
+def may_write_rom(ins):
+    """Could this instruction write to $8000-$FFFF (a mapper register)?"""
+    if ins.op.mn not in MAPPER_STORES or ins.op.mode in ("IMP", "ACC", "ZP", "ZPX", "ZPY"):
+        return False
+    if ins.op.mode == "ABS":
+        return ins.operand >= 0x8000
+    if ins.op.mode in ("ABX", "ABY"):
+        return ins.operand + 0xFF >= 0x8000
+    return True  # (zp,X), (zp),Y: unknown address
+
+
+def emit(regions, rom_name, prg_hash, nbanks, banked):
+    """regions: [(blocks, 64 KB view, {window: bank})]. Each instruction is
+    listed in the table of the (bank, window) it sits in. With `banked`, a
+    block returns after any store that may hit a mapper register if its own
+    window's bank changed, so the dispatcher continues in the new code."""
+    out = [HEADER.format(rom=rom_name, nblocks=sum(len(b) for b, _, _ in regions),
+                         ninstrs=sum(len(k.instrs) for b, _, _ in regions for k in b),
+                         prg_hash=prg_hash)]
+    tables = {}  # (bank, window) -> [(offset, function name)]
+    for blocks, mem, banks in regions:
+        w0 = min(banks)  # first window of the unit: its page changes on any switch
+        for blk in blocks:
+            w = (blk.start - 0x8000) >> 13
+            name = f"b_{banks[w]:02X}_{blk.start:04X}"
+            out.append(f"static void {name}(Cpu *c) {{")
+            if banked and any(may_write_rom(i) for i in blk.instrs[:-1]):
+                out.append(f"    const uint8_t *const page = c->read_map[{16 + w0 * 4}];  /* bank {banks[w0]} at ${0x8000 + w0 * 0x2000:04X} */")
+            out.append("    switch (c->pc) {")
+            out += [f"    case 0x{i.pc:04X}: goto i_{i.pc:04X};" for i in blk.instrs]
+            out.append("    default: return;")
+            out.append("    }")
+            for ins in blk.instrs:
+                out.append(f"i_{ins.pc:04X}: /* {disasm(ins, mem)} */")
+                out.append(f"    fetch_k(c, 0x{ins.pc:04X}, 0x{mem[ins.pc]:02X});")
+                out.append("    {")
+                out += ["        " + s for s in static_body(ins, mem) if s]
+                out.append("    }")
+                last = ins is blk.instrs[-1]
+                if ins.op.mn == "KIL":
+                    out.append("    return;")
+                elif banked and may_write_rom(ins) and not last:
+                    out.append(f"    if (c->poll_prev || c->read_map[{16 + w0 * 4}] != page) return;")
+                elif not last:
+                    out.append("    if (c->poll_prev) return;")
+                iw = (ins.pc - 0x8000) >> 13
+                tables.setdefault((banks[iw], iw), []).append((ins.pc & 0x1FFF, name))
+            out.append("}")
+            out.append("")
+    for (bank, w), entries in sorted(tables.items()):
+        out.append(f"static const RecompFn r_{bank:02X}_{w}[0x2000] = {{")
+        out += [f"    [0x{off:04X}] = {name}," for off, name in sorted(entries)]
+        out.append("};")
+        out.append("")
+    out.append(f"static const RecompFn *const regions[{nbanks}][4] = {{")
+    for (bank, w) in sorted(tables):
+        out.append(f"    [{bank}][{w}] = r_{bank:02X}_{w},")
     out.append("};")
     out.append("")
-    out.append("static RecompFn lookup(uint16_t pc) { return pc >= 0x8000 ? table[pc - 0x8000] : 0; }")
+    out.append("static RecompFn lookup(uint16_t pc, uint32_t bank) {")
+    out.append("    if (pc < 0x8000 || bank >= %d) return 0;" % nbanks)
+    out.append("    const RecompFn *r = regions[bank][(pc >> 13) & 3];")
+    out.append("    return r ? r[pc & 0x1FFF] : 0;")
+    out.append("}")
     out.append("")
     out.append("static const RecompProgram program = {")
     out.append(f"    0x{prg_hash:08X}u, \"{rom_name}\", lookup,")

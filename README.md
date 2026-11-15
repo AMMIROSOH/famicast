@@ -23,8 +23,8 @@ SingleStepTests) and a PPU passing 52 blargg-style test ROMs. Battle City runs
 on the interpreter and recompiled (M5: lockstep-identical to the interpreter
 over 10 minutes of play, no interpreted code left), about 30x faster than a
 real NES in both modes (M5b), with sound (M6). Mappers 0-4, 7, 11, 66 run in
-the interpreter (M7a, most of the NES library); recompiling banked games is
-next (M7b). See
+the interpreter and recompile with bank-aware code (M7); one game per mapper
+is verified identical to the interpreter. See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
@@ -41,8 +41,8 @@ Headless (no SDL3): add `-DNES_FRONTEND=OFF`.
 
 ## Recompiling a game
 ```
-cmake -S . -B build -DNES_GAMES="path/to/Battle City.nes"
-cmake --build build              # -> build/battle_city(.exe) and battle_city_headless
+cmake -S . -B build -DNES_GAMES="path/to/Battle City.nes;path/to/Metroid (E) [!].nes"
+cmake --build build              # -> build/battle_city, build/metroid (+ _headless)
 build/battle_city "path/to/Battle City.nes"
 ```
 The ROM is still needed at run time (graphics and data). Code the static
@@ -53,6 +53,9 @@ python -m recomp.suggest game.nes misses.txt --hints games/battle_city.toml --wr
 cmake --build build
 ```
 `--diff` runs the interpreter in lockstep and reports the first difference.
+Target names drop "(...)"/"[...]" tags from the file name; hints live in
+`games/<name>.toml` and record the PRG hash of the dump they were made for.
+On Windows with Git Bash, give `NES_GAMES` Windows paths (`pwd -W`).
 
 ## Controls
 Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =

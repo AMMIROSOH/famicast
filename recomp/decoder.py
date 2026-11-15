@@ -80,6 +80,9 @@ def explore(mem, entries, code_range=(0x8000, 0x10000), no_return=()):
             prog.external.add(pc)
             continue
         ins = decode_at(mem, pc)
+        if pc + ins.size > hi:  # operand bytes in the next window (maybe another bank)
+            prog.external.add(pc)
+            continue
         prog.instrs[pc] = ins
         if not ins.op.official:
             prog.unofficial.add(pc)

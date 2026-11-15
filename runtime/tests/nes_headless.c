@@ -91,7 +91,7 @@ static int run_frame_diff(Nes *n, Nes *ref, long frame) {
         const char *what = compare(n, ref);
         if (!what) continue;
         printf("DIVERGENCE (%s) in frame %ld, step starting at PC=%04X%s\n", what, frame, before.pc,
-               n->recomp && n->recomp(before.pc) ? " (recompiled block)" : " (interpreted)");
+               n->recomp && n->recomp(before.pc, nes_prg_bank(n, before.pc)) ? " (recompiled block)" : " (interpreted)");
         print_cpu("before", &before);
         print_cpu("recompiled", &n->cpu);
         print_cpu("interpreter", &ref->cpu);
@@ -109,8 +109,15 @@ static void print_misses(Nes *n) {
     printf("STEPS native=%llu interpreted=%llu interrupt-entries=%llu\n",
            (unsigned long long)n->steps_native, (unsigned long long)n->steps_interp,
            (unsigned long long)n->steps_interrupt);
-    for (uint32_t a = 0; a < 0x10000; a++)  /* input for python -m recomp.suggest */
-        if (n->misses[a]) printf("MISS $%04X %u%s\n", a, n->misses[a], a < 0x8000 ? " (RAM)" : "");
+    /* input for python -m recomp.suggest; ROM misses carry their 8 KB bank */
+    for (uint32_t a = 0; a < 0x8000; a++)
+        if (n->misses[a]) printf("MISS $%04X %u (RAM)\n", a, n->misses[a]);
+    for (size_t slot = 0x8000; slot < nes_miss_slots(n); slot++) {
+        if (!n->misses[slot]) continue;
+        size_t key = (slot - 0x8000) >> 13;  /* bank * 4 + window */
+        unsigned addr = 0x8000u + (unsigned)(key & 3) * 0x2000u + (unsigned)((slot - 0x8000) & 0x1FFF);
+        printf("MISS $%04X %u bank %u\n", addr, n->misses[slot], (unsigned)(key >> 2));
+    }
 }
 
 /* ---- audio capture (--wav, --audio-hash) ---- */
@@ -197,7 +204,7 @@ int main(int argc, char **argv) {
     else if (recomp_program && !nes.recomp)
         printf("WARNING: recompiled code is for %s; this ROM's PRG differs, interpreting\n",
                recomp_program->rom_name);
-    if (misses) nes.misses = calloc(0x10000, sizeof *nes.misses);
+    if (misses) nes.misses = calloc(nes_miss_slots(&nes), sizeof *nes.misses);
     static Nes ref;
     if (diff) {
         if (!nes.recomp) { fprintf(stderr, "--diff needs matching recompiled code\n"); return 2; }

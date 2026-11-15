@@ -95,12 +95,15 @@ if(EXISTS ${NESTEST_ROM})
 endif()
 
 # Your own game ROMs (never committed): -DNES_GAMES="a.nes;b.nes".
-# Target name = file name in lower case, non-alphanumerics -> '_';
+# Target name = file name without "(...)"/"[...]" tags, lower case,
+# non-alphanumerics -> '_' (e.g. "Arkista's Ring (U) [!].nes" -> arkista_s_ring);
 # hints are read from games/<name>.toml when present.
 set(NES_GAMES "" CACHE STRING "ROM files to recompile (semicolon-separated)")
 foreach(rom IN LISTS NES_GAMES)
-    get_filename_component(stem "${rom}" NAME_WE)
+    get_filename_component(stem "${rom}" NAME_WLE)
+    string(REGEX REPLACE "[ ]*[[(][^])]*[])]" "" stem "${stem}")  # drop (U), [!], ...
     string(TOLOWER "${stem}" name)
     string(REGEX REPLACE "[^a-z0-9]+" "_" name "${name}")
+    string(REGEX REPLACE "^_+|_+$" "" name "${name}")
     nes_recompile(${name} "${rom}" ${CMAKE_SOURCE_DIR}/games/${name}.toml)
 endforeach()

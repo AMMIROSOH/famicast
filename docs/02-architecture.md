@@ -62,8 +62,12 @@ typedef struct { uint8_t a, x, y, s, p; uint16_t pc; uint64_t cycles; } Cpu;
   interrupts happen on the same instruction as in the interpreter.
 - **Identity**: the generated code carries an FNV-1a hash of the PRG; the
   runtime uses it only if the loaded ROM matches.
-- **Banked mappers**: blocks are keyed by (PRG bank, address). The dispatcher
-  looks up the bank currently mapped at that address.
+- **Banked mappers** (`recomp/banks.py`): code is compiled per (PRG bank,
+  window unit) and looked up by the bank mapped at run time, so a wrong
+  static guess about banking costs coverage, never correctness. Units match
+  how the mapper switches (8/16/32 KB); code never runs across units. After
+  a store that may reach a mapper register, a block checks whether its own
+  unit's bank changed and returns to the dispatcher if so.
 - **Dispatch loop** (runtime):
   ```
   loop:

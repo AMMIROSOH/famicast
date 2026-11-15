@@ -66,7 +66,8 @@ static int nestest(const char *rom, long steps, int recomp) {
         while (c.cycles <= (uint64_t)steps && !c.jammed) {
             printf("%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%" PRIu64 "\n",
                    c.pc, c.a, c.x, c.y, c.p, c.s, c.cycles);
-            RecompFn f = c.poll_prev ? NULL : recomp_program->lookup(c.pc);
+            uint32_t bank = ((c.pc - 0x8000u) % 0x4000u) >> 13;  /* NROM-128 layout */
+            RecompFn f = c.poll_prev ? NULL : recomp_program->lookup(c.pc, bank);
             if (f) f(&c);
             else cpu_step(&c);
         }

@@ -145,9 +145,21 @@ M7a (runtime):
   cpu_dummy_reads (CNROM) pass; `tools/smoke_games.py` boots a sample of the
   local collection per mapper (52/53 ok, see 06).
 M7b (recompiler):
-- [ ] Bank-aware blocks: code compiled per (PRG bank, CPU window), looked up
-  by the bank currently mapped; feedback loop extended to banks.
-- **Exit:** at least one game per mapper runs in `--diff` with no divergence.
+- [x] Bank-aware regions (`recomp/banks.py`): code compiled per (PRG bank,
+  window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color
+  Dreams/GxROM), looked up by the bank mapped at run time; NROM/CNROM stay
+  one region. A block returns after a store that may hit a mapper register
+  if its own unit's bank changed.
+- [x] Feedback loop with banks: misses reported as (address, bank);
+  `suggest` writes `banked = [[bank, addr]]` and stamps the PRG hash; the
+  recompiler warns if hints belong to another dump.
+- [x] One game per mapper recompiled and identical to the interpreter in
+  `--diff` for 6,000 frames of scripted play (table in 06).
+- [ ] Shortcut: an instruction straddling two independently switched 8 KB
+  MMC3 windows is interpreted (Kirby: 18 times in 6,000 frames).
+- [ ] Speed: Kirby recompiled 19.2x vs interpreter 22.1x real time; tune
+  together with M5b's open items.
+- **Exit:** met.
 
 ## M8 · Tooling and polish
 - Coverage report (share of cycles in recompiled vs fallback code).

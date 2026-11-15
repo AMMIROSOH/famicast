@@ -15,7 +15,9 @@ class Cartridge:
             raise ValueError("not an iNES file")
         prg_units, chr_units, f6, f7 = data[4], data[5], data[6], data[7]
         self.nes2 = (f7 & 0x0C) == 0x08
-        self.mapper = (f6 >> 4) | (f7 & 0xF0)
+        # old dumps have junk ("DiskDude!") in bytes 7-15: ignore byte 7 then
+        junk = not self.nes2 and any(data[12:16])
+        self.mapper = (f6 >> 4) | (0 if junk else f7 & 0xF0)
         if self.nes2:
             self.mapper |= (data[8] & 0x0F) << 8
             # shortcut: NES 2.0 exponent-multiplier sizes not supported; add when a ROM needs it

@@ -24,6 +24,11 @@ class TestInes(unittest.TestCase):
         self.assertTrue(c.chr_ram)
         self.assertEqual(c.vectors()[1], 0xC070)  # trainer skipped
 
+    def test_diskdude_junk_header(self):
+        rom = bytearray(make_rom(f6=0x21))
+        rom[7:16] = b"DiskDude!"  # byte 7 'D' would add $40 to the mapper
+        self.assertEqual(Cartridge(bytes(rom)).mapper, 2)
+
     def test_truncated(self):
         with self.assertRaises(ValueError):
             Cartridge(make_rom()[:-1])

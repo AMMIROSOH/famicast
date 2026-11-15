@@ -241,13 +241,13 @@ void nes_reset(Nes *n) {
 void nes_step(Nes *n) {
     Cpu *c = &n->cpu;
     if (n->recomp && !c->poll_prev && !c->jammed) {
-        RecompFn f = n->recomp(c->pc);
+        RecompFn f = n->recomp(c->pc, nes_prg_bank(n, c->pc));
         if (f) {
             f(c);
             n->steps_native++;
             return;
         }
-        if (n->misses) n->misses[c->pc]++;
+        if (n->misses) n->misses[nes_miss_slot(n, c->pc)]++;
     }
     if (c->poll_prev) n->steps_interrupt++;
     else n->steps_interp++;
@@ -257,6 +257,15 @@ void nes_step(Nes *n) {
 void nes_run_frame(Nes *n) {
     n->ppu.frame_done = 0;
     while (!n->ppu.frame_done && !n->cpu.jammed) nes_step(n);
+}
+
+uint32_t nes_prg_bank(Nes *n, uint16_t a) { return n->cart.prg_off[(a >> 13) & 3] >> 13; }
+
+size_t nes_miss_slots(Nes *n) { return 0x8000u + (size_t)n->cart.prg_size * 4; }
+
+size_t nes_miss_slot(Nes *n, uint16_t a) {
+    if (a < 0x8000) return a;
+    return 0x8000u + (((size_t)nes_prg_bank(n, a) * 4 + ((a >> 13) & 3)) << 13 | (a & 0x1FFF));
 }
 
 uint8_t nes_peek(Nes *n, uint16_t a) {

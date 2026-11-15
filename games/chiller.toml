@@ -1,0 +1,17 @@
+# Recompiler hints (see python -m recomp --help).
+# Entries marked 'runtime' came from python -m recomp.suggest.
+prg_fnv1a = "35FD1B7C"  # the dump these hints belong to
+entries = [
+]
+banked = [  # [8 KB PRG bank, address]
+    [0, 0x9AB0],
+    [0, 0x9B29],
+    [0, 0x9BA2],
+    [0, 0x9C1B],
+    [0, 0x9C94],
+    [0, 0x9CFB],
+    [0, 0x9FFD],
+    [1, 0xA000],
+    [1, 0xAE12],
+    [1, 0xAE91],
+]

@@ -13,28 +13,50 @@ import re
 import sys
 import tomllib
 
+from .banks import assumed_layout, unit_windows, view, window_of
 from .decoder import decode_at
+from .emit_c import fnv1a
 from .ines import Cartridge
 
 
 def chain_starts(mem, misses):
     """Missed ROM addresses the decoder cannot reach from another miss
     (not its fall-through, not its static branch/jump target)."""
-    follows = set()
+    edges = {}
     for pc in misses:
         ins = decode_at(mem, pc)
+        succ = set()
         if ins.falls_through:
-            follows.add((pc + ins.size) & 0xFFFF)
+            succ.add((pc + ins.size) & 0xFFFF)
         if ins.target is not None:
-            follows.add(ins.target)
-    return sorted(pc for pc in misses if pc not in follows)
+            succ.add(ins.target)
+        edges[pc] = succ & set(misses)
+    follows = set().union(*edges.values()) if edges else set()
+    starts = {pc for pc in misses if pc not in follows}
+    # A loop entered from code the decoder cannot see (RAM, another bank) has
+    # no start of its own: take its lowest address until all is reachable.
+    while True:
+        seen, work = set(), list(starts)
+        while work:
+            pc = work.pop()
+            if pc not in seen:
+                seen.add(pc)
+                work += edges.get(pc, ())
+        rest = set(misses) - seen
+        if not rest:
+            return sorted(starts)
+        starts.add(min(rest))
 
 
-def render(entries, no_return, found):
+def render(entries, banked, no_return, found, prg_hash):
     lines = ["# Recompiler hints (see python -m recomp --help).",
              "# Entries marked 'runtime' came from python -m recomp.suggest.",
+             f'prg_fnv1a = "{prg_hash:08X}"  # the dump these hints belong to',
              "entries = ["]
-    lines += [f"    0x{pc:04X},{'  # runtime' if pc in found else ''}" for pc in entries]
+    lines += [f"    0x{pc:04X}," for pc in entries]
+    lines.append("]")
+    lines.append("banked = [  # [8 KB PRG bank, address]")
+    lines += [f"    [{b}, 0x{pc:04X}],{'  # runtime' if (b, pc) in found else ''}" for b, pc in banked]
     lines.append("]")
     if no_return:
         lines.append("no_return = [" + ", ".join(f"0x{pc:04X}" for pc in no_return) + "]")
@@ -49,18 +71,31 @@ def main(argv=None):
     ap.add_argument("--write", action="store_true", help="rewrite the hints file")
     args = ap.parse_args(argv)
 
-    mem = Cartridge.load(args.rom).nrom_image()
+    cart = Cartridge.load(args.rom)
+    layout = assumed_layout(cart)
     with open(args.misses) as f:
-        misses = {int(m.group(1), 16) for m in re.finditer(r"^MISS \$([0-9A-F]{4})", f.read(), re.M)}
-    rom_misses = {pc for pc in misses if pc >= 0x8000}
+        text = f.read()
+    rom_misses = {(int(b), int(a, 16)) for a, b in
+                  re.findall(r"^MISS \$([0-9A-F]{4}) \d+ bank (\d+)", text, re.M)}
+    ram_misses = re.findall(r"^MISS \$[0-9A-F]{4} \d+ \(RAM\)", text, re.M)
     old = {}
     if args.hints and os.path.exists(args.hints):
         with open(args.hints, "rb") as f:
             old = tomllib.load(f)
-    found = set(chain_starts(mem, rom_misses)) - set(old.get("entries", []))
-    entries = sorted(set(old.get("entries", [])) | found)
-    text = render(entries, old.get("no_return", []), found)
-    print(f"{len(rom_misses)} ROM misses, {len(misses) - len(rom_misses)} RAM; "
+    known = {tuple(x) for x in old.get("banked", [])}
+    found = set()
+    by_region = {}
+    for b, a in rom_misses:
+        by_region.setdefault((b, window_of(a)), set()).add(a)
+    k = unit_windows(cart)
+    for (b, w), addrs in by_region.items():
+        w0, b0 = w - w % k, b - w % k
+        mem = view(cart, {**layout, **{w0 + i: b0 + i for i in range(k)}})
+        found |= {(b, a) for a in chain_starts(mem, addrs)}
+    found -= known
+    banked = sorted(known | found)
+    text = render(old.get("entries", []), banked, old.get("no_return", []), found, fnv1a(cart.prg))
+    print(f"{len(rom_misses)} ROM misses, {len(ram_misses)} RAM; "
           f"{len(found)} new entries", file=sys.stderr)
     if args.write and args.hints:
         os.makedirs(os.path.dirname(os.path.abspath(args.hints)), exist_ok=True)
