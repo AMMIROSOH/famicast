@@ -43,11 +43,11 @@ jobs:
         shell: bash
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then v="$GITHUB_REF_NAME"; else v="dev-${GITHUB_SHA::7}"; fi
-          python tools/make_release.py --name "famicast-$v-${{ matrix.name }}" --out dist
+          python tools/make_release.py --name "famicast-$v-${{ matrix.name }}" --out out/dist
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.name }}
-          path: dist/*
+          path: out/dist/*
           if-no-files-found: error
 
   publish:
