@@ -3,6 +3,22 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · M7j: Irem G-101 (32)
+- **Unit ROM** (`tests/test_mappers.py`): PRG mode 1 puts the $8000
+  register at $C000 and the second-to-last bank at $8000; a CHR bank at
+  $1400; submapper 1 ignores $9000 and is one-screen page 1 (not the
+  header's mirroring). Mutation caught: $9000 honoured on submapper 1.
+- **Boot smoke**: the 7 licensed titles reach a title, menu or play screen,
+  including Ai Sensei no Oshiete (the one game using PRG mode 1) and Major
+  League (submapper 1 in its header).
+- **Recompiled with `NES_AUTO_HINTS`, `--diff` 3,000 frames**: all identical.
+
+  | Game | Recompiled cycles |
+  |---|---|
+  | Image Fight (Japan) | 99.98% |
+  | Major League (Japan) | 99.98% |
+  | Ai Sensei no Oshiete: Watashi no Hoshi (Japan) | 99.98% |
+
 ## 2026-11-17 · M7i: Konami VRC1 (75)
 - **Unit ROM** (`tests/test_mappers.py`): PRG at $A000; CHR banks 17 and 2
   from the low bits at $E000/$F000 and $9000 bit 1 (the $0000 bank's bit 4

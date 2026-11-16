@@ -6,7 +6,8 @@
  * "MMC4" (10), "INES Mapper 018" (Jaleco SS88006), "Sunsoft FME-7" (69),
  * "INES Mapper 210" (Namco 175/340), "Bandai FCG board", "INES Mapper 016",
  * "INES Mapper 153", "INES Mapper 157", "INES Mapper 159", "INES Mapper 118"
- * (TxSROM), "VRC1" (75); the EEPROMs from
+ * (TxSROM), "VRC1" (75), "INES Mapper 032" (Irem G-101) and "NES 2.0
+ * submappers" (032: 1); the EEPROMs from
  * the 24C02/X24C01 datasheets' I2C protocol. */
 #include "cart.h"
 
@@ -509,6 +510,35 @@ static void vrc1_write(Cart *c, uint16_t a, uint8_t v) {
     vrc1_update(c);
 }
 
+/* ---- Irem G-101 (32): $8000 and $A000 8 KB PRG; $9000 bit 1 swaps the
+ * $8000 bank with $C000 (fixed to the second-to-last bank), bit 0 mirroring
+ * (0 vertical, 1 horizontal); $B000-$B007 1 KB CHR banks; $E000 fixed to the
+ * last bank. Submapper 1 (Major League): $9000 is not connected and CIRAM
+ * A10 is tied high (one screen, page 1). */
+static void g101_update(Cart *c) {
+    uint32_t n8 = c->prg_size / 0x2000;
+    int swap = (c->latch & 2) != 0;  /* $9000: always 0 on submapper 1 */
+    c->prg_off[swap ? 2 : 0] = (c->prg_bank[0] % n8) * 0x2000;
+    c->prg_off[swap ? 0 : 2] = (n8 - 2) * 0x2000;
+    c->prg_off[1] = (c->prg_bank[1] % n8) * 0x2000;
+    c->prg_off[3] = (n8 - 1) * 0x2000;
+    for (int i = 0; i < 8; i++) set_chr(c, i, 1, c->chr_bank[i]);
+}
+
+static void g101_write(Cart *c, uint16_t a, uint8_t v) {
+    switch (a & 0xF000) {
+    case 0x8000: c->prg_bank[0] = v & 0x1F; break;
+    case 0xA000: c->prg_bank[1] = v & 0x1F; break;
+    case 0xB000: c->chr_bank[a & 7] = v; break;
+    case 0x9000:
+        if (c->submapper == 1) break;
+        c->latch = v;
+        if (!c->four_screen) c->mirroring = (v & 1) ? MIRROR_HORIZONTAL : MIRROR_VERTICAL;
+        break;
+    }
+    g101_update(c);
+}
+
 /* ---- Jaleco SS88006 (18): decodes A12-A14 and A0-A1, data D0-D3, so each
  * bank number is written as two nibbles (low first). $8000-$9001 PRG,
  * $A000-$D003 CHR, $E000-$E003 IRQ reload (low nibble first), $F000 reload
@@ -691,6 +721,7 @@ static void update_banks(Cart *c) {
     case 3: set_prg16(c, 0, 0); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, (uint32_t)c->latch * 8); break;
     case 4: case 118: mmc3_update(c); break;
     case 75: vrc1_update(c); break;
+    case 32: g101_update(c); break;
     case 7:
         set_prg32(c, c->latch & 7);
         set_chr(c, 0, 8, 0);
@@ -743,8 +774,8 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         snprintf(err, errlen, "file shorter than its header says");
         return -1;
     }
-    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 25, 66, 69, 71, 75,
-                                    79, 87, 118, 153, 157, 159, 185, 206, 210};
+    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 25, 32, 66, 69, 71,
+                                    75, 79, 87, 118, 153, 157, 159, 185, 206, 210};
     int ok = 0;
     for (size_t i = 0; i < sizeof SUPPORTED / sizeof *SUPPORTED; i++) ok |= c->mapper == SUPPORTED[i];
     if (!ok) {
@@ -762,6 +793,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
     if (c->mapper == 1) c->reg[0] = 0x0C;          /* power-on: last bank fixed at $C000 */
     if (cart_is_mmc3(c) || c->mapper == 206) { c->reg[6] = 0; c->reg[7] = 1; }
     c->chr_latch[0] = c->chr_latch[1] = 1;  /* MMC2/MMC4: $FE (power-on state unknown) */
+    if (c->mapper == 32 && c->submapper == 1 && !c->four_screen) c->mirroring = MIRROR_SINGLE_HIGH;
     c->vrc2 = c->mapper == 22 || ((c->mapper == 23 || c->mapper == 25) && c->submapper == 3);
     c->prg_ram_size = 0x2000;
     /* power-on RAM is not zero on hardware; Famicom Jump II (153) jams on
@@ -882,6 +914,7 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     case 9: case 10: mmc2_write(c, a, v); return 1;
     case 18: ss88006_write(c, a, v); return 1;
     case 75: vrc1_write(c, a, v); return 1;
+    case 32: g101_write(c, a, v); return 1;
     case 69: fme7_write(c, a, v); return 1;  /* command 8 can map ROM or RAM at $6000 */
     case 210: n175_write(c, a, v); return 1;
     case 16: if (c->submapper == 4) return 0; /* FCG-1/2: $6000-$7FFF only */ /* fall through */
