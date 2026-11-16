@@ -59,24 +59,24 @@ endif()
 add_executable(nes_headless runtime/tests/nes_headless.c)
 target_link_libraries(nes_headless PRIVATE nescore recomp_none)
 
-# SDL3 frontend (zlib license). Fetched and built statically; turn off with
-# -DNES_FRONTEND=OFF for headless builds (CI, tests).
+# SDL3 frontend (zlib license), linked statically; turn off with
+# -DNES_FRONTEND=OFF for headless builds (CI, tests). A prebuilt SDL3 in
+# NES_SDL3_PREFIX (the release kit ships one in sdl3/) is used when present;
+# otherwise SDL3 is fetched and built (cmake/sdl3_options.cmake).
 option(NES_FRONTEND "Build the SDL3 frontend" ON)
+set(NES_SDL3_PREFIX "${CMAKE_SOURCE_DIR}/sdl3" CACHE PATH "Prebuilt static SDL3 (install prefix)")
 if(NES_FRONTEND)
-    include(FetchContent)
-    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-    set(SDL_STATIC ON CACHE BOOL "" FORCE)
-    set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
-    # Only video, 2D render, audio and gamepads are used (SDL_INIT_* in sdl3_main.c).
-    # Vulkan: the 2D renderer uses D3D11/12 on Windows, OpenGL elsewhere.
-    foreach(unused CAMERA HAPTIC POWER SENSOR DIALOG TRAY GPU RENDER_GPU VULKAN RENDER_VULKAN)
-        set(SDL_${unused} OFF CACHE BOOL "" FORCE)
-    endforeach()
-    FetchContent_Declare(SDL3
-        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG release-3.4.20
-        GIT_SHALLOW TRUE)
-    FetchContent_MakeAvailable(SDL3)
+    # only this prefix: a system SDL3 (often shared-only) is never picked up
+    find_package(SDL3 CONFIG QUIET COMPONENTS SDL3-static PATHS "${NES_SDL3_PREFIX}" NO_DEFAULT_PATH)
+    if(NOT SDL3_FOUND)
+        include(FetchContent)
+        include(cmake/sdl3_options.cmake)
+        FetchContent_Declare(SDL3
+            GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+            GIT_TAG release-3.4.20
+            GIT_SHALLOW TRUE)
+        FetchContent_MakeAvailable(SDL3)
+    endif()
     # A game window (no console window on Windows); display settings are read
     # from TARGET.ini next to the program, created on first run.
     function(nes_frontend target code)

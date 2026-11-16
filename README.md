@@ -69,10 +69,20 @@ Namco 175/340 (210), expansion audio (MMC5, Namco 163, VRC6, ...) and the
 long tail of rarer boards. Other mappers are
 refused at load ("mapper N not supported yet").
 
+## Downloads
+[Releases](https://github.com/Viper-Bit/famicast/releases) have builds for
+Windows (x64, arm64), Linux (x64, arm64; glibc 2.35+) and macOS (arm64):
+`nes` (plays a ROM in the interpreter), `nes_headless`, `nesrecomp`, and a
+**kit** that recompiles your ROMs into native programs with only CMake and a
+C compiler installed (SDL3 comes prebuilt). `README.txt` in the archive
+explains both. Archives are made by `tools/make_release.py`
+(`.github/workflows/release.yml`: push a tag `v*` for a draft release).
+
 ## Build
 Needs CMake ≥ 3.20 and a C11 compiler (clang/gcc/MSVC); any CMake generator
 works (Visual Studio, Ninja, Makefiles). SDL3 is downloaded and built by
-CMake. Python ≥ 3.11 is only needed for the tests.
+CMake, unless a prebuilt static SDL3 is found in `sdl3/` (or
+`-DNES_SDL3_PREFIX=...`). Python ≥ 3.11 is only needed for the tests.
 ```
 cmake -S . -B build
 cmake --build build --config Release

@@ -6,6 +6,7 @@ roms/
 # build outputs
 out/
 build/
+/sdl3/
 __pycache__/
 *.pyc
 *.o
