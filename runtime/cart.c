@@ -1,7 +1,8 @@
 /* iNES parsing: nesdev "INES", "NES 2.0" (nesrecomp uses this file too).
  * Mapper behaviour: nesdev wiki "MMC1", "UxROM", "CNROM", "MMC3", "AxROM",
  * "Color Dreams", "GxROM", "INES Mapper 071", "NINA-003-006" (79),
- * "INES Mapper 087", "INES Mapper 185", "Namco 108" (206). */
+ * "INES Mapper 087", "INES Mapper 185", "Namco 108" (206), "VRC2 and VRC4",
+ * "VRC IRQ" (21, 22, 23, 25). */
 #include "cart.h"
 
 #include <stdio.h>
@@ -67,10 +68,109 @@ static void mmc3_update(Cart *c) {
 }
 
 /* Mapper 185: CHR reads only work while the latch matches the board's diodes
- * (copy protection: games check that they fail). reg[0] = NES 2.0 submapper. */
+ * (copy protection: games check that they fail). */
 static int chr_enabled_185(const Cart *c) {
-    if (c->reg[0] >= 4) return (c->latch & 3) == c->reg[0] - 4;
+    if (c->submapper >= 4) return (c->latch & 3) == c->submapper - 4;
     return (c->latch & 0x0F) && c->latch != 0x13;  /* old iNES header: usual emulator guess */
+}
+
+/* ---- Konami VRC2/VRC4 (21, 22, 23, 25): one chip, boards wire its two
+ * register lines A0/A1 to different CPU address lines. The NES 2.0 submapper
+ * names the board; without it both wirings of the mapper are decoded at once
+ * (they do not overlap). */
+static int is_vrc(const Cart *c) { return c->mapper == 21 || c->mapper == 22 || c->mapper == 23 || c->mapper == 25; }
+
+static int vrc_lines(const Cart *c, uint16_t a) {
+    int s = c->submapper, a0, a1;
+    switch (c->mapper) {
+    case 21: /* 1 VRC4a: A1, A2; 2 VRC4c: A6, A7 */
+        a0 = s == 1 ? a >> 1 : s == 2 ? a >> 6 : (a >> 1) | (a >> 6);
+        a1 = s == 1 ? a >> 2 : s == 2 ? a >> 7 : (a >> 2) | (a >> 7);
+        break;
+    case 22: a0 = a >> 1; a1 = a; break;  /* VRC2a: A1, A0 */
+    case 23: /* 1 VRC4f, 3 VRC2b: A0, A1; 2 VRC4e: A2, A3 */
+        a0 = s == 1 || s == 3 ? a : s == 2 ? a >> 2 : a | (a >> 2);
+        a1 = s == 1 || s == 3 ? a >> 1 : s == 2 ? a >> 3 : (a >> 1) | (a >> 3);
+        break;
+    default: /* 25: 1 VRC4b, 3 VRC2c: A1, A0; 2 VRC4d: A3, A2 */
+        a0 = s == 1 || s == 3 ? a >> 1 : s == 2 ? a >> 3 : (a >> 1) | (a >> 3);
+        a1 = s == 1 || s == 3 ? a : s == 2 ? a >> 2 : a | (a >> 2);
+        break;
+    }
+    return (a0 & 1) | (a1 & 1) << 1;
+}
+
+static void vrc_update(Cart *c) {
+    uint32_t n8 = c->prg_size / 0x2000;
+    uint32_t banks[4] = {c->vrc_prg[0] % n8, c->vrc_prg[1] % n8, n8 - 2, n8 - 1};
+    if (c->vrc_swap) { banks[2] = banks[0]; banks[0] = n8 - 2; }
+    for (int i = 0; i < 4; i++) c->prg_off[i] = banks[i] * 0x2000;
+    for (int i = 0; i < 8; i++)  /* VRC2a (22) has CHR A10 unconnected: bank >> 1 */
+        set_chr(c, i, 1, c->mapper == 22 ? c->vrc_chr[i] >> 1 : c->vrc_chr[i]);
+}
+
+static void vrc_write(Cart *c, uint16_t a, uint8_t v) {
+    int line = vrc_lines(c, a);
+    switch (a >> 12) {
+    case 0x8: c->vrc_prg[0] = v & 0x1F; break;
+    case 0xA: c->vrc_prg[1] = v & 0x1F; break;
+    case 0x9:
+        if (c->vrc2 || line < 2) {  /* mirroring (VRC2: one bit) */
+            static const int MIRROR[4] = {MIRROR_VERTICAL, MIRROR_HORIZONTAL, MIRROR_SINGLE_LOW, MIRROR_SINGLE_HIGH};
+            if (!c->four_screen) c->mirroring = MIRROR[c->vrc2 ? v & 1 : v & 3];
+        } else {
+            c->vrc_swap = (v >> 1) & 1;  /* bit 0: PRG RAM enable, ignored */
+        }
+        break;
+    case 0xB: case 0xC: case 0xD: case 0xE: {  /* CHR: low nibble, then high bits */
+        int page = ((a >> 12) - 0xB) * 2 + (line >> 1);
+        if (line & 1) c->vrc_chr[page] = (uint16_t)((c->vrc_chr[page] & 0x0F) | (v & 0x1F) << 4);
+        else c->vrc_chr[page] = (uint16_t)((c->vrc_chr[page] & 0x1F0) | (v & 0x0F));
+        break;
+    }
+    case 0xF:  /* VRC4 IRQ: latch low, latch high, control, acknowledge */
+        if (c->vrc2) break;
+        if (line == 0) c->irq_latch = (uint8_t)((c->irq_latch & 0xF0) | (v & 0x0F));
+        else if (line == 1) c->irq_latch = (uint8_t)((c->irq_latch & 0x0F) | v << 4);
+        else if (line == 2) {
+            c->vrc_irq_ctrl = v & 7;
+            c->irq_line = 0;
+            if (v & 2) { c->irq_counter = c->irq_latch; c->vrc_prescaler = 341; }
+        } else {
+            c->irq_line = 0;
+            c->vrc_irq_ctrl = (uint8_t)((c->vrc_irq_ctrl & ~2) | (c->vrc_irq_ctrl & 1) << 1);
+        }
+        break;
+    }
+    vrc_update(c);
+}
+
+/* VRC IRQ: while enabled the counter is clocked every CPU cycle (M set) or
+ * every 113 2/3 (scanline mode: the prescaler drops by 3 per cycle and adds
+ * 341 when it reaches 0 or less). Clocking $FF reloads the latch and asserts
+ * the IRQ. Runs in closed form: the bus only calls it on its slow path. */
+void cart_run(Cart *c, uint64_t cycle) {
+    if (cycle <= c->vrc_cycle) { c->vrc_cycle = cycle; return; }
+    int64_t n = (int64_t)(cycle - c->vrc_cycle);
+    c->vrc_cycle = cycle;
+    if (!is_vrc(c) || !(c->vrc_irq_ctrl & 2)) return;
+    int64_t k = n;  /* counter clocks in these n cycles */
+    if (!(c->vrc_irq_ctrl & 4)) {
+        k = 3 * n < c->vrc_prescaler ? 0 : (3 * n - c->vrc_prescaler) / 341 + 1;
+        c->vrc_prescaler = (int16_t)(c->vrc_prescaler - 3 * n + 341 * k);
+    }
+    int64_t first = 0x100 - c->irq_counter;  /* clocks until $FF is clocked */
+    if (k < first) { c->irq_counter = (uint8_t)(c->irq_counter + k); return; }
+    c->irq_line = 1;
+    c->irq_counter = (uint8_t)(c->irq_latch + (k - first) % (0x100 - c->irq_latch));
+}
+
+int64_t cart_cycles_to_irq(const Cart *c, uint64_t cycle) {
+    if (!is_vrc(c) || !(c->vrc_irq_ctrl & 2)) return -1;
+    int64_t m = 0x100 - c->irq_counter;  /* clocks to go */
+    int64_t need = (c->vrc_irq_ctrl & 4) ? m : (c->vrc_prescaler + 341 * (m - 1) + 2) / 3;
+    int64_t left = need - (int64_t)(cycle - c->vrc_cycle);
+    return left > 0 ? left : 0;
 }
 
 static void update_banks(Cart *c) {
@@ -101,6 +201,7 @@ static void update_banks(Cart *c) {
             for (int i = 0; i < 8; i++) c->chr_off[i] = c->chr_size;  /* the $FF page after CHR */
         break;
     case 206: mmc3_update(c); break;  /* Namco 108: MMC3 without modes, mirroring or IRQ */
+    case 21: case 22: case 23: case 25: vrc_update(c); break;
     }
 }
 
@@ -116,6 +217,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
     int junk = !nes2 && (d[12] | d[13] | d[14] | d[15]);
     /* NES 2.0: mapper bits 8-11 in byte 8 (else mapper 515 would load as 3) */
     c->mapper = (d[6] >> 4) | (junk ? 0 : (d[7] & 0xF0)) | (nes2 ? (d[8] & 0x0F) << 8 : 0);
+    c->submapper = nes2 ? d[8] >> 4 : 0;
     c->four_screen = (d[6] & 0x08) != 0;
     c->mirroring = c->four_screen ? MIRROR_FOUR : (d[6] & 0x01) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
     c->battery = (d[6] & 0x02) != 0;
@@ -126,7 +228,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         snprintf(err, errlen, "file shorter than its header says");
         return -1;
     }
-    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 7, 11, 66, 71, 79, 87, 185, 206};
+    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 7, 11, 21, 22, 23, 25, 66, 71, 79, 87, 185, 206};
     int ok = 0;
     for (size_t i = 0; i < sizeof SUPPORTED / sizeof *SUPPORTED; i++) ok |= c->mapper == SUPPORTED[i];
     if (!ok) {
@@ -143,7 +245,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
     if (!c->chr_ram) memcpy(c->chr, d + off + c->prg_size, c->chr_size);
     if (c->mapper == 1) c->reg[0] = 0x0C;          /* power-on: last bank fixed at $C000 */
     if (c->mapper == 4 || c->mapper == 206) { c->reg[6] = 0; c->reg[7] = 1; }
-    if (c->mapper == 185) c->reg[0] = nes2 ? d[8] >> 4 : 0;
+    c->vrc2 = c->mapper == 22 || ((c->mapper == 23 || c->mapper == 25) && c->submapper == 3);
     update_banks(c);
     return 0;
 }
@@ -212,6 +314,7 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     case 0: case 79: case 87: return 0;
     case 1: mmc1_write(c, a, v, cycle); return 1;
     case 4: mmc3_write(c, a, v); return 1;
+    case 21: case 22: case 23: case 25: vrc_write(c, a, v); return 1;
     case 206:  /* bank select and data only; 3 select bits */
         if (a < 0xA000) mmc3_write(c, a, (a & 1) ? v : v & 7);
         return 1;

@@ -3,6 +3,34 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-16 · M7d: Konami VRC2/VRC4 (21, 22, 23, 25)
+- **Unit ROMs** (`tests/test_mappers.py`): VRC4e PRG swap (with submapper
+  and with an old header, both wirings decoded), VRC2a CHR shift, VRC4b IRQ
+  count over one frame (scanline mode, 20 lines: 13; cycle mode, 256
+  cycles: 116), and IRQ arrival with no slow bus access in between (a RAM
+  loop counts 284 iterations of 8 cycles = 2,272 of the expected 2,274).
+  Mutations caught: the IRQ planned 1,000 cycles late, no VRC2a shift, a
+  prescaler period of 300. (A prescaler step of 1 instead of 3 was not: the
+  negative prescaler pays the missing clocks back at the next catch-up.)
+  The first IRQ test read 3 instead of 13: the test ROM had left the APU
+  frame IRQ on and never acknowledged it; it now writes $40 to $4017.
+- **Boot smoke**: 15 of 15 games (every wiring: 21 sub 1/2, 22, 23 sub 2/3,
+  25 sub 1/2/3) reach a title, menu or play screen; IRQ status bars (Tiny
+  Toon, Bio Miracle, Gradius II, TMNT 2) split where they should.
+- **Recompiled with `NES_AUTO_HINTS`, `--diff` 3,000 frames**: all identical.
+
+  | Mapper | Game | Board | Regions | Recompiled cycles |
+  |---|---|---|---|---|
+  | 21 | Wai Wai World 2 | VRC4a | 17 | 99.96% |
+  | 22 | TwinBee 3 | VRC2a | 10 | 99.98% |
+  | 23 | Crisis Force | VRC4e | 11 | 99.91% |
+  | 23 | Contra (Japan) | VRC2b | 9 | 99.98% |
+  | 25 | Gradius II | VRC4b | 8 | 99.93% |
+  | 25 | TMNT 2 (Japan) | VRC4d | 17 | 99.91% |
+
+  Speed (headless, 6,000 frames of scripted play): Gradius II 20x, Contra
+  18x real time; Super Mario Bros 19x measured the same way.
+
 ## 2026-11-16 · M7c: mappers 71, 79, 87, 185, 206
 - **Header survey** of a full ~4,000-ROM set (first 16 bytes of each dump):
   all iNES; 18 NES 2.0 dumps on mappers 256-519 loaded as mapper 0-7

@@ -1,8 +1,9 @@
 /* Cartridge: iNES loading and mappers.
  * Supported: 0 NROM, 1 MMC1, 2 UxROM, 3 CNROM, 4 MMC3, 7 AxROM, 11 Color
  * Dreams, 66 GxROM, 71 Camerica, 79 NINA-03/06, 87 Jaleco J87, 185 CNROM
- * with CHR protection, 206 Namco 108 (nesdev wiki, see cart.c). Every mapper
- * only sets the bank tables below; reads go through them. */
+ * with CHR protection, 206 Namco 108, 21/22/23/25 Konami VRC2/VRC4 (nesdev
+ * wiki, see cart.c). Every mapper only sets the bank tables below; reads go
+ * through them. */
 #ifndef NES_CART_H
 #define NES_CART_H
 
@@ -14,7 +15,7 @@ enum { MIRROR_HORIZONTAL, MIRROR_VERTICAL, MIRROR_FOUR, MIRROR_SINGLE_LOW, MIRRO
 typedef struct Cart {
     uint8_t *prg, *chr;
     uint32_t prg_size, chr_size;
-    int chr_ram, mapper, mirroring, four_screen, battery;
+    int chr_ram, mapper, submapper, mirroring, four_screen, battery;  /* submapper: NES 2.0, else 0 */
     uint8_t prg_ram[0x2000];         /* $6000-$7FFF */
     uint32_t prg_off[4];             /* PRG offset mapped at $8000/$A000/$C000/$E000 */
     uint32_t chr_off[8];             /* CHR offset of each 1 KB PPU page */
@@ -27,6 +28,12 @@ typedef struct Cart {
     uint8_t irq_latch, irq_counter, irq_reload, irq_enabled, irq_line;
     uint8_t a12;                     /* PPU address line 12, last seen */
     uint64_t a12_low_since;          /* PPU dot when A12 went low */
+    /* VRC2/VRC4 (IRQ latch, counter and line: the irq_ fields above) */
+    uint16_t vrc_chr[8];             /* 1 KB CHR banks */
+    uint8_t vrc_prg[2], vrc_swap, vrc2;  /* vrc_swap: $8000 and $C000 exchanged; vrc2: no IRQ */
+    uint8_t vrc_irq_ctrl;            /* bit 0 A (E after ack), 1 E (enabled), 2 M (cycle mode) */
+    int16_t vrc_prescaler;           /* scanline mode: 341, minus 3 per CPU cycle */
+    uint64_t vrc_cycle;              /* CPU cycle the IRQ counter has been run to */
 } Cart;
 
 /* Returns 0 on success, else writes a message to err. Copies the data. */
@@ -64,5 +71,10 @@ void cart_ppu_address(Cart *c, uint16_t a, uint64_t ppu_dot);
 /* MMC3: the IRQ could assert at the next A12 rise (the bus then catches up
  * the PPU finely around sprite fetches). */
 int cart_irq_armed(const Cart *c);
+/* VRC4: the IRQ counter counts CPU cycles. cart_run runs it to `cycle` (the
+ * bus calls it before reading irq_line); cart_cycles_to_irq says how many
+ * cycles after `cycle` it fires next, -1 if it is off. */
+void cart_run(Cart *c, uint64_t cycle);
+int64_t cart_cycles_to_irq(const Cart *c, uint64_t cycle);
 
 #endif

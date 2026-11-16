@@ -11,7 +11,8 @@
  * and --diff (docs/06). The APU (M6) is caught up the same way; its events
  * are the frame IRQ and DMC sample fetches. The MMC3 IRQ (M7) asserts on a
  * PPU A12 rise: while it is armed, the PPU is caught up every cycle around
- * the sprite fetches (dots 255-330 of rendering lines). */
+ * the sprite fetches (dots 255-330 of rendering lines). The VRC4 IRQ counts
+ * CPU cycles: like an APU event, the next one ends the batch (cart_run). */
 #include "nes.h"
 
 #include <stdio.h>
@@ -29,6 +30,8 @@ static void plan_next_event(Nes *n) {
     if (d <= 0) d += FRAME_SHORT;
     int64_t apu = n->cpu.bus_pending + 3 * apu_cycles_to_event(&n->apu);
     if (apu < d) d = apu;
+    int64_t vrc = cart_cycles_to_irq(&n->cart, n->cpu.cycles);
+    if (vrc >= 0 && n->cpu.bus_pending + 3 * vrc < d) d = n->cpu.bus_pending + 3 * vrc;
     /* MMC3: the counter is clocked on A12 rises during rendering (around dot
      * 260 or 324, or at dot 5 of the pre-render line, depending on the
      * pattern tables). While the IRQ is enabled, check the counter at dots 0
@@ -51,12 +54,18 @@ static void plan_next_event(Nes *n) {
     n->cpu.bus_budget = (int32_t)d;
 }
 
+/* The cartridge's IRQ line, its cycle counter (VRC4) run to now. */
+static int cart_irq(Nes *n) {
+    cart_run(&n->cart, n->cpu.cycles);
+    return n->cart.irq_line;
+}
+
 /* APU order within CPU cycle N: the bus access sees the APU as of N-1, then
  * the APU clocks cycle N, then the CPU samples IRQ. So catch-ups run the APU
  * to N-1, and every slow-path access finishes with sync_apu() (through N). */
 static void sync_apu(Nes *n) {
     apu_run(&n->apu, n->cpu.cycles - 1);
-    n->cpu.irq = apu_irq(&n->apu) || n->cart.irq_line;  /* APU IRQ lags one cycle, like $4015 */
+    n->cpu.irq = apu_irq(&n->apu) || cart_irq(n);  /* APU IRQ lags one cycle, like $4015 */
     apu_run(&n->apu, n->cpu.cycles);
 }
 
@@ -70,7 +79,7 @@ static void catch_up(Nes *n) {
     n->nmi_prev = n->ppu.nmi_out;
     n->cpu.bus_pending = 0;
     apu_run(&n->apu, n->cpu.cycles - 1);
-    n->cpu.irq = apu_irq(&n->apu) || n->cart.irq_line;
+    n->cpu.irq = apu_irq(&n->apu) || cart_irq(n);
     plan_next_event(n);
 }
 
@@ -160,7 +169,7 @@ static void run_dma(Nes *n, uint16_t a) {
         if (get && ready) {
             uint8_t v = read_cycle(n, n->apu.dmc.addr);
             apu_dmc_fill(&n->apu, v);
-            n->cpu.irq = apu_irq(&n->apu) || n->cart.irq_line;
+            n->cpu.irq = apu_irq(&n->apu) || cart_irq(n);
             plan_next_event(n);
             dmc = 0;
         } else if (get && oam) {
@@ -297,7 +306,7 @@ void nes_step(Nes *n) {
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 1 };
+enum { STATE_VERSION = 2 };  /* 2: submapper, VRC2/VRC4 fields */
 
 typedef struct {
     char magic[4];  /* "NESS" */

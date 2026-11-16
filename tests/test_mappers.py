@@ -38,10 +38,10 @@ def put(prg, offset, data):
     prg[offset:offset + len(data)] = data
 
 
-def vectors(prg, end, reset):  # NMI and IRQ point at an RTI just before the vectors
+def vectors(prg, end, reset, irq=0xFFF9):  # NMI (and IRQ) at an RTI just before the vectors
     put(prg, end - 7, bytes([0x40]))
     rti = 0xFFF9
-    put(prg, end - 6, bytes([rti & 0xFF, rti >> 8, reset & 0xFF, reset >> 8, rti & 0xFF, rti >> 8]))
+    put(prg, end - 6, bytes([rti & 0xFF, rti >> 8, reset & 0xFF, reset >> 8, irq & 0xFF, irq >> 8]))
 
 
 def peek(rom, addr=0):
@@ -103,6 +103,64 @@ class TestMappers(unittest.TestCase):
         put(prg, 0x1E200, lda_sta(0x46, 0x8000) + lda_sta(0x02, 0x8001) + lda_abs(0x8100) + END)
         vectors(prg, 0x20000, 0xE200)
         self.assertEqual(peek(ines(206, prg)), 0x62)  # 0x6E if mode 1 were honoured
+
+    def test_23_vrc4_prg_swap(self):  # VRC4e wiring (A2, A3): $9008 is the swap-mode register
+        prg = bytearray(0x20000)
+        for b in range(16):
+            prg[b * 0x2000 + 0x100] = 0x60 + b
+        code = (lda_sta(0x03, 0x8000) + lda_sta(0x02, 0x9008) +
+                lda_abs(0x8100) + bytes([0x85, 0x01]) + lda_abs(0xC100) + END)
+        put(prg, 0x1E200, code)
+        vectors(prg, 0x20000, 0xE200)
+        for sub in (2, None):  # NES 2.0 VRC4e, and an old header (both wirings decoded)
+            with self.subTest(submapper=sub):
+                rom = ines(23, prg, submapper=sub)
+                self.assertEqual(peek(rom, 0), 0x63)  # PRG 0 now at $C000
+                self.assertEqual(peek(rom, 1), 0x6E)  # second-last bank at $8000
+
+    def test_22_vrc2a_chr(self):  # VRC2a ignores CHR bit 0: register 4 = 1 KB bank 2
+        prg, chr_ = bytearray(0x8000), bytearray(0x8000)
+        for b in range(32):
+            chr_[b * 0x400] = 0x80 + b
+        put(prg, 0x6200, WAIT_VBLANK + lda_sta(0x04, 0xB000) + CHR_READ + END)
+        vectors(prg, 0x8000, 0xE200)
+        self.assertEqual(peek(ines(22, prg, chr_)), 0x82)
+
+    def test_25_vrc4_irq(self):
+        """VRC4b wiring (A1, A0): latch $F000/$F002, control $F001, ack $F003.
+        IRQs counted from one vblank to the next (29,780.7 CPU cycles)."""
+        handler = bytes([0xE6, 0x00, 0x8D, 0x03, 0xF0, 0x40])  # INC $00, STA $F003 (ack), RTI
+        bpl_wait = bytes([0x2C, 0x02, 0x20, 0x10, 0xFB])
+        # scanline mode, 20 lines (latch $EC): every 2,273.3 cycles = 13; cycle mode, 256 cycles = 116
+        for latch, ctrl, expect in ((0xEC, 0x03, 13), (0x00, 0x07, 116)):
+            prg = bytearray(0x8000)
+            code = (bytes([0x78]) + lda_sta(0x40, 0x4017) +  # APU frame IRQ off: only the VRC's
+                    WAIT_VBLANK + lda_sta(latch & 0x0F, 0xF000) + lda_sta(latch >> 4, 0xF002) +
+                    bpl_wait + lda_sta(0x00, 0x0000)[:2] + bytes([0x85, 0x00]) +  # LDA #0, STA $00
+                    lda_sta(ctrl, 0xF001) + bytes([0x58]) +                      # control, CLI
+                    bpl_wait + bytes([0x78, 0xA5, 0x00]) + END)                    # SEI, LDA $00
+            put(prg, 0x6200, code)
+            put(prg, 0x6400, handler)
+            vectors(prg, 0x8000, 0xE200, irq=0xE400)
+            with self.subTest(mode="cycle" if ctrl & 4 else "scanline"):
+                self.assertEqual(peek(ines(25, prg, submapper=1)), expect)
+
+    def test_25_vrc4_irq_on_time(self):
+        """The IRQ must arrive on time with no slow bus access to catch the
+        cart up (the bus plans for it, nes.c plan_next_event). A RAM loop of 8
+        cycles counts until the first IRQ: 20 lines = 2,274 cycles = ~284."""
+        prg = bytearray(0x8000)
+        handler = bytes([0xA5, 0x10, 0x85, 0x00, 0xA5, 0x11, 0x85, 0x01,  # $00/$01 = loop count
+                         0xA9, 0x00, 0x8D, 0x01, 0xF0, 0x40])              # IRQ off, RTI
+        code = (bytes([0x78]) + lda_sta(0x40, 0x4017) + WAIT_VBLANK + lda_sta(0x0C, 0xF000) +
+                lda_sta(0x0E, 0xF002) + lda_sta(0x03, 0xF001) + bytes([0x58]))
+        loop = 0xE200 + len(code)  # INC $10 / BNE loop / INC $11 / JMP loop
+        code += bytes([0xE6, 0x10, 0xD0, 0xFC, 0xE6, 0x11, 0x4C, loop & 0xFF, loop >> 8])
+        put(prg, 0x6200, code)
+        put(prg, 0x6400, handler)
+        vectors(prg, 0x8000, 0xE200, irq=0xE400)
+        rom = ines(25, prg, submapper=1)
+        self.assertAlmostEqual(peek(rom, 0) + 256 * peek(rom, 1), 284, delta=1)
 
 
 if __name__ == "__main__":

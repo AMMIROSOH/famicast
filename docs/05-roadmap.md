@@ -154,6 +154,11 @@ M7a (runtime):
   4,031 ROMs in a full set (88% of licensed releases). Unit ROMs in
   `tests/test_mappers.py`; one game per mapper identical to the interpreter
   (06).
+- [x] M7d: Konami VRC2/VRC4 (21, 22, 23, 25): every board wiring (NES 2.0
+  submapper, else both wirings decoded), VRC2a's CHR shift, PRG swap mode,
+  the VRC4 IRQ (scanline and cycle mode) counted in closed form and planned
+  like an APU event. 3,109 of 4,031 ROMs (89% of licensed). IRQ count and
+  timing checked by unit ROMs; six games identical to the interpreter (06).
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

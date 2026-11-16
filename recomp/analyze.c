@@ -141,6 +141,7 @@ int assumed_layout(const Rom *r, int layout[4]) {
         return 0;
     case 1: case 2: case 71:     /* MMC1 (mode 3), UxROM, Camerica: last 16 KB fixed */
     case 4: case 206:            /* MMC3, Namco 108: $E000 fixed, $C000 in mode 0 */
+    case 21: case 22: case 23: case 25:  /* VRC2/VRC4: the same, swap mode off */
         layout[2] = n8 - 2;
         layout[3] = n8 - 1;
         return 0;
@@ -154,7 +155,7 @@ int unit_windows(const Rom *r) {
     int m = r->mapper;
     if (m == 7 || m == 11 || m == 66 || m == 79) return 4;  /* 32 KB */
     if (m == 1 || m == 2 || m == 71) return 2;  /* 16 KB (MMC1 32 KB mode = two units) */
-    return 1;                                   /* MMC3, Namco 108: 8 KB windows independent */
+    return 1;                                   /* MMC3, Namco 108, VRC: 8 KB windows independent */
 }
 
 int prg_bank_reg(const Rom *r) {
