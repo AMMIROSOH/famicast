@@ -24,7 +24,11 @@ static inline void bus_address(Ppu *p, uint16_t a) {
 static uint8_t mem_read(Ppu *p, uint16_t a) {
     a &= 0x3FFF;
     bus_address(p, a);
-    if (a < 0x2000) return cart_chr_read(p->cart, a);
+    if (a < 0x2000) {
+        uint8_t v = cart_chr_read(p->cart, a);
+        if (p->cart->mapper == 9 || p->cart->mapper == 10) cart_chr_latch(p->cart, a);  /* MMC2/MMC4 */
+        return v;
+    }
     if (a < 0x3F00) return cart_custom_nt(p->cart) ? cart_nt_read(p->cart, p->nt, a) : p->nt[cart_nt_index(p->cart, a)];
     return p->pal[pal_index(a)];
 }

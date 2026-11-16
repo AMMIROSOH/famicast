@@ -167,6 +167,12 @@ M7a (runtime):
   cycle IRQ (closed form, like VRC4), the RAM port. Not done: expansion
   audio, MMC5 split screen, N163 CHR from nametable RAM. 3,173 of 4,031
   ROMs (91% of licensed); 42 games boot; 8 identical to the interpreter.
+- [x] M7f: MMC2 (9), MMC4 (10), Jaleco SS88006 (18), Sunsoft FME-7 (69),
+  Namco 175/340 (210). MMC2/MMC4 CHR latches switched by the PPU's own
+  pattern reads; the SS88006 and FME-7 16-bit cycle IRQs in closed form;
+  FME-7 PRG ROM at $6000; 210 reuses the Namco 163's banking. Not done:
+  the SS88006 speech chip and Sunsoft 5B audio. 3,239 of 4,031 ROMs (93%
+  of licensed); 46 games boot; 7 identical to the interpreter (06).
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

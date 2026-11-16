@@ -1,4 +1,4 @@
-"""Mappers 71, 79, 87, 185, 206 (runtime/cart.c) on tiny hand-assembled ROMs:
+"""Mappers (runtime/cart.c) on tiny hand-assembled ROMs:
 each switches a bank, reads a marker byte from it and stores it at $00, which
 nes_headless --peek reports. The other mappers are covered by test ROMs
 (tests/test_roms.py) and the recompiled games."""
@@ -257,6 +257,103 @@ class TestMappers(unittest.TestCase):
         code += ram_loop(0xE200 + len(code))
         rom = self.n163(code)
         self.assertAlmostEqual(peek(rom, 0) + 256 * peek(rom, 1), 125, delta=2)
+
+    # ---- MMC2 (9), MMC4 (10): CHR latches set by reading tile $FD/$FE patterns ----
+    def test_9_10_chr_latch(self):
+        """$B000 = 4 KB bank 1 (latch $FD), $C000 = bank 2 ($FE, power-on).
+        Reading $0FD8 sets $FD; then $0FE9 sets $FE on the MMC4 only (MMC2's
+        left table triggers on $0FE8 exactly)."""
+        chr_ = bytearray(0x8000)
+        for b in range(8):
+            chr_[b * 0x1000 + 0x10] = 0xC0 + b
+        for mapper, after_fe9 in ((9, 0xC1), (10, 0xC2)):
+            prg = bytearray(0x10000)
+            for b in range(8):
+                prg[b * 0x2000 + 0x100] = 0x60 + b
+            code = (WAIT_VBLANK + lda_sta(0x02, 0xA000) + lda_abs(0x8100) + bytes([0x85, 0x01]) +
+                    lda_sta(0x01, 0xB000) + lda_sta(0x02, 0xC000) + ppu_read(0x0010) + bytes([0x85, 0x02]) +
+                    ppu_read(0x0FD8) + ppu_read(0x0010) + bytes([0x85, 0x03]) +
+                    ppu_read(0x0FE9) + ppu_read(0x0010) + END)
+            put(prg, 0xE200, code)
+            vectors(prg, 0x10000, 0xE200)
+            rom = ines(mapper, prg, chr_)
+            with self.subTest(mapper=mapper):
+                self.assertEqual(peek(rom, 1), 0x62 if mapper == 9 else 0x64)  # 8 KB / 16 KB bank 2
+                self.assertEqual(peek(rom, 2), 0xC2)
+                self.assertEqual(peek(rom, 3), 0xC1)
+                self.assertEqual(peek(rom, 0), after_fe9)
+
+    # ---- Jaleco SS88006 (18): nibble registers, a counter of 4/8/12/16 bits ----
+    def test_18_ss88006_prg(self):  # bank $11 from two nibbles at $8000/$8001
+        prg = bytearray(0x40000)
+        for b in range(32):
+            prg[b * 0x2000 + 0x100] = 0x40 + b
+        put(prg, 0x3E200, lda_sta(0x01, 0x8000) + lda_sta(0x01, 0x8001) + lda_abs(0x8100) + END)
+        vectors(prg, 0x40000, 0xE200)
+        self.assertEqual(peek(ines(18, prg)), 0x51)
+
+    def test_18_ss88006_irq_on_time(self):
+        """12-bit mode, reload $F3E8: only the low 12 bits ($3E8 = 1000) count,
+        so the IRQ comes after ~1,000 cycles = ~125 turns (16 bits: ~7,800)."""
+        prg = bytearray(0x8000)
+        code = bytes([0x78]) + lda_sta(0x40, 0x4017)
+        for i, nib in enumerate((0x8, 0xE, 0x3, 0xF)):
+            code += lda_sta(nib, 0xE000 + i)
+        code += lda_sta(0x00, 0xF000) + lda_sta(0x03, 0xF001) + bytes([0x58])  # reload, count 12 bits, CLI
+        code += ram_loop(0xE200 + len(code))
+        put(prg, 0x6200, code)
+        put(prg, 0x6400, bytes([0xA5, 0x10, 0x85, 0x00, 0xA5, 0x11, 0x85, 0x01,  # $00/$01 = loop count
+                                0xA9, 0x00, 0x8D, 0x01, 0xF0, 0x40]))          # IRQ off (acknowledges), RTI
+        vectors(prg, 0x8000, 0xE200, irq=0xE400)
+        rom = ines(18, prg)
+        self.assertAlmostEqual(peek(rom, 0) + 256 * peek(rom, 1), 125, delta=2)
+
+    # ---- Sunsoft FME-7 (69): command at $8000, parameter at $A000 ----
+    @staticmethod
+    def fme7(code):
+        prg = bytearray(0x10000)
+        for b in range(8):
+            prg[b * 0x2000 + 0x100] = 0x60 + b
+        put(prg, 0xE200, code)
+        put(prg, 0xE400, bytes([0xA5, 0x10, 0x85, 0x00, 0xA5, 0x11, 0x85, 0x01,  # $00/$01 = loop count
+                                0xA9, 0x0D, 0x8D, 0x00, 0x80, 0xA9, 0x00, 0x8D, 0x00, 0xA0, 0x40]))  # D = 0, RTI
+        vectors(prg, 0x10000, 0xE200, irq=0xE400)
+        return ines(69, prg)
+
+    def test_69_fme7_prg_and_6000(self):  # command 9: $8000; command 8: ROM bank, then RAM, at $6000
+        code = (lda_sta(0x09, 0x8000) + lda_sta(0x03, 0xA000) + lda_abs(0x8100) + bytes([0x85, 0x01]) +
+                lda_sta(0x08, 0x8000) + lda_sta(0x05, 0xA000) + lda_abs(0x6100) + bytes([0x85, 0x02]) +
+                lda_sta(0x77, 0x6005) +  # ROM: ignored
+                lda_sta(0xC0, 0xA000) + lda_sta(0x55, 0x6005) + lda_abs(0x6005) + END)
+        rom = self.fme7(code)
+        self.assertEqual(peek(rom, 1), 0x63)
+        self.assertEqual(peek(rom, 2), 0x65)
+        self.assertEqual(peek(rom, 0), 0x55)
+
+    def test_69_fme7_irq_on_time(self):  # counter 1000: wraps after 1,001 cycles = ~125 turns
+        code = bytes([0x78]) + lda_sta(0x40, 0x4017)
+        for cmd, v in ((0x0E, 1000 & 0xFF), (0x0F, 1000 >> 8), (0x0D, 0x81)):
+            code += lda_sta(cmd, 0x8000) + lda_sta(v, 0xA000)
+        code += bytes([0x58])
+        code += ram_loop(0xE200 + len(code))
+        rom = self.fme7(code)
+        self.assertAlmostEqual(peek(rom, 0) + 256 * peek(rom, 1), 125, delta=2)
+
+    # ---- Namco 175/340 (210) ----
+    def test_210_prg_and_340_mirroring(self):
+        """$E800: 8 KB at $A000. Namco 340 (submapper 2): $E000 bits 6-7 = 1
+        is vertical mirroring, so $2800 shows what was written at $2000."""
+        prg = bytearray(0x10000)
+        for b in range(8):
+            prg[b * 0x2000 + 0x100] = 0x60 + b
+        ppu_write = lda_sta(0x20, 0x2006) + lda_sta(0x00, 0x2006) + lda_sta(0x5A, 0x2007)
+        code = (WAIT_VBLANK + lda_sta(0x03, 0xE800) + lda_abs(0xA100) + bytes([0x85, 0x01]) +
+                lda_sta(0x40, 0xE000) + ppu_write + ppu_read(0x2800) + END)
+        put(prg, 0xE200, code)
+        vectors(prg, 0x10000, 0xE200)
+        rom = ines(210, prg, bytes(0x2000), submapper=2)
+        self.assertEqual(peek(rom, 1), 0x63)
+        self.assertEqual(peek(rom, 0), 0x5A)
 
 
 if __name__ == "__main__":
