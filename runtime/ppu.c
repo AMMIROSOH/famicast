@@ -250,7 +250,7 @@ static void render_pixel(Ppu *p) {
     if (!RENDERING(p) && (p->v & 0x3F00) == 0x3F00) color = p->pal[pal_index(p->v)];  /* palette hack */
     else color = p->pal[idx ? idx : 0];
     if (p->mask & 0x01) color &= 0x30;  /* greyscale */
-    p->fb[p->scanline * 256 + x] = color;
+    p->fb[p->scanline * 256 + x] = (uint16_t)(color | (p->mask & 0xE0) << 1);  /* + emphasis */
 }
 
 void ppu_step(Ppu *p) {
@@ -313,8 +313,9 @@ static void visible_dots(Ppu *p, int n) {
     const int bg_on = mask & 0x08, bg_left = mask & 0x02;
     const int sp_on = (mask & 0x10) && p->sp_count, sp_left = mask & 0x04;
     const uint8_t grey = (mask & 0x01) ? 0x30 : 0x3F;
+    const uint16_t emph = (uint16_t)((mask & 0xE0) << 1);
     const int first = p->dot - 1;
-    uint8_t line[256];
+    uint16_t line[256];
     for (; n > 0; n--) {
         int dot = p->dot, x = dot - 1;
         p->dots++;
@@ -334,10 +335,10 @@ static void visible_dots(Ppu *p, int n) {
         if ((s & 0x40) && p->sp_zero_on_line && bg && x != 255) p->status |= 0x40;  /* sprite 0 hit */
         uint8_t idx = (!sp || (bg && (s & 0x20))) ? (uint8_t)(bg ? bg_pal * 4 + bg : 0)
                                                     : (uint8_t)(((s >> 2) & 7) * 4 + sp);
-        line[x] = p->pal[idx] & grey;
+        line[x] = (uint16_t)((p->pal[idx] & grey) | emph);
         p->dot = dot + 1;
     }
-    memcpy(p->fb + p->scanline * 256 + first, line + first, (size_t)(p->dot - 1 - first));
+    memcpy(p->fb + p->scanline * 256 + first, line + first, (size_t)(p->dot - 1 - first) * sizeof line[0]);
     p->rendering_prev = 1;
     p->nmi_out = (p->status & 0x80) && (p->ctrl & 0x80);
 }

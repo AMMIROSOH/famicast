@@ -45,7 +45,7 @@ typedef struct Ppu {
     uint8_t nmi_cancel;   /* race near vblank start: drop an NMI edge just seen */
     uint8_t vbl_suppress; /* $2002 read one dot before vblank: flag not set */
     uint8_t frame_done;   /* set when vblank starts; cleared by the caller */
-    uint8_t fb[256 * 240];/* palette index per pixel, bits 0-5 (+ emphasis later) */
+    uint16_t fb[256 * 240];  /* per pixel: bits 0-5 colour, 6-8 emphasis ($2001 bits 5-7) */
 } Ppu;
 
 void ppu_reset(Ppu *p, Cart *cart);
@@ -56,6 +56,6 @@ void ppu_reg_write(Ppu *p, uint16_t reg, uint8_t v);
 void ppu_oam_dma_write(Ppu *p, uint8_t v);    /* one byte of $4014 DMA */
 
 /* 64 colours as 0x00RRGGBB, generated from an NTSC signal model (palette.c) */
-void nes_palette_rgb(uint32_t out[64]);
+void nes_palette_rgb(uint32_t out[512]);  /* RGB of fb values: emphasis << 6 | colour */
 
 #endif
