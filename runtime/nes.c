@@ -49,7 +49,7 @@ static void plan_next_event(Nes *n) {
      * pattern tables). While the IRQ is enabled, check the counter at dots 0
      * and 255 of every rendering line; once the next clock can fire, catch
      * up every cycle until the line ends, so a batch never runs past it. */
-    if (n->cart.mapper == 4 && n->cart.irq_enabled && (n->ppu.mask & 0x18)) {
+    if (cart_is_mmc3(&n->cart) && n->cart.irq_enabled && (n->ppu.mask & 0x18)) {
         int line = n->ppu.scanline, dot = n->ppu.dot;
         int rendering_line = line < 240 || line == 261;
         int64_t m;
@@ -326,8 +326,8 @@ void nes_step(Nes *n) {
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 5 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
-                                4: MMC2/MMC4, SS88006, FME-7; 5: Bandai FCG EEPROMs */
+enum { STATE_VERSION = 6 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
+                                4: MMC2/MMC4, SS88006, FME-7; 5: Bandai FCG EEPROMs; 6: TxSROM */
 
 typedef struct {
     char magic[4];  /* "NESS" */

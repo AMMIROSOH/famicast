@@ -429,6 +429,28 @@ class TestMappers(unittest.TestCase):
                 code = self.i2c(*write, ("start",), ("byte", wire), ("read",), ("stop",))
                 self.assertEqual(peek(self.bandai(code + END[2:], mapper=159, submapper=0)), expect)
 
+    # ---- TxSROM (118): CHR bank bit 7 picks each nametable's CIRAM page ----
+    def test_118_txsrom_nametables(self):
+        """R0 = R1 = $80: every nametable is page 1 (one screen; $A000 =
+        vertical is ignored), so $2C00 shows the $2000 write. With CHR A12
+        inversion R2-R5 pick the four nametables: 0, 1, 0, 1 is vertical
+        ($2800 = $2000, $2400 differs). Neither result fits header mirroring."""
+        def sel(r, v):
+            return lda_sta(r, 0x8000) + lda_sta(v, 0x8001)
+        ppu_write = lda_sta(0x20, 0x2006) + lda_sta(0x00, 0x2006) + lda_sta(0x5A, 0x2007)
+        one_screen = sel(0, 0x80) + sel(1, 0x80) + lda_sta(0x00, 0xA000) + ppu_write + ppu_read(0x2C00) + END
+        vertical = (sel(0x82, 0x00) + sel(0x83, 0x80) + sel(0x84, 0x00) + sel(0x85, 0x80) + ppu_write +
+                    ppu_read(0x2800) + bytes([0x85, 0x01]) + ppu_read(0x2400) + END)
+        roms = []
+        for code in (one_screen, vertical):
+            prg = bytearray(0x8000)
+            put(prg, 0x6200, WAIT_VBLANK + code)
+            vectors(prg, 0x8000, 0xE200)
+            roms.append(ines(118, prg, bytes(0x2000)))
+        self.assertEqual(peek(roms[0]), 0x5A)
+        self.assertEqual(peek(roms[1], 1), 0x5A)
+        self.assertEqual(peek(roms[1], 0), 0x00)
+
 
 if __name__ == "__main__":
     unittest.main()
