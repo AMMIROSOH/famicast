@@ -4,6 +4,7 @@
 #include "tv_frame.h"
 
 #include <math.h>
+#include <stddef.h>
 
 static float clampf(float x, float lo, float hi) { return x < lo ? lo : x > hi ? hi : x; }
 
