@@ -6,7 +6,7 @@
  * "MMC4" (10), "INES Mapper 018" (Jaleco SS88006), "Sunsoft FME-7" (69),
  * "INES Mapper 210" (Namco 175/340), "Bandai FCG board", "INES Mapper 016",
  * "INES Mapper 153", "INES Mapper 157", "INES Mapper 159", "INES Mapper 118"
- * (TxSROM); the EEPROMs from
+ * (TxSROM), "VRC1" (75); the EEPROMs from
  * the 24C02/X24C01 datasheets' I2C protocol. */
 #include "cart.h"
 
@@ -477,6 +477,38 @@ static void banks8_update(Cart *c) {
     }
 }
 
+/* ---- Konami VRC1 (75): $8000/$A000/$C000 8 KB PRG (the last bank fixed at
+ * $E000), $E000/$F000 the low 4 bits of the 4 KB CHR banks at $0000/$1000,
+ * $9000 mirroring (bit 0: 0 vertical, 1 horizontal; ignored on four-screen
+ * boards) and the CHR banks' bit 4 (bit 1: $0000, bit 2: $1000). No RAM or
+ * IRQ. The chip has 4 PRG bank bits (128 KB); a fifth is kept for the
+ * 256 KB re-release of Ninja JaJaMaru (Switch collection, NES 2.0 header),
+ * which boots only with it; on 128 KB it vanishes in the bank modulo. */
+static void vrc1_update(Cart *c) {
+    uint32_t n8 = c->prg_size / 0x2000;
+    for (int w = 0; w < 3; w++) c->prg_off[w] = (c->prg_bank[w] % n8) * 0x2000;
+    c->prg_off[3] = (n8 - 1) * 0x2000;
+    set_chr(c, 0, 4, c->chr_bank[0] * 4u);
+    set_chr(c, 4, 4, c->chr_bank[1] * 4u);
+}
+
+static void vrc1_write(Cart *c, uint16_t a, uint8_t v) {
+    switch (a >> 12) {
+    case 0x8: case 0xA: case 0xC: c->prg_bank[((a >> 12) - 8) >> 1] = v & 0x1F; break;
+    case 0x9:
+        if (!c->four_screen) c->mirroring = (v & 1) ? MIRROR_HORIZONTAL : MIRROR_VERTICAL;
+        c->chr_bank[0] = (uint8_t)((c->chr_bank[0] & 0x0F) | (v & 2) << 3);
+        c->chr_bank[1] = (uint8_t)((c->chr_bank[1] & 0x0F) | (v & 4) << 2);
+        break;
+    case 0xE: case 0xF: {
+        uint8_t *b = &c->chr_bank[(a >> 12) - 0xE];
+        *b = (uint8_t)((*b & 0x10) | (v & 0x0F));
+        break;
+    }
+    }
+    vrc1_update(c);
+}
+
 /* ---- Jaleco SS88006 (18): decodes A12-A14 and A0-A1, data D0-D3, so each
  * bank number is written as two nibbles (low first). $8000-$9001 PRG,
  * $A000-$D003 CHR, $E000-$E003 IRQ reload (low nibble first), $F000 reload
@@ -658,6 +690,7 @@ static void update_banks(Cart *c) {
     case 2: set_prg16(c, 0, c->latch); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, 0); break;
     case 3: set_prg16(c, 0, 0); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, (uint32_t)c->latch * 8); break;
     case 4: case 118: mmc3_update(c); break;
+    case 75: vrc1_update(c); break;
     case 7:
         set_prg32(c, c->latch & 7);
         set_chr(c, 0, 8, 0);
@@ -710,8 +743,8 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         snprintf(err, errlen, "file shorter than its header says");
         return -1;
     }
-    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 25, 66, 69, 71, 79,
-                                    87, 118, 153, 157, 159, 185, 206, 210};
+    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 25, 66, 69, 71, 75,
+                                    79, 87, 118, 153, 157, 159, 185, 206, 210};
     int ok = 0;
     for (size_t i = 0; i < sizeof SUPPORTED / sizeof *SUPPORTED; i++) ok |= c->mapper == SUPPORTED[i];
     if (!ok) {
@@ -848,6 +881,7 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     case 21: case 22: case 23: case 25: vrc_write(c, a, v); return 1;
     case 9: case 10: mmc2_write(c, a, v); return 1;
     case 18: ss88006_write(c, a, v); return 1;
+    case 75: vrc1_write(c, a, v); return 1;
     case 69: fme7_write(c, a, v); return 1;  /* command 8 can map ROM or RAM at $6000 */
     case 210: n175_write(c, a, v); return 1;
     case 16: if (c->submapper == 4) return 0; /* FCG-1/2: $6000-$7FFF only */ /* fall through */
