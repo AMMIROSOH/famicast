@@ -145,7 +145,12 @@ int assumed_layout(const Rom *r, int layout[4]) {
         layout[2] = n8 - 2;
         layout[3] = n8 - 1;
         return 0;
+    case 153:                    /* Bandai with 512 KB: the first half at power-on */
+        layout[2] = (n8 < 32 ? n8 : 32) - 2;
+        layout[3] = (n8 < 32 ? n8 : 32) - 1;
+        return 0;
     case 10:                     /* MMC4: 16 KB at $8000, the last fixed */
+    case 16: case 157: case 159: /* Bandai FCG */
         layout[2] = n8 - 2;
         layout[3] = n8 - 1;
         return 0;
@@ -165,7 +170,8 @@ int assumed_layout(const Rom *r, int layout[4]) {
 int unit_windows(const Rom *r) {
     int m = r->mapper;
     if (m == 7 || m == 11 || m == 66 || m == 79) return 4;  /* 32 KB */
-    if (m == 1 || m == 2 || m == 10 || m == 71) return 2;  /* 16 KB (MMC1 32 KB mode = two units) */
+    if (m == 1 || m == 2 || m == 10 || m == 71 || m == 16 || m == 153 || m == 157 || m == 159)
+        return 2;                               /* 16 KB (MMC1 32 KB mode = two units) */
     return 1;                                   /* MMC3, Namco 108, VRC: 8 KB windows independent */
 }
 
@@ -174,6 +180,7 @@ int prg_bank_reg(const Rom *r) {
     case 0: case 3: case 87: case 185: return 0;
     case 79: return 0x4100;
     case 5: return 0x5100;
+    case 16: return 0x6000;  /* FCG-1/2 registers at $6000-$7FFF */
     default: return 0x8000;
     }
 }

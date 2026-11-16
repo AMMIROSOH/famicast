@@ -4,7 +4,9 @@
  * "INES Mapper 087", "INES Mapper 185", "Namco 108" (206), "VRC2 and VRC4",
  * "VRC IRQ" (21, 22, 23, 25), "MMC5" (5), "Namco 163" (19), "MMC2" (9),
  * "MMC4" (10), "INES Mapper 018" (Jaleco SS88006), "Sunsoft FME-7" (69),
- * "INES Mapper 210" (Namco 175/340). */
+ * "INES Mapper 210" (Namco 175/340), "Bandai FCG board", "INES Mapper 016",
+ * "INES Mapper 153", "INES Mapper 157", "INES Mapper 159"; the EEPROMs from
+ * the 24C02/X24C01 datasheets' I2C protocol. */
 #include "cart.h"
 
 #include <stdio.h>
@@ -151,10 +153,15 @@ static void vrc_write(Cart *c, uint16_t a, uint8_t v) {
  * enabled; the IRQ asserts when it wraps (SS88006: only the low 4, 8 or 12
  * bits count, the rest keep their value) and stays until acknowledged.
  * Returns the counting bits (0: stopped); *irq: whether a wrap asserts it. */
+static int is_bandai(const Cart *c) {
+    return c->mapper == 16 || c->mapper == 153 || c->mapper == 157 || c->mapper == 159;
+}
+
 static uint16_t count16_mask(const Cart *c, int *irq) {
     uint8_t r = c->irq_ctrl;
     if (c->mapper == 69) { *irq = r & 1; return (r & 0x80) ? 0xFFFF : 0; }
     *irq = 1;
+    if (is_bandai(c)) return (r & 1) ? 0xFFFF : 0;  /* IRQ at the clock that finds 0 (Mesen2) */
     if (c->mapper != 18 || !(r & 1)) return 0;
     return (r & 8) ? 0x000F : (r & 4) ? 0x00FF : (r & 2) ? 0x0FFF : 0xFFFF;
 }
@@ -199,7 +206,7 @@ int64_t cart_cycles_to_irq(const Cart *c, uint64_t cycle) {
     if (c->mapper == 19) {
         if (!c->n163_irq_enable || c->n163_counter >= 0x7FFF) return -1;
         need = 0x7FFF - c->n163_counter;
-    } else if (c->mapper == 18 || c->mapper == 69) {
+    } else if (c->mapper == 18 || c->mapper == 69 || is_bandai(c)) {
         int irq;
         uint16_t mask = count16_mask(c, &irq);
         if (!mask || !irq) return -1;
@@ -521,6 +528,113 @@ static void n175_write(Cart *c, uint16_t a, uint8_t v) {
     n163_write(c, a, v);
 }
 
+/* ---- I2C serial EEPROMs (Bandai 16, 157, 159): START = SDA falls while SCL
+ * is high, STOP = SDA rises; a bit per SCL rise, MSB first; after 8 bits an
+ * acknowledge clock (the receiver pulls SDA low). 24C02: device byte $A0
+ * (write) / $A1 (read), then for writes a word address and data (8-byte
+ * pages). X24C01: no device byte; 7 address bits then R/W, data in 4-byte
+ * pages (its MSB-first order reverses the LSB-first bytes Bandai's code
+ * sends; the game reads them back the same way). Reads go on while the CPU
+ * acknowledges each byte. The chip changes its SDA while SCL is low. */
+enum { EE_IDLE, EE_DEVICE, EE_ADDR, EE_WRITE, EE_READ };
+
+static void ee_rise(Eeprom *e, int sda) {
+    if (e->state == EE_IDLE) return;
+    if (e->bit < 8) {
+        if (e->state != EE_READ) e->shift = (uint8_t)(e->shift << 1 | sda);
+        e->bit++;
+        return;
+    }
+    if (e->state == EE_READ && sda) e->next = EE_IDLE;  /* no acknowledge: the CPU is done */
+    e->state = e->next;
+    e->bit = 0;
+}
+
+static void ee_fall(Cart *c, Eeprom *e) {
+    uint8_t *m = c->prg_ram + e->base;
+    e->out = 1;
+    if (e->state == EE_READ) {
+        if (e->bit < 8) e->out = (m[e->addr] >> (7 - e->bit)) & 1;
+        else { e->next = EE_READ; e->addr = (uint8_t)((e->addr + 1) % e->size); }
+        return;
+    }
+    if (e->state == EE_IDLE || e->bit < 8) return;
+    uint8_t b = e->shift, page = e->c01 ? 3 : 7;
+    e->out = 0;  /* acknowledge the byte */
+    if (e->state == EE_DEVICE) {
+        if ((b & 0xFE) == 0xA0) e->next = (b & 1) ? EE_READ : EE_ADDR;
+        else { e->out = 1; e->next = EE_IDLE; }  /* another device */
+    } else if (e->state == EE_ADDR && e->c01) {
+        e->addr = (uint8_t)((b >> 1) % e->size);
+        e->next = (b & 1) ? EE_READ : EE_WRITE;
+    } else if (e->state == EE_ADDR) {
+        e->addr = (uint8_t)(b % e->size);
+        e->next = EE_WRITE;
+    } else {
+        m[e->addr] = b;
+        e->addr = (uint8_t)((e->addr & ~page) | ((e->addr + 1) & page));
+        e->next = EE_WRITE;
+    }
+}
+
+static void ee_lines(Cart *c, Eeprom *e, int scl, int sda) {
+    if (e->scl && scl && e->sda != sda) {  /* SDA moved while SCL is high */
+        e->state = sda ? EE_IDLE : (e->c01 ? EE_ADDR : EE_DEVICE);
+        e->bit = 0;
+        e->out = 1;
+    } else if (!e->scl && scl) {
+        ee_rise(e, sda);
+    } else if (e->scl && !scl) {
+        ee_fall(c, e);
+    }
+    e->scl = (uint8_t)scl;
+    e->sda = (uint8_t)sda;
+}
+
+/* ---- Bandai FCG (16, 153, 157, 159). Registers by the low 4 address bits:
+ * 0-7 1 KB CHR banks, 8 16 KB PRG at $8000 (the last bank fixed at $C000),
+ * 9 mirroring, A IRQ control (bit 0 counting; acknowledges), B/C IRQ counter
+ * low/high, D EEPROM lines (bit 5 SCL, 6 SDA). The FCG-1/2 decodes them at
+ * $6000-$7FFF and B/C load the counter; the LZ93D50 at $8000-$FFFF, B/C
+ * load a latch that A copies into the counter. Mapper 16 with submapper 4
+ * is an FCG, 5 an LZ93D50; without a submapper both ranges work, each the
+ * way its chip does. 153: CHR RAM, $8000-$8003 bit 0 the 256 KB half of
+ * PRG, 8 KB battery RAM ($800D bit 5 RAM enable ignored). 157 (Datach):
+ * CHR RAM, $8000-$8003 bit 3 clocks the cartridge's X24C01, $6000 bit 3
+ * the barcode reader (0 here: no barcode is ever scanned). */
+static void fcg_update(Cart *c) {
+    uint32_t outer = 0;
+    if (c->mapper == 153) outer = (uint32_t)((c->chr_bank[0] | c->chr_bank[1] | c->chr_bank[2] | c->chr_bank[3]) & 1) << 4;
+    set_prg16(c, 0, outer | (c->prg_bank[0] & 0x0Fu));
+    set_prg16(c, 1, outer | 0x0Fu);
+    for (int i = 0; i < 8; i++) set_chr(c, i, 1, c->chr_ram ? (uint32_t)i : c->chr_bank[i]);
+}
+
+static void fcg_write(Cart *c, uint16_t a, uint8_t v) {
+    int lz = a >= 0x8000, r = a & 0x0F;
+    if (r < 8) {
+        c->chr_bank[r] = v;
+        if (c->mapper == 157 && r < 4 && c->eeprom_count > 1) ee_lines(c, &c->eeprom[1], (v >> 3) & 1, c->eeprom[1].sda);
+    } else if (r == 8) {
+        c->prg_bank[0] = v;
+    } else if (r == 9 && !c->four_screen) {
+        static const int MIRROR[4] = {MIRROR_VERTICAL, MIRROR_HORIZONTAL, MIRROR_SINGLE_LOW, MIRROR_SINGLE_HIGH};
+        c->mirroring = MIRROR[v & 3];
+    } else if (r == 0xA) {
+        c->irq_ctrl = v & 1;
+        c->irq_line = 0;
+        if (lz) c->irq_count16 = c->irq_reload16;
+    } else if (r == 0xB || r == 0xC) {
+        uint16_t *t = lz ? &c->irq_reload16 : &c->irq_count16;
+        *t = r == 0xB ? (uint16_t)((*t & 0xFF00) | v) : (uint16_t)((*t & 0x00FF) | v << 8);
+    } else if (r == 0xD && lz && c->eeprom_count) {
+        int sda = (v >> 6) & 1;
+        ee_lines(c, &c->eeprom[0], (v >> 5) & 1, sda);
+        if (c->eeprom_count > 1) ee_lines(c, &c->eeprom[1], c->eeprom[1].scl, sda);  /* SDA is shared */
+    }
+    fcg_update(c);
+}
+
 static void update_banks(Cart *c) {
     uint32_t n16 = c->prg_size / 0x4000;
     switch (c->mapper) {
@@ -554,6 +668,7 @@ static void update_banks(Cart *c) {
     case 19: case 210: n163_update(c); break;
     case 9: case 10: mmc2_update(c); break;
     case 18: case 69: banks8_update(c); break;
+    case 16: case 153: case 157: case 159: fcg_update(c); break;
     }
 }
 
@@ -580,8 +695,8 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         snprintf(err, errlen, "file shorter than its header says");
         return -1;
     }
-    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 18, 19, 21, 22, 23, 25, 66, 69, 71, 79, 87,
-                                    185, 206, 210};
+    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 25, 66, 69, 71, 79,
+                                    87, 153, 157, 159, 185, 206, 210};
     int ok = 0;
     for (size_t i = 0; i < sizeof SUPPORTED / sizeof *SUPPORTED; i++) ok |= c->mapper == SUPPORTED[i];
     if (!ok) {
@@ -601,6 +716,9 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
     c->chr_latch[0] = c->chr_latch[1] = 1;  /* MMC2/MMC4: $FE (power-on state unknown) */
     c->vrc2 = c->mapper == 22 || ((c->mapper == 23 || c->mapper == 25) && c->submapper == 3);
     c->prg_ram_size = 0x2000;
+    /* power-on RAM is not zero on hardware; Famicom Jump II (153) jams on
+     * all-zero RAM with no save (nesdev), $FF boots it */
+    if (c->mapper == 153) memset(c->prg_ram, 0xFF, 0x2000);
     if (c->mapper == 5) {
         /* NES 2.0 byte 10: PRG RAM and NVRAM sizes (64 << shift); else the most a board has */
         uint32_t ram = (d[10] & 15) ? 64u << (d[10] & 15) : 0, nv = (d[10] >> 4) ? 64u << (d[10] >> 4) : 0;
@@ -608,6 +726,20 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         c->prg_ram_size = total >= 0x2000 && total <= 0x10000 ? total : 0x10000;
         c->mmc5_prg_mode = 3;
         c->mmc5_prg[4] = 0xFF;  /* power-on: the last bank at $E000 (reset vector) */
+    }
+    /* Bandai EEPROMs, kept in prg_ram (saved like battery RAM): 159 an X24C01;
+     * 157 the Datach's 24C02, plus a cartridge X24C01 if the NES 2.0 header
+     * lists NVRAM (Battle Rush); 16 a 24C02 on an LZ93D50 with NVRAM in the
+     * header, or, without a submapper, a battery. */
+    int nvram = nes2 && (d[10] >> 4);
+    int c02 = c->mapper == 157 || (c->mapper == 16 && (c->submapper == 5 ? nvram : c->submapper == 0 && c->battery));
+    int c01 = c->mapper == 159 || (c->mapper == 157 && nvram);
+    if (c02 || c01) {
+        uint16_t base = 0;
+        if (c02) { c->eeprom[c->eeprom_count++] = (Eeprom){.size = 256, .base = base, .scl = 1, .sda = 1, .out = 1}; base = 256; }
+        if (c01) c->eeprom[c->eeprom_count++] = (Eeprom){.size = 128, .base = base, .c01 = 1, .scl = 1, .sda = 1, .out = 1};
+        c->prg_ram_size = base + (c01 ? 128u : 0u);
+        c->battery = 1;
     }
     update_banks(c);
     return 0;
@@ -624,6 +756,11 @@ uint8_t cart_cpu_read(Cart *c, uint16_t a, uint8_t open_bus) {
         int w = (a >> 13) & 3;
         return ((c->prg_ram_window >> w & 1) ? c->prg_ram : c->prg)[c->prg_off[w] + (a & 0x1FFF)];
     }
+    if (a >= 0x6000 && c->eeprom_count) {  /* bit 4: the EEPROMs' SDA (open drain: ANDed) */
+        int sda = c->eeprom[0].out & (c->eeprom_count > 1 ? c->eeprom[1].out : 1);
+        return (uint8_t)((open_bus & (c->mapper == 157 ? 0xE7 : 0xEF)) | sda << 4);
+    }
+    if (a >= 0x6000 && is_bandai(c) && c->mapper != 153) return open_bus;
     if (a >= 0x6000) return (c->rom_at_6000 ? c->prg : c->prg_ram)[c->ram_off + (a - 0x6000)];
     if (c->mapper == 5 && a >= 0x5000) return mmc5_read(c, a, open_bus);
     if (c->mapper == 19) return n163_read(c, a, open_bus);
@@ -674,12 +811,16 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     if (a < 0x8000 && cart_is_reg(c, a)) {  /* 79: $4100 (A8 set), 87: $6000-$7FFF, 5, 19: $5xxx */
         if (c->mapper == 5) return mmc5_write(c, a, v);
         if (c->mapper == 19) { n163_write(c, a, v); return 0; }
+        if (c->mapper == 16) { fcg_write(c, a, v); return 1; }
         c->latch = v;
         update_banks(c);
         return c->mapper == 79;  /* 87 switches CHR only */
     }
     if (a < 0x6000) return 0;
-    if (a < 0x8000) { if (!c->rom_at_6000) c->prg_ram[c->ram_off + (a - 0x6000)] = v; return 0; }
+    if (a < 0x8000) {
+        if (!c->rom_at_6000 && !cart_6000_is_io(c)) c->prg_ram[c->ram_off + (a - 0x6000)] = v;
+        return 0;
+    }
     if (c->prg_ram_window >> ((a >> 13) & 3) & 1) {  /* MMC5: PRG RAM in a ROM window */
         c->prg_ram[c->prg_off[(a >> 13) & 3] + (a & 0x1FFF)] = v;
         return 0;
@@ -694,6 +835,8 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     case 18: ss88006_write(c, a, v); return 1;
     case 69: fme7_write(c, a, v); return 1;  /* command 8 can map ROM or RAM at $6000 */
     case 210: n175_write(c, a, v); return 1;
+    case 16: if (c->submapper == 4) return 0; /* FCG-1/2: $6000-$7FFF only */ /* fall through */
+    case 153: case 157: case 159: fcg_write(c, a, v); return 1;
     case 206:  /* bank select and data only; 3 select bits */
         if (a < 0xA000) mmc3_write(c, a, (a & 1) ? v : v & 7);
         return 1;

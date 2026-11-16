@@ -355,6 +355,67 @@ class TestMappers(unittest.TestCase):
         self.assertEqual(peek(rom, 1), 0x63)
         self.assertEqual(peek(rom, 0), 0x5A)
 
+    # ---- Bandai FCG (16, 159): FCG-1/2 at $6000 (submapper 4), LZ93D50 at $8000 (5) ----
+    @staticmethod
+    def bandai(code, mapper=16, submapper=5, ram_sizes=None):
+        prg = bytearray(0x20000)
+        for b in range(8):
+            prg[b * 0x4000 + 0x100] = 0x60 + b
+        put(prg, 0x1C200, code)  # in the fixed bank, room for long I2C sequences
+        base = 0x6000 if submapper == 4 else 0x8000  # IRQ: $00/$01 = loop count, counting off (acknowledges)
+        put(prg, 0x1E400, bytes([0xA5, 0x10, 0x85, 0x00, 0xA5, 0x11, 0x85, 0x01]) + lda_sta(0x00, base + 0xA) + b"\x40")
+        vectors(prg, 0x20000, 0xC200, irq=0xE400)
+        return ines(mapper, prg, bytes(0x2000), submapper=submapper, ram_sizes=ram_sizes)
+
+    def test_16_bandai_prg_and_irq_on_time(self):
+        """PRG register 8; IRQ counter 1000: the FCG-1/2 loads the counter
+        directly, the LZ93D50 a latch copied by the enable write; the IRQ
+        comes at the clock that finds 0, after ~1,000 cycles = ~125 turns."""
+        for sub, base in ((4, 0x6000), (5, 0x8000)):
+            with self.subTest(submapper=sub):
+                rom = self.bandai(lda_sta(0x02, base + 8) + lda_abs(0x8100) + END, submapper=sub)
+                self.assertEqual(peek(rom), 0x62)
+                code = (bytes([0x78]) + lda_sta(0x40, 0x4017) + lda_sta(1000 & 0xFF, base + 0xB) +
+                        lda_sta(1000 >> 8, base + 0xC) + lda_sta(0x01, base + 0xA) + bytes([0x58]))
+                code += ram_loop(0xC200 + len(code))
+                rom = self.bandai(code, submapper=sub)
+                self.assertAlmostEqual(peek(rom, 0) + 256 * peek(rom, 1), 125, delta=2)
+
+    @staticmethod
+    def i2c(*ops):
+        """6502 code bit-banging $800D (bit 5 SCL, 6 SDA, 7 read) and reading
+        SDA at $6000 bit 4. ops: ("start",), ("stop",), ("byte", v) = send v
+        MSB first + an acknowledge clock, ("read",) = 8 bits into $00 + NACK."""
+        def lines(scl, sda, rd=0):
+            return lda_sta(scl << 5 | sda << 6 | rd << 7, 0x800D)
+        out = b""
+        for op in ops:
+            if op[0] == "start":
+                out += lines(1, 1) + lines(1, 0) + lines(0, 0)
+            elif op[0] == "stop":
+                out += lines(0, 0) + lines(1, 0) + lines(1, 1)
+            elif op[0] == "byte":
+                for k in range(7, -1, -1):
+                    b = op[1] >> k & 1
+                    out += lines(0, b) + lines(1, b) + lines(0, b)
+                out += lines(0, 1, 1) + lines(1, 1, 1) + lines(0, 1, 1)  # the chip's acknowledge
+            else:  # LDA $6000 / AND #$10 / CMP #$10 (carry = bit) / ROL $00, per bit
+                for _ in range(8):
+                    out += lines(0, 1, 1) + lines(1, 1, 1) + bytes([0xAD, 0x00, 0x60, 0x29, 0x10, 0xC9, 0x10, 0x26, 0x00])
+                out += lines(0, 1, 1) + lines(1, 1, 1) + lines(0, 1, 1)  # no acknowledge: done
+        return out
+
+    def test_16_159_eeprom_write_then_read(self):
+        """24C02 (16, NVRAM 256 bytes): device $A0, address 5, data $4B; then
+        a random read (address, repeated start, $A1). X24C01 (159): address
+        and R/W in one byte. Both read back $4B."""
+        c02 = self.i2c(("start",), ("byte", 0xA0), ("byte", 0x05), ("byte", 0x4B), ("stop",),
+                       ("start",), ("byte", 0xA0), ("byte", 0x05), ("start",), ("byte", 0xA1), ("read",), ("stop",))
+        c01 = self.i2c(("start",), ("byte", 0x05 << 1), ("byte", 0x4B), ("stop",),
+                       ("start",), ("byte", 0x05 << 1 | 1), ("read",), ("stop",))
+        self.assertEqual(peek(self.bandai(c02 + END[2:], ram_sizes=0x20)), 0x4B)  # END without STA $00
+        self.assertEqual(peek(self.bandai(c01 + END[2:], mapper=159, submapper=0)), 0x4B)
+
 
 if __name__ == "__main__":
     unittest.main()

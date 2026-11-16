@@ -12,7 +12,7 @@
  * are the frame IRQ and DMC sample fetches. The MMC3 IRQ (M7) asserts on a
  * PPU A12 rise: while it is armed, the PPU is caught up every cycle around
  * the sprite fetches (dots 255-330 of rendering lines). The VRC4, Namco
- * 163, SS88006 and FME-7 IRQs count CPU cycles: like an APU event, the next
+ * 163, SS88006, FME-7 and Bandai FCG IRQs count CPU cycles: like an APU event, the next
  * one ends the batch (cart_run). The MMC5 counts scanlines: while its IRQ is on, every line
  * start ends a batch, and a $5204 read catches the PPU up first. */
 #include "nes.h"
@@ -257,8 +257,10 @@ static void map_memory(Nes *n) {
     for (int i = 0; i < 4; i++) c->read_map[i] = c->write_map[i] = n->ram;
     const uint8_t *m6 = n->cart.rom_at_6000 ? n->cart.prg : n->cart.prg_ram;  /* FME-7: ROM there */
     for (int i = 12; i < 16; i++) c->read_map[i] = c->write_map[i] = (uint8_t *)m6 + n->cart.ram_off + (i - 12) * 0x800;
-    if (n->cart.mapper == 87 || n->cart.rom_at_6000)  /* 87: its register; ROM: writes ignored (slow path) */
+    if (n->cart.rom_at_6000)  /* writes ignored (slow path) */
         for (int i = 12; i < 16; i++) c->write_map[i] = NULL;
+    if (cart_6000_is_io(&n->cart))  /* registers, EEPROM lines */
+        for (int i = 12; i < 16; i++) c->read_map[i] = c->write_map[i] = NULL;
     for (int i = 16; i < 32; i++) {  /* 8 KB windows from the mapper, 4 pages each */
         int w = (i - 16) >> 2;
         const uint8_t *mem = (n->cart.prg_ram_window >> w & 1) ? n->cart.prg_ram : n->cart.prg;
@@ -324,8 +326,8 @@ void nes_step(Nes *n) {
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 4 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
-                                4: MMC2/MMC4, SS88006, FME-7 */
+enum { STATE_VERSION = 5 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
+                                4: MMC2/MMC4, SS88006, FME-7; 5: Bandai FCG EEPROMs */
 
 typedef struct {
     char magic[4];  /* "NESS" */

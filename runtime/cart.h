@@ -3,7 +3,7 @@
  * Dreams, 66 GxROM, 71 Camerica, 79 NINA-03/06, 87 Jaleco J87, 185 CNROM
  * with CHR protection, 206 Namco 108, 21/22/23/25 Konami VRC2/VRC4, 5 MMC5,
  * 19 Namco 163, 9 MMC2, 10 MMC4, 18 Jaleco SS88006, 69 Sunsoft FME-7, 210
- * Namco 175/340 (nesdev wiki, see cart.c). Every mapper only sets the bank
+ * Namco 175/340, 16/153/157/159 Bandai FCG (nesdev wiki, see cart.c). Every mapper only sets the bank
  * tables below; reads go through them. MMC5 and Namco 163 also map the
  * nametables (cart_nt_read), and MMC5 has its own background banks. */
 #ifndef NES_CART_H
@@ -13,6 +13,15 @@
 #include <stdint.h>
 
 enum { MIRROR_HORIZONTAL, MIRROR_VERTICAL, MIRROR_FOUR, MIRROR_SINGLE_LOW, MIRROR_SINGLE_HIGH };
+
+/* An I2C serial EEPROM (Bandai boards: 24C02, or X24C01 with no device byte),
+ * its bytes in Cart.prg_ram at `base` (battery saves keep them). */
+typedef struct {
+    uint8_t scl, sda;                /* the lines as last driven */
+    uint8_t state, next, bit, shift, out;  /* out: the chip's SDA (0 = pulled low) */
+    uint8_t addr, c01;               /* c01: X24C01 (7-bit address, bits LSB first) */
+    uint16_t base, size;
+} Eeprom;
 
 typedef struct Cart {
     uint8_t *prg, *chr;
@@ -59,6 +68,9 @@ typedef struct Cart {
     uint8_t chr_latch[2];            /* MMC2/MMC4: 0 = $FD, 1 = $FE, per pattern table */
     uint8_t fme7_cmd, fme7_6000, irq_ctrl;  /* irq_ctrl: FME-7 command $D, SS88006 $F001 */
     uint16_t irq_count16, irq_reload16;     /* 16-bit down counters (SS88006 reload: $E000-$E003) */
+    /* Bandai FCG (16, 153, 157, 159): prg_bank[0], chr_bank, irq_ctrl/count16/reload16 above */
+    Eeprom eeprom[2];                /* [0] on the board, [1] Datach cartridge (157) */
+    uint8_t eeprom_count;
 } Cart;
 
 /* Returns 0 on success, else writes a message to err. Copies the data. */
@@ -75,7 +87,13 @@ static inline int cart_is_reg(const Cart *c, uint16_t a) {
     if (c->mapper == 79) return (a & 0xE100) == 0x4100;
     if (c->mapper == 5) return a >= 0x5000 && a < 0x6000;
     if (c->mapper == 19) return a >= 0x4800 && a < 0x6000;
+    if (c->mapper == 16 && c->submapper != 5) return a >= 0x6000;  /* FCG-1/2 */
     return c->mapper == 87 && a >= 0x6000;
+}
+/* $6000-$7FFF is no memory: a register or an EEPROM line (reads and writes
+ * take the bus's slow path). */
+static inline int cart_6000_is_io(const Cart *c) {
+    return c->mapper == 87 || c->mapper == 16 || c->mapper == 157 || c->mapper == 159;
 }
 /* A CPU read the PPU must be caught up for first (MMC5 scanline IRQ status). */
 static inline int cart_read_syncs(const Cart *c, uint16_t a) { return c->mapper == 5 && a == 0x5204; }
@@ -115,7 +133,7 @@ void cart_ppu_address(Cart *c, uint16_t a, uint64_t ppu_dot);
 /* MMC3: the IRQ could assert at the next A12 rise (the bus then catches up
  * the PPU finely around sprite fetches). */
 int cart_irq_armed(const Cart *c);
-/* VRC4, Namco 163, SS88006, FME-7: the IRQ counter counts CPU cycles. cart_run runs it to `cycle` (the
+/* VRC4, Namco 163, SS88006, FME-7, Bandai FCG: the IRQ counter counts CPU cycles. cart_run runs it to `cycle` (the
  * bus calls it before reading irq_line); cart_cycles_to_irq says how many
  * cycles after `cycle` it fires next, -1 if it is off. */
 void cart_run(Cart *c, uint64_t cycle);
