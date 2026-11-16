@@ -140,7 +140,7 @@ int assumed_layout(const Rom *r, int layout[4]) {
         for (int w = 0; w < 4; w++) layout[w] = w % n8;
         return 0;
     case 1: case 2: case 71:     /* MMC1 (mode 3), UxROM, Camerica: last 16 KB fixed */
-    case 4: case 206:            /* MMC3, Namco 108: $E000 fixed, $C000 in mode 0 */
+    case 4: case 118: case 206:  /* MMC3, TxSROM, Namco 108: $E000 fixed, $C000 in mode 0 */
     case 21: case 22: case 23: case 25:  /* VRC2/VRC4: the same, swap mode off */
         layout[2] = n8 - 2;
         layout[3] = n8 - 1;

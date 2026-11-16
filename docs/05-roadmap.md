@@ -179,6 +179,10 @@ M7a (runtime):
   and battery RAM, the Datach's two EEPROMs. Not done: the Datach barcode
   reader. 3,270 of 4,031 ROMs (95% of licensed); 26 games boot; 5
   identical to the interpreter (06).
+- [x] M7h: TxSROM (118): MMC3 with each nametable's CIRAM page from bit 7
+  of the CHR bank register for that page; MMC3 banking and IRQ reused.
+  3,280 of 4,031 ROMs (95% of licensed); 7 games boot; 3 identical to the
+  interpreter (06).
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

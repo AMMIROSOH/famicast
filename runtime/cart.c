@@ -5,7 +5,8 @@
  * "VRC IRQ" (21, 22, 23, 25), "MMC5" (5), "Namco 163" (19), "MMC2" (9),
  * "MMC4" (10), "INES Mapper 018" (Jaleco SS88006), "Sunsoft FME-7" (69),
  * "INES Mapper 210" (Namco 175/340), "Bandai FCG board", "INES Mapper 016",
- * "INES Mapper 153", "INES Mapper 157", "INES Mapper 159"; the EEPROMs from
+ * "INES Mapper 153", "INES Mapper 157", "INES Mapper 159", "INES Mapper 118"
+ * (TxSROM); the EEPROMs from
  * the 24C02/X24C01 datasheets' I2C protocol. */
 #include "cart.h"
 
@@ -69,6 +70,11 @@ static void mmc3_update(Cart *c) {
     set_chr(c, 5 ^ inv, 1, c->reg[3]);
     set_chr(c, 6 ^ inv, 1, c->reg[4]);
     set_chr(c, 7 ^ inv, 1, c->reg[5]);
+    /* TxSROM: CHR bank bit 7 drives CIRAM A10, so nametable q follows the
+     * register of CHR page q ($0000-$0FFF): R0/R1 (2 KB, two nametables
+     * each), or R2-R5 with A12 inversion. The mirroring register does nothing. */
+    if (c->mapper == 118)
+        for (int q = 0; q < 4; q++) c->txsrom_nt[q] = (inv ? c->reg[2 + q] : c->reg[q >> 1]) >> 7;
 }
 
 /* Mapper 185: CHR reads only work while the latch matches the board's diodes
@@ -397,6 +403,7 @@ static uint8_t n163_read(Cart *c, uint16_t a, uint8_t open_bus) {
 
 uint8_t cart_nt_read(Cart *c, const uint8_t *ciram, uint16_t a) {
     int q = (a >> 10) & 3, off = a & 0x3FF;
+    if (c->mapper == 118) return ciram[c->txsrom_nt[q] * 0x400 + off];
     if (c->mapper == 19) {
         uint8_t v = c->n163_nt[q];
         return v >= 0xE0 ? ciram[(v & 1) * 0x400 + off] : c->chr[((uint32_t)v * 0x400 + (uint32_t)off) % c->chr_size];
@@ -411,6 +418,7 @@ uint8_t cart_nt_read(Cart *c, const uint8_t *ciram, uint16_t a) {
 
 void cart_nt_write(Cart *c, uint8_t *ciram, uint16_t a, uint8_t v) {
     int q = (a >> 10) & 3, off = a & 0x3FF;
+    if (c->mapper == 118) { ciram[c->txsrom_nt[q] * 0x400 + off] = v; return; }
     if (c->mapper == 19) {
         if (c->n163_nt[q] >= 0xE0) ciram[(c->n163_nt[q] & 1) * 0x400 + off] = v;  /* CHR ROM: ignored */
         return;
@@ -649,7 +657,7 @@ static void update_banks(Cart *c) {
     case 1: mmc1_update(c); break;
     case 2: set_prg16(c, 0, c->latch); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, 0); break;
     case 3: set_prg16(c, 0, 0); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, (uint32_t)c->latch * 8); break;
-    case 4: mmc3_update(c); break;
+    case 4: case 118: mmc3_update(c); break;
     case 7:
         set_prg32(c, c->latch & 7);
         set_chr(c, 0, 8, 0);
@@ -703,7 +711,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         return -1;
     }
     static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 25, 66, 69, 71, 79,
-                                    87, 153, 157, 159, 185, 206, 210};
+                                    87, 118, 153, 157, 159, 185, 206, 210};
     int ok = 0;
     for (size_t i = 0; i < sizeof SUPPORTED / sizeof *SUPPORTED; i++) ok |= c->mapper == SUPPORTED[i];
     if (!ok) {
@@ -719,7 +727,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
     memcpy(c->prg, d + off, c->prg_size);
     if (!c->chr_ram) memcpy(c->chr, d + off + c->prg_size, c->chr_size);
     if (c->mapper == 1) c->reg[0] = 0x0C;          /* power-on: last bank fixed at $C000 */
-    if (c->mapper == 4 || c->mapper == 206) { c->reg[6] = 0; c->reg[7] = 1; }
+    if (cart_is_mmc3(c) || c->mapper == 206) { c->reg[6] = 0; c->reg[7] = 1; }
     c->chr_latch[0] = c->chr_latch[1] = 1;  /* MMC2/MMC4: $FE (power-on state unknown) */
     c->vrc2 = c->mapper == 22 || ((c->mapper == 23 || c->mapper == 25) && c->submapper == 3);
     c->prg_ram_size = 0x2000;
@@ -801,7 +809,7 @@ static void mmc3_write(Cart *c, uint16_t a, uint8_t v) {
         mmc3_update(c);
         break;
     case 1:
-        if (!odd && !c->four_screen) c->mirroring = (v & 1) ? MIRROR_HORIZONTAL : MIRROR_VERTICAL;
+        if (!odd && !c->four_screen && c->mapper != 118) c->mirroring = (v & 1) ? MIRROR_HORIZONTAL : MIRROR_VERTICAL;
         break;  /* odd: PRG RAM protect, ignored */
     case 2:
         if (!odd) c->irq_latch = v;
@@ -836,7 +844,7 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     case 0: case 5: case 79: case 87: return 0;
     case 19: n163_write(c, a, v); return 1;
     case 1: mmc1_write(c, a, v, cycle); return 1;
-    case 4: mmc3_write(c, a, v); return 1;
+    case 4: case 118: mmc3_write(c, a, v); return 1;
     case 21: case 22: case 23: case 25: vrc_write(c, a, v); return 1;
     case 9: case 10: mmc2_write(c, a, v); return 1;
     case 18: ss88006_write(c, a, v); return 1;
@@ -860,7 +868,7 @@ void cart_chr_write(Cart *c, uint16_t a, uint8_t v) {
 }
 
 void cart_ppu_address(Cart *c, uint16_t a, uint64_t dot) {
-    if (c->mapper != 4) return;
+    if (!cart_is_mmc3(c)) return;
     uint8_t a12 = (a >> 12) & 1;
     if (a12 && !c->a12) {
         if (dot - c->a12_low_since >= A12_FILTER_DOTS) {
@@ -879,5 +887,5 @@ void cart_ppu_address(Cart *c, uint16_t a, uint64_t dot) {
 }
 
 int cart_irq_armed(const Cart *c) {
-    return c->mapper == 4 && c->irq_enabled && (c->irq_counter <= 1 || c->irq_reload);
+    return cart_is_mmc3(c) && c->irq_enabled && (c->irq_counter <= 1 || c->irq_reload);
 }

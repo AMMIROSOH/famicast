@@ -18,7 +18,7 @@ static uint8_t pal_index(uint16_t a) {
 
 /* Every PPU bus access drives A12 (MMC3 counts its rises, cart.c). */
 static inline void bus_address(Ppu *p, uint16_t a) {
-    if (p->cart->mapper == 4) cart_ppu_address(p->cart, a, p->dots);
+    if (cart_is_mmc3(p->cart)) cart_ppu_address(p->cart, a, p->dots);
 }
 
 static uint8_t mem_read(Ppu *p, uint16_t a) {

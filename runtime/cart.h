@@ -3,7 +3,8 @@
  * Dreams, 66 GxROM, 71 Camerica, 79 NINA-03/06, 87 Jaleco J87, 185 CNROM
  * with CHR protection, 206 Namco 108, 21/22/23/25 Konami VRC2/VRC4, 5 MMC5,
  * 19 Namco 163, 9 MMC2, 10 MMC4, 18 Jaleco SS88006, 69 Sunsoft FME-7, 210
- * Namco 175/340, 16/153/157/159 Bandai FCG (nesdev wiki, see cart.c). Every mapper only sets the bank
+ * Namco 175/340, 16/153/157/159 Bandai FCG, 118 TxSROM (nesdev wiki, see
+ * cart.c). Every mapper only sets the bank
  * tables below; reads go through them. MMC5 and Namco 163 also map the
  * nametables (cart_nt_read), and MMC5 has its own background banks. */
 #ifndef NES_CART_H
@@ -39,6 +40,7 @@ typedef struct Cart {
     uint8_t mmc1_shift, mmc1_count;
     uint64_t mmc1_last_write;        /* CPU cycle (consecutive writes are ignored) */
     uint8_t mmc3_select;
+    uint8_t txsrom_nt[4];            /* TxSROM (118): CIRAM page of each nametable */
     uint8_t irq_latch, irq_counter, irq_reload, irq_enabled, irq_line;
     uint8_t a12;                     /* PPU address line 12, last seen */
     uint64_t a12_low_since;          /* PPU dot when A12 went low */
@@ -95,6 +97,8 @@ static inline int cart_is_reg(const Cart *c, uint16_t a) {
 static inline int cart_6000_is_io(const Cart *c) {
     return c->mapper == 87 || c->mapper == 16 || c->mapper == 157 || c->mapper == 159;
 }
+/* MMC3 and TxSROM (an MMC3 board wiring CHR bank bit 7 to the nametables) */
+static inline int cart_is_mmc3(const Cart *c) { return c->mapper == 4 || c->mapper == 118; }
 /* A CPU read the PPU must be caught up for first (MMC5 scanline IRQ status). */
 static inline int cart_read_syncs(const Cart *c, uint16_t a) { return c->mapper == 5 && a == 0x5204; }
 /* Returns 1 if the PRG mapping may have changed (the bus re-maps its pages). */
@@ -102,9 +106,9 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cpu_cycle);
 /* PPU $0000-$1FFF (inline: the PPU fetches every few dots) */
 static inline uint8_t cart_chr_read(Cart *c, uint16_t a) { return c->chr[c->chr_off[(a >> 10) & 7] + (a & 0x3FF)]; }
 void cart_chr_write(Cart *c, uint16_t a, uint8_t v);
-/* MMC5 and Namco 163 map each 1 KB nametable themselves: cart_nt_read/write
+/* MMC5, Namco 163 and TxSROM map each 1 KB nametable themselves: cart_nt_read/write
  * (ciram = the PPU's nametable RAM). The rest use cart_nt_index. */
-static inline int cart_custom_nt(const Cart *c) { return c->mapper == 5 || c->mapper == 19; }
+static inline int cart_custom_nt(const Cart *c) { return c->mapper == 5 || c->mapper == 19 || c->mapper == 118; }
 uint8_t cart_nt_read(Cart *c, const uint8_t *ciram, uint16_t a);
 void cart_nt_write(Cart *c, uint8_t *ciram, uint16_t a, uint8_t v);
 /* MMC5 background fetches (v = the PPU's VRAM address, for ExRAM's per-tile

@@ -3,6 +3,23 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · M7h: TxSROM (118)
+- **Unit ROM** (`tests/test_mappers.py`): R0 = R1 = $80 makes all four
+  nametables CIRAM page 1 ($2C00 shows a $2000 write; the mirroring
+  register is ignored); with CHR A12 inversion R2-R5 = 0, 1, 0, 1 is
+  vertical. Neither fits the header's mirroring. Mutation caught: R0/R1
+  used in inversion mode too.
+- **Boot smoke**: the 7 licensed titles reach a title, menu or play screen.
+  Armadillo's "Battle Box not connected" is its save peripheral on the
+  expansion port (not emulated); the game itself plays.
+- **Recompiled with `NES_AUTO_HINTS`, `--diff` 3,000 frames**: all identical.
+
+  | Game | Recompiled cycles |
+  |---|---|
+  | Ys III (Japan) | 99.97% |
+  | Pro Sport Hockey (USA) | 99.95% |
+  | Armadillo (Japan) | 99.94% |
+
 ## 2026-11-16 · M7g: Bandai FCG (16, 153, 157, 159)
 - **Unit ROMs** (`tests/test_mappers.py`): PRG register and IRQ on time
   (counter 1000: 125 turns of a RAM loop) for the FCG-1/2 (registers at
