@@ -117,15 +117,15 @@ static void dynamic_body(Buf *o, const Instr *ins) {
         if (*l.s[k]) bprintf(o, "        %s\n", l.s[k]);
 }
 
-/* Could this instruction write to $8000-$FFFF (a mapper register)? */
-static int may_write_rom(const Instr *i) {
+/* Could this instruction write to a PRG bank register (at bank_reg and up)? */
+static int may_write_rom(const Instr *i, int bank_reg) {
     static const char STORES[] = " STA STX STY SAX AHX SHX SHY TAS ASL LSR ROL ROR INC DEC SLO RLA SRE RRA DCP ISB ";
     char key[6];
     snprintf(key, sizeof key, " %s ", i->op->mn);
     const char *m = i->op->mode;
     if (!strstr(STORES, key) || !strcmp(m, "IMP") || !strcmp(m, "ACC") || m[0] == 'Z') return 0;
-    if (!strcmp(m, "ABS")) return i->operand >= 0x8000;
-    if (!strcmp(m, "ABX") || !strcmp(m, "ABY")) return i->operand + 0xFF >= 0x8000;
+    if (!strcmp(m, "ABS")) return i->operand >= bank_reg;
+    if (!strcmp(m, "ABX") || !strcmp(m, "ABY")) return i->operand + 0xFF >= bank_reg;
     return 1;  /* (zp,X), (zp),Y: unknown address */
 }
 
@@ -148,7 +148,8 @@ static void c_string(Buf *o, const char *s) {
 }
 
 void emit_program(Buf *o, Region *regions, int nregions, const char *rom_name, uint32_t prg_hash,
-                  int nbanks, int banked, const uint8_t *rom, size_t rom_size) {
+                  int nbanks, int bank_reg, const uint8_t *rom, size_t rom_size) {
+    const int banked = bank_reg != 0;
     static AddrSet starts[1];
     static Instr ins[0x10000];
     long nblocks = 0, ninstrs = 0;
@@ -186,7 +187,7 @@ void emit_program(Buf *o, Region *regions, int nregions, const char *rom_name, u
             snprintf(name, sizeof name, "b_%02X_%04X", bank, start);
             bprintf(o, "static void %s(Cpu *c) {\n", name);
             int stores = 0;
-            for (int k = 0; k < n - 1; k++) stores |= may_write_rom(&ins[k]);
+            for (int k = 0; k < n - 1; k++) stores |= may_write_rom(&ins[k], bank_reg);
             if (banked && stores)
                 bprintf(o, "    const uint8_t *const page = c->read_map[%d];  /* bank %d at $%04X */\n",
                         16 + w0 * 4, R->banks[w0], 0x8000 + w0 * 0x2000);
@@ -204,7 +205,7 @@ void emit_program(Buf *o, Region *regions, int nregions, const char *rom_name, u
                 bprintf(o, "    }\n");
                 int last = k == n - 1;
                 if (!strcmp(i->op->mn, "KIL")) bprintf(o, "    return;\n");
-                else if (banked && may_write_rom(i) && !last)
+                else if (banked && may_write_rom(i, bank_reg) && !last)
                     bprintf(o, "    if (c->poll_prev || c->read_map[%d] != page) return;\n", 16 + w0 * 4);
                 else if (!last) bprintf(o, "    if (c->poll_prev) return;\n");
                 int iw = window_of(i->pc), key = R->banks[iw] * 4 + iw;
@@ -221,7 +222,7 @@ void emit_program(Buf *o, Region *regions, int nregions, const char *rom_name, u
             else if (t >= 0) next[nnext++] = t;                       /* JMP abs, JSR */
             else if (!is_transfer(end)) next[nnext++] = after;        /* the next block starts here */
             if (nnext == 2 && next[0] == next[1]) nnext = 1;
-            if ((banked && may_write_rom(end)) || R->prog->straddle.b[end->pc]) nnext = 0;
+            if ((banked && may_write_rom(end, bank_reg)) || R->prog->straddle.b[end->pc]) nnext = 0;
             int chained = 0;
             for (int k = 0; k < nnext; k++) {
                 if (!R->prog->instrs.b[next[k]] || !starts->b[next[k]]) continue;

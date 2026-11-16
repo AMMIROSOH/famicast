@@ -17,6 +17,7 @@ detail yet.
 | Mesen2's delayed rendering-enable flag | idea for the odd-frame skip timing (confirmed by blargg 10-even_odd_timing) | from memory |
 | mmc3_test_2 (readme read), MMC1_A12 from the same mirror | MMC3 IRQ and A12 checks (M7) | freely distributed test ROMs | read |
 | nesdev wiki: MMC1, UxROM, CNROM, MMC3 (IRQ counter, A12 filter, "cycle 260"), AxROM, Color Dreams, GxROM, PPU sprite fetches | `runtime/cart.c`, sprite fetch timing | from memory |
+| nesdev wiki: NES 2.0 (mapper bits 8-11, submapper), INES Mapper 071, NINA-003-006 (79), INES Mapper 087, INES Mapper 185 (submappers 4-7), Namco 108 (206) | `runtime/cart.c` (M7c) | from memory; mapper 185 without a submapper uses the usual emulator guess (CHR on if latch & $0F and latch != $13), from memory |
 | Mesen2 APU reset behaviour (keep $4017 mode, clear IRQ inhibit; pulse/noise length counters zeroed and unhalted, triangle unaffected) | `apu_reset()` | from memory |
 | nesdev wiki "DMA" (halt, dummy and alignment cycles, get/put, DMC during OAM DMA) and Mesen2's DMA loop | `run_dma` in `runtime/nes.c` | from memory |
 | Test sources from the pinned nes-test-roms mirror: cpu_interrupts_v2/source/4-irq_and_dma.s, apu_reset/source/*.s, dmc_dma_during_read4/source/*.s | expected outputs and what each test measures | read |

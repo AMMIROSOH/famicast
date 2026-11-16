@@ -3,6 +3,37 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-16 · M7c: mappers 71, 79, 87, 185, 206
+- **Header survey** of a full ~4,000-ROM set (first 16 bytes of each dump):
+  all iNES; 18 NES 2.0 dumps on mappers 256-519 loaded as mapper 0-7
+  because byte 8 was ignored (515 ran as CNROM). Fixed, test in
+  `tests/test_ines.py`. The table of unsupported mappers by licensed count
+  chose these five (206, 87, 185 among the most common; 79, 71 the most
+  common unlicensed).
+- **Unit ROMs** (`tests/test_mappers.py`): each switches a bank and stores
+  the marker it reads. Mutation check: dropping mapper 87's swapped CHR bits
+  or decoding mapper 79 at $4000 (A8 clear) fails the tests.
+- **Boot smoke** (interpreter, 1,500 frames with Start presses): 15 of 15
+  (three per mapper) reach a title, menu or play screen; the mapper 185
+  games pass their CHR-protection check; four-screen Gauntlet (206) correct.
+- **Recompiled, `--diff` 3,000 frames of scripted play**, one game per mapper:
+
+  | Mapper | Game | Recompiled cycles (static) | With `NES_AUTO_HINTS` | `--diff` |
+  |---|---|---|---|---|
+  | 71 | Micro Machines (USA) | 0.3% | 99.97% | identical |
+  | 79 | Krazy Kreatures (NINA-06) | 98.7% | 99.98% | identical |
+  | 87 | City Connection (Japan) | 99.98% | (not needed) | identical |
+  | 185 | B-Wings (Japan) | 49.5% | 99.98% | identical |
+  | 206 | Karnov (USA) | 33.1% | 99.98% | identical |
+
+  Mapper 79's register is at $4100, below ROM: the recompiler ends a block
+  after any store at or above `prg_bank_reg()` (here $4100), so a bank
+  switch there is seen like one at $8000.
+- **Cross-platform frames**: Battle City frames 905-2400 from MSVC, MinGW
+  GCC 15 and Linux GCC 13 (WSL) builds are byte-identical, interpreted and
+  recompiled (a report of a missing shot on one Linux machine is therefore
+  not in the emulation).
+
 ## 2026-11-16 · Open items pass
 - **Play-to-recompile**: Kirby with no hints file: 7.2% of cycles recompiled
   before; after one 1,500-frame session in the real frontend (replaying the

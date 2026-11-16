@@ -1,7 +1,8 @@
 /* Cartridge: iNES loading and mappers.
  * Supported: 0 NROM, 1 MMC1, 2 UxROM, 3 CNROM, 4 MMC3, 7 AxROM, 11 Color
- * Dreams, 66 GxROM (nesdev wiki pages of the same names). Every mapper only
- * sets the bank tables below; reads go through them. */
+ * Dreams, 66 GxROM, 71 Camerica, 79 NINA-03/06, 87 Jaleco J87, 185 CNROM
+ * with CHR protection, 206 Namco 108 (nesdev wiki, see cart.c). Every mapper
+ * only sets the bank tables below; reads go through them. */
 #ifndef NES_CART_H
 #define NES_CART_H
 
@@ -34,6 +35,14 @@ void cart_free(Cart *c);
 
 /* CPU $4020-$FFFF. open_bus is returned for unmapped addresses. */
 uint8_t cart_cpu_read(Cart *c, uint16_t a, uint8_t open_bus);
+/* Is a CPU write to `a` a mapper register? (The bus catches the PPU up first:
+ * bank switches can be raster effects.) Mapper 79 decodes $4100 with A8 set
+ * ($4100-$5FFF), mapper 87 $6000-$7FFF; the rest $8000-$FFFF. */
+static inline int cart_is_reg(const Cart *c, uint16_t a) {
+    if (a >= 0x8000) return c->mapper != 0;
+    if (c->mapper == 79) return (a & 0xE100) == 0x4100;
+    return c->mapper == 87 && a >= 0x6000;
+}
 /* Returns 1 if the PRG mapping may have changed (the bus re-maps its pages). */
 int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cpu_cycle);
 /* PPU $0000-$1FFF (inline: the PPU fetches every few dots) */

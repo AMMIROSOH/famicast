@@ -193,7 +193,7 @@ uint8_t cpu_read(Cpu *c, uint16_t a) {
 void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
     Nes *n = c->bus;
     n->cpu.open_bus = v;
-    int mapper_reg = a >= 0x8000 && n->cart.mapper != 0;
+    int mapper_reg = cart_is_reg(&n->cart, a);
     if (!is_ppu(a) && a != 0x4014 && !mapper_reg) {
         add_dots(n, 3);
         if (a < 0x2000) n->ram[a & 0x7FF] = v;
@@ -233,6 +233,8 @@ static void map_memory(Nes *n) {
     Cpu *c = &n->cpu;
     for (int i = 0; i < 4; i++) c->read_map[i] = c->write_map[i] = n->ram;
     for (int i = 12; i < 16; i++) c->read_map[i] = c->write_map[i] = n->cart.prg_ram + (i - 12) * 0x800;
+    if (n->cart.mapper == 87)  /* $6000-$7FFF is its register: writes take the slow path */
+        for (int i = 12; i < 16; i++) c->write_map[i] = NULL;
     for (int i = 16; i < 32; i++)  /* 8 KB windows from the mapper, 4 pages each */
         c->read_map[i] = n->cart.prg + n->cart.prg_off[(i - 16) >> 2] + ((i & 3) * 0x800);
     c->bus_step = 3;

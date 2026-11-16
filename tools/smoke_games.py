@@ -27,7 +27,10 @@ PRESSES = ["--press", "240:08", "--press", "480:08", "--press", "720:08", "--pre
 def mapper_of(path):
     with open(path, "rb") as f:
         h = f.read(16)
-    return (h[6] >> 4) | (h[7] & 0xF0) if h[:4] == b"NES\x1a" else None
+    if h[:4] != b"NES\x1a":
+        return None
+    m = (h[6] >> 4) | (h[7] & 0xF0)
+    return m | (h[8] & 0x0F) << 8 if (h[7] & 0x0C) == 0x08 else m  # NES 2.0: bits 8-11
 
 
 def read_ppm(path):

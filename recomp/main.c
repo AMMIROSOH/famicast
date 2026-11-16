@@ -210,7 +210,7 @@ static int explore_regions(const Rom *r, const Hints *h, Region **out) {
     }
     uint16_t vec[3];
     vectors(r, vec);
-    if (r->mapper == 0 || r->mapper == 3) {
+    if (!prg_bank_reg(r)) {
         Region *R = *out = calloc(1, sizeof *R);
         R->prog = calloc(1, sizeof *R->prog);
         R->mem = malloc(0x10000);
@@ -374,7 +374,7 @@ int main(int argc, char **argv) {
     Region *regions;
     int n = explore_regions(&rom, &hints, &regions);
     const char *name = basename_of(rom_path);
-    emit_program(&o, regions, n, name, prg_hash, (int)(cart.prg_size / 0x2000), cart.mapper != 0 && cart.mapper != 3,
+    emit_program(&o, regions, n, name, prg_hash, (int)(cart.prg_size / 0x2000), prg_bank_reg(&rom),
                  embed ? file : NULL, embed ? size : 0);
     write_file(output, &o);
     long ninstr = 0, nindirect = 0;

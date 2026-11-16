@@ -148,6 +148,12 @@ M7a (runtime):
 - [x] Tests: mmc3_test_2 5/6 (6 = rev A, pending), test_ppu_read_buffer and
   cpu_dummy_reads (CNROM) pass; `tools/smoke_games.py` boots a sample of the
   local collection per mapper (52/53 ok, see 06).
+- [x] M7c: mappers 71 (Camerica), 79 (NINA-03/06, register at $4100), 87
+  (Jaleco J87, register at $6000), 185 (CNROM with CHR protection, NES 2.0
+  submappers) and 206 (Namco 108); NES 2.0 mapper bits 8-11 read. 3,069 of
+  4,031 ROMs in a full set (88% of licensed releases). Unit ROMs in
+  `tests/test_mappers.py`; one game per mapper identical to the interpreter
+  (06).
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

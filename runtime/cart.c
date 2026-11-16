@@ -1,6 +1,7 @@
-/* iNES parsing: nesdev "INES" (nesrecomp uses this file too). Mapper behaviour:
- * nesdev wiki "MMC1", "UxROM", "CNROM", "MMC3", "AxROM", "Color Dreams",
- * "GxROM". */
+/* iNES parsing: nesdev "INES", "NES 2.0" (nesrecomp uses this file too).
+ * Mapper behaviour: nesdev wiki "MMC1", "UxROM", "CNROM", "MMC3", "AxROM",
+ * "Color Dreams", "GxROM", "INES Mapper 071", "NINA-003-006" (79),
+ * "INES Mapper 087", "INES Mapper 185", "Namco 108" (206). */
 #include "cart.h"
 
 #include <stdio.h>
@@ -65,6 +66,13 @@ static void mmc3_update(Cart *c) {
     set_chr(c, 7 ^ inv, 1, c->reg[5]);
 }
 
+/* Mapper 185: CHR reads only work while the latch matches the board's diodes
+ * (copy protection: games check that they fail). reg[0] = NES 2.0 submapper. */
+static int chr_enabled_185(const Cart *c) {
+    if (c->reg[0] >= 4) return (c->latch & 3) == c->reg[0] - 4;
+    return (c->latch & 0x0F) && c->latch != 0x13;  /* old iNES header: usual emulator guess */
+}
+
 static void update_banks(Cart *c) {
     uint32_t n16 = c->prg_size / 0x4000;
     switch (c->mapper) {
@@ -80,6 +88,19 @@ static void update_banks(Cart *c) {
         break;
     case 11: set_prg32(c, c->latch & 3); set_chr(c, 0, 8, (uint32_t)(c->latch >> 4) * 8); break;
     case 66: set_prg32(c, (c->latch >> 4) & 3); set_chr(c, 0, 8, (uint32_t)(c->latch & 3) * 8); break;
+    case 71: set_prg16(c, 0, c->latch & 0x0F); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, 0); break;
+    case 79: set_prg32(c, (c->latch >> 3) & 1); set_chr(c, 0, 8, (uint32_t)(c->latch & 7) * 8); break;
+    case 87:  /* CHR bank bits are swapped on the board */
+        set_prg16(c, 0, 0); set_prg16(c, 1, n16 - 1);
+        set_chr(c, 0, 8, (uint32_t)(((c->latch & 1) << 1) | ((c->latch >> 1) & 1)) * 8);
+        break;
+    case 185:
+        set_prg16(c, 0, 0); set_prg16(c, 1, n16 - 1);
+        set_chr(c, 0, 8, 0);
+        if (!chr_enabled_185(c))
+            for (int i = 0; i < 8; i++) c->chr_off[i] = c->chr_size;  /* the $FF page after CHR */
+        break;
+    case 206: mmc3_update(c); break;  /* Namco 108: MMC3 without modes, mirroring or IRQ */
     }
 }
 
@@ -105,7 +126,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         snprintf(err, errlen, "file shorter than its header says");
         return -1;
     }
-    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 7, 11, 66};
+    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 7, 11, 66, 71, 79, 87, 185, 206};
     int ok = 0;
     for (size_t i = 0; i < sizeof SUPPORTED / sizeof *SUPPORTED; i++) ok |= c->mapper == SUPPORTED[i];
     if (!ok) {
@@ -115,11 +136,14 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
     c->chr_ram = c->chr_size == 0;
     if (c->chr_ram) c->chr_size = 0x2000;
     c->prg = malloc(c->prg_size);
-    c->chr = calloc(1, c->chr_size);
+    c->chr = malloc(c->chr_size + 0x400);  /* + a page of $FF: CHR disabled (mapper 185) */
+    memset(c->chr, 0, c->chr_size);
+    memset(c->chr + c->chr_size, 0xFF, 0x400);
     memcpy(c->prg, d + off, c->prg_size);
     if (!c->chr_ram) memcpy(c->chr, d + off + c->prg_size, c->chr_size);
     if (c->mapper == 1) c->reg[0] = 0x0C;          /* power-on: last bank fixed at $C000 */
-    if (c->mapper == 4) { c->reg[6] = 0; c->reg[7] = 1; }
+    if (c->mapper == 4 || c->mapper == 206) { c->reg[6] = 0; c->reg[7] = 1; }
+    if (c->mapper == 185) c->reg[0] = nes2 ? d[8] >> 4 : 0;
     update_banks(c);
     return 0;
 }
@@ -177,12 +201,24 @@ static void mmc3_write(Cart *c, uint16_t a, uint8_t v) {
 }
 
 int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
+    if (a < 0x8000 && cart_is_reg(c, a)) {  /* 79: $4100 (A8 set), 87: $6000-$7FFF */
+        c->latch = v;
+        update_banks(c);
+        return c->mapper == 79;  /* 87 switches CHR only */
+    }
     if (a < 0x6000) return 0;
     if (a < 0x8000) { c->prg_ram[a - 0x6000] = v; return 0; }
     switch (c->mapper) {
-    case 0: return 0;
+    case 0: case 79: case 87: return 0;
     case 1: mmc1_write(c, a, v, cycle); return 1;
     case 4: mmc3_write(c, a, v); return 1;
+    case 206:  /* bank select and data only; 3 select bits */
+        if (a < 0xA000) mmc3_write(c, a, (a & 1) ? v : v & 7);
+        return 1;
+    case 71:  /* $C000: PRG; $9000: single-screen select (BF9097 boards) */
+        if (a >= 0xC000) { c->latch = v; update_banks(c); }
+        else if (a >= 0x9000 && a < 0xA000) c->mirroring = (v & 0x10) ? MIRROR_SINGLE_HIGH : MIRROR_SINGLE_LOW;
+        return 1;
     default: c->latch = v; update_banks(c); return 1;  /* simple latch mappers (bus conflicts ignored) */
     }
 }

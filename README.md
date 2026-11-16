@@ -6,7 +6,7 @@ A hobby, open-source **static recompiler for NES games**: it translates the
 6502 code in a ROM into C, compiles it to a native executable, and runs it on a
 small runtime (PPU, APU, mappers, SDL3 window/audio/gamepad).
 
-Built for the challenge. Runs games on mappers 0, 1, 2, 3, 4, 7, 11 and 66;
+Built for the challenge. Runs games on 13 mappers (see [Mappers](#mappers));
 every recompiled game is checked cycle by cycle against a reference
 interpreter. No ROMs included: bring your own.
 
@@ -26,9 +26,9 @@ M0-M3 done: verified opcode table and decoder, a reference interpreter (nestest,
 SingleStepTests) and a PPU passing 52 blargg-style test ROMs. A first example
 game runs on the interpreter and recompiled (M5: lockstep-identical to the
 interpreter over 10 minutes of play, no interpreted code left), about 30x
-faster than a real NES in both modes (M5b), with sound (M6). Mappers 0-4, 7, 11, 66 run in
-the interpreter and recompile with bank-aware code (M7); one game per mapper
-is verified identical to the interpreter. The recompiler is plain C and runs
+faster than a real NES in both modes (M5b), with sound (M6). All supported
+mappers run in the interpreter and recompile with bank-aware code (M7); one
+game per mapper is verified identical to the interpreter. The recompiler is plain C and runs
 inside the CMake build; it can trace a game first to find code by itself
 (M8a). Save states, a coverage report, frame-hash regression tests and
 display settings (fullscreen, scaling, TV frame) came with M8b. Recompiled
@@ -36,6 +36,31 @@ example games run at about 33-38x real time. See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
+
+## Mappers
+The mapper is the cartridge's banking hardware; the iNES header names it.
+These cover about 88% of licensed releases (76% of a full ~4,000-ROM set,
+including unlicensed and pirate carts).
+
+| Mapper | Board | Examples |
+|---|---|---|
+| 0 | NROM | Super Mario Bros., Donkey Kong, Excitebike |
+| 1 | MMC1 (incl. SUROM 512 KB) | The Legend of Zelda, Metroid, Mega Man 2 |
+| 2 | UxROM | Mega Man, Castlevania, Contra |
+| 3 | CNROM | Gradius, Paperboy, Solomon's Key |
+| 4 | MMC3 | Super Mario Bros. 3, Kirby's Adventure, Mega Man 3 |
+| 7 | AxROM | Battletoads, Marble Madness, R.C. Pro-Am |
+| 11 | Color Dreams | Crystal Mines, Bible Adventures, Chiller |
+| 66 | GxROM | Super Mario Bros. / Duck Hunt, Dragon Power, Gumshoe |
+| 71 | Camerica / Codemasters | Micro Machines, The Fantastic Adventures of Dizzy, Bee 52 |
+| 79 | AVE NINA-03/06 | Krazy Kreatures, Dudes with Attitude, Deathbots |
+| 87 | Jaleco J87 | Argus, City Connection, The Goonies (Japan) |
+| 185 | CNROM with CHR copy protection | B-Wings, Bird Week, Mighty Bomb Jack (Japan) |
+| 206 | Namco 108 | Karnov, Gauntlet (unlicensed), Dragon Buster II |
+
+Not yet: MMC5 (5), Namco 163 (19), Konami VRC2/4 (21-25), Sunsoft FME-7
+(69), Bandai FCG (16) and the long tail of rarer boards. Other mappers are
+refused at load ("mapper N not supported yet").
 
 ## Build
 Needs CMake ≥ 3.20 and a C11 compiler (clang/gcc/MSVC); any CMake generator

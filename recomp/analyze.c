@@ -135,12 +135,12 @@ int assumed_layout(const Rom *r, int layout[4]) {
     int n8 = (int)(r->prg_size / 0x2000);
     for (int w = 0; w < 4; w++) layout[w] = -1;
     switch (r->mapper) {
-    case 0: case 3:              /* NROM, CNROM: no PRG switching (16 KB mirrors: 0,1,0,1) */
-    case 7: case 11: case 66:    /* 32 KB switching, bank 0 at power-on */
+    case 0: case 3: case 87: case 185:  /* no PRG switching (16 KB mirrors: 0,1,0,1) */
+    case 7: case 11: case 66: case 79:  /* 32 KB switching, bank 0 at power-on */
         for (int w = 0; w < 4; w++) layout[w] = w % n8;
         return 0;
-    case 1: case 2:              /* MMC1 (mode 3), UxROM: last 16 KB fixed */
-    case 4:                      /* MMC3: $E000 fixed, $C000 in mode 0 */
+    case 1: case 2: case 71:     /* MMC1 (mode 3), UxROM, Camerica: last 16 KB fixed */
+    case 4: case 206:            /* MMC3, Namco 108: $E000 fixed, $C000 in mode 0 */
         layout[2] = n8 - 2;
         layout[3] = n8 - 1;
         return 0;
@@ -151,9 +151,18 @@ int assumed_layout(const Rom *r, int layout[4]) {
 /* How many 8 KB windows switch together: code may run across windows inside
  * one unit (consecutive banks), never across units. */
 int unit_windows(const Rom *r) {
-    if (r->mapper == 7 || r->mapper == 11 || r->mapper == 66) return 4;  /* 32 KB */
-    if (r->mapper == 1 || r->mapper == 2) return 2;  /* 16 KB (MMC1 32 KB mode = two units) */
-    return 1;                                        /* MMC3: 8 KB windows independent */
+    int m = r->mapper;
+    if (m == 7 || m == 11 || m == 66 || m == 79) return 4;  /* 32 KB */
+    if (m == 1 || m == 2 || m == 71) return 2;  /* 16 KB (MMC1 32 KB mode = two units) */
+    return 1;                                   /* MMC3, Namco 108: 8 KB windows independent */
+}
+
+int prg_bank_reg(const Rom *r) {
+    switch (r->mapper) {
+    case 0: case 3: case 87: case 185: return 0;
+    case 79: return 0x4100;
+    default: return 0x8000;
+    }
 }
 
 void view(const Rom *r, const int layout[4], uint8_t *mem) {

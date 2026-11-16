@@ -66,6 +66,9 @@ typedef struct {
 
 int assumed_layout(const Rom *r, int layout[4]);  /* -1 = window unknown; returns 0 or -1 */
 int unit_windows(const Rom *r);
+/* Lowest CPU address of a PRG bank register (a store there may switch the
+ * code being run); 0 if PRG never switches. Matches cart_is_reg (cart.h). */
+int prg_bank_reg(const Rom *r);
 static inline int window_of(uint32_t a) { return (int)((a - 0x8000) >> 13); }
 void view(const Rom *r, const int layout[4], uint8_t *mem /* 64 KB */);
 
@@ -85,7 +88,7 @@ typedef struct {
 } Region;
 
 void emit_program(Buf *out, Region *regions, int nregions, const char *rom_name, uint32_t prg_hash,
-                  int nbanks, int banked, const uint8_t *rom, size_t rom_size);
+                  int nbanks, int bank_reg, const uint8_t *rom, size_t rom_size);
 void emit_cpu_switch(Buf *out);
 
 #endif
