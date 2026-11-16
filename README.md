@@ -110,8 +110,9 @@ so those builds are not for sharing either.
 
 Code the static decoder cannot find (jump tables, RTS used as a jump) runs in
 the interpreter. Two ways to recompile it too:
-- `-DNES_AUTO_HINTS=ON`: before recompiling, the build runs each game in the
-  interpreter for `NES_AUTO_HINTS_FRAMES` (default 6000) frames of scripted
+- Automatically (on by default; `-DNES_AUTO_HINTS=OFF` to skip): before
+  recompiling, the build runs each game in the interpreter for
+  `NES_AUTO_HINTS_FRAMES` (default 6000, about 6 s) frames of scripted
   play (`nes_headless --play 1`) and passes every address it ran to the
   recompiler. Merged hints are written to `build/gen/<name>.toml`; copy them
   to `games/` to keep them without tracing.

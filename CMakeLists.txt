@@ -92,9 +92,11 @@ endif()
 # nes_recompile(NAME ROM [HINTS]) generates ${GEN_DIR}/NAME.c with nesrecomp
 # (the ROM is embedded) and builds NAME_headless (and NAME with the frontend).
 #
-# NES_AUTO_HINTS: first run the game in the interpreter with scripted input
-# (nes_headless --play) and give every address it ran to nesrecomp, so code
-# reached in that session is recompiled without hand-made hints. The merged
+# NES_AUTO_HINTS (on by default): first run the game in the interpreter with
+# scripted input (nes_headless --play) and give every address it ran to
+# nesrecomp, so code reached in that session is recompiled without hand-made
+# hints (~6 s per game; coverage from as low as 0.3% static to 99.9%, docs/06).
+# Traced once per ROM: a rebuilt nes_headless does not trace again. The merged
 # hints are written to ${GEN_DIR}/NAME.toml; copy them to games/ to keep them.
 #
 # NAME.misses next to the program: ROM code your own sessions had to
@@ -103,7 +105,7 @@ endif()
 #
 # NES_EMBED_ROM=OFF: the program carries no ROM and needs the file at start
 # (the generated code still holds the game's code bytes: not for sharing either).
-option(NES_AUTO_HINTS "Trace each game in the interpreter before recompiling it" OFF)
+option(NES_AUTO_HINTS "Trace each game in the interpreter before recompiling it" ON)
 option(NES_EMBED_ROM "Embed the ROM in recompiled programs" ON)
 set(NES_AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by NES_AUTO_HINTS")
 function(nes_recompile name rom)
@@ -120,7 +122,9 @@ function(nes_recompile name rom)
         add_custom_command(
             OUTPUT ${trace}
             COMMAND nes_headless "${rom}" --play 1 --frames ${NES_AUTO_HINTS_FRAMES} --misses --out ${trace}
-            DEPENDS "${rom}" nes_headless
+            # nes_headless as COMMAND is built first (target-level dependency) but is
+            # no file dependency: runtime changes do not re-trace every game
+            DEPENDS "${rom}"
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             COMMENT "Tracing ${name} in the interpreter (${NES_AUTO_HINTS_FRAMES} frames)")
         list(APPEND hint_args --misses ${trace} --save-hints ${GEN_DIR}/${name}.toml)
@@ -155,7 +159,10 @@ endfunction()
 # against nestest.log through the CPU test runner.
 set(NESTEST_ROM ${CMAKE_SOURCE_DIR}/tests/roms/nestest.nes)
 if(EXISTS ${NESTEST_ROM})
+    # hand-made hints only: tests/test_recomp.py compares its blocks with nestest.log
+    set(NES_AUTO_HINTS OFF)
     nes_recompile(nestest ${NESTEST_ROM} ${CMAKE_SOURCE_DIR}/tests/data/nestest.toml)
+    unset(NES_AUTO_HINTS)  # the cache value again, for the games below
     add_executable(nestest_recomp_tests runtime/tests/cpu_tests.c)
     target_link_libraries(nestest_recomp_tests PRIVATE nestest_code)
 endif()
