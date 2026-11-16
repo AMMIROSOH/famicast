@@ -166,6 +166,7 @@ fullscreen = 0      # 1 = fullscreen at desktop resolution
 scale = fit         # fit (keep aspect), integer (sharp pixels), stretch
 tv_frame = 0        # 1 = picture inside a TV-like frame
 overscan = 1        # 1 = hide the top/bottom 8 lines, as a TV did
+aspect = tv         # tv = 8:7 pixels as on an NTSC TV, square = square pixels
 window_scale = 3    # starting window size
 ```
 Save states work across builds of the same version: a state saved by the
