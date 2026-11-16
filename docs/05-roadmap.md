@@ -30,11 +30,10 @@ recompiler.)
   FetchContent (static), `-DNES_FRONTEND=OFF` for headless builds.
 - [x] Old prototype moved to `legacy/`.
 - [x] GitHub Actions workflow (`.github/workflows/ci.yml`: Linux GCC and
-  Clang, Windows MSVC; public test ROMs; headless). Written, **not yet run**:
-  the repository has no GitHub remote. Sources are clean under
-  `-std=c11 -Wpedantic` (checked with Clang).
-- **Exit:** `build/nes --frames 120` opens the window and exits 0 (done
-  locally); CI green (pending remote).
+  Clang, Windows MSVC; public test ROMs; headless). Green on its first run
+  (github.com/Viper-Bit/famicast, 2026-11-16).
+- **Exit:** met: `build/nes --frames 120` opens the window and exits 0;
+  CI green.
 
 ## M1 · Opcode table and decoder (Python)
 - [x] `recomp/ops.py`: all 256 opcodes, checked against radare2's tables
