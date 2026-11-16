@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
     if (nes.cart.battery) {
         size_t sav_size;
         void *sav = SDL_LoadFile(sav_path, &sav_size);
-        if (sav && sav_size == sizeof nes.cart.prg_ram) SDL_memcpy(nes.cart.prg_ram, sav, sav_size);
+        if (sav && sav_size == nes.cart.prg_ram_size) SDL_memcpy(nes.cart.prg_ram, sav, sav_size);
         SDL_free(sav);
     }
 
@@ -299,7 +299,7 @@ int main(int argc, char **argv) {
     input_log_free(&replay_log);
     for (int i = 0; i < 2; i++)
         if (gamepads[i]) SDL_CloseGamepad(gamepads[i]);
-    if (nes.cart.battery && !SDL_SaveFile(sav_path, nes.cart.prg_ram, sizeof nes.cart.prg_ram))
+    if (nes.cart.battery && !SDL_SaveFile(sav_path, nes.cart.prg_ram, nes.cart.prg_ram_size))
         SDL_Log("%s: %s", sav_path, SDL_GetError());
     /* rewrite the misses file only when this session found new ROM code, so
      * the next build does not rerun the recompiler for nothing */

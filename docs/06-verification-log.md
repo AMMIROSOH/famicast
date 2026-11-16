@@ -3,6 +3,47 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-16 · M7e: MMC5 (5) and Namco 163 (19)
+- **Unit ROMs** (`tests/test_mappers.py`): MMC5 PRG mode 3, PRG RAM in a
+  ROM window (written at $8005, read back through $6000 with the same
+  bank), multiplier, fill-mode and ExRAM nametables, scanline IRQ at line
+  100 arriving on time with no slow access (1,713 turns of a RAM loop,
+  ~1,712 expected); Namco 163 PRG, a nametable from CHR ROM, the RAM port's
+  auto-increment, cycle IRQ on time (125 turns). Mutations caught: no
+  per-line catch-up for the MMC5 IRQ, the N163 IRQ planned 500 cycles late,
+  RAM windows read as ROM. Two test-ROM mistakes found on the way: the
+  scanline IRQ was already pending from the previous frame (now
+  acknowledged before CLI), and the first expected loop count forgot the
+  7 extra cycles per wrap of the low byte.
+- **Probes** (temporary stderr reports, removed): all 21 MMC5 games write
+  $5114-$5116 with bit 7 clear at some point, so PRG RAM windows were
+  implemented rather than left as ROM; none ran code from one in the
+  recompiled runs below. Three Namco 163 games write CHR values >= $E0
+  (Megami Tensei II, Namco Classic I and II); all three set both $E800
+  bits, which select CHR ROM for them, so reading CHR ROM is exact.
+- **PRG RAM chips**: a battery save of Bandit Kings came out 16 KB, as its
+  NES 2.0 header says (8 KB RAM + 8 KB NVRAM): two chips, picked by bit 2
+  of the bank. The first version took the bank modulo the size, so banks 0
+  and 4 shared memory; now bit 2 selects the chip (`mmc5_ram_off`), with a
+  unit ROM that fails on the old mapping. The 21 boot frames are unchanged.
+- **Boot smoke**: 21 MMC5 titles (one dump each) and 21 Namco 163 titles
+  reach a title, menu, map or play screen; IRQ status bars (Castlevania
+  III, Rolling Thunder, Youkai Douchuuki) split where they should; Metal
+  Slader Glory's ExRAM pictures and the Koei strategy maps are correct.
+  Uchuu Keibitai SDF runs without its split screen (not emulated).
+- **Recompiled with `NES_AUTO_HINTS`, `--diff` 3,000 frames**: all identical.
+
+  | Mapper | Game | Regions | Recompiled cycles |
+  |---|---|---|---|
+  | 5 | Castlevania III (Europe, VC) | 18 | 99.97% |
+  | 5 | Metal Slader Glory (Japan, VC) | 5 | 99.96% |
+  | 5 | Uncharted Waters (USA) | 10 | 99.98% |
+  | 5 | Just Breed (Japan) | 13 | 99.95% |
+  | 19 | Rolling Thunder (Japan) | 9 | 99.91% |
+  | 19 | Megami Tensei II (Japan) | 10 | 99.98% |
+  | 19 | Star Wars (Japan) | 8 | 99.98% |
+  | 19 | King of Kings (Japan) | 6 | 99.98% |
+
 ## 2026-11-16 · M7d: Konami VRC2/VRC4 (21, 22, 23, 25)
 - **Unit ROMs** (`tests/test_mappers.py`): VRC4e PRG swap (with submapper
   and with an old header, both wirings decoded), VRC2a CHR shift, VRC4b IRQ

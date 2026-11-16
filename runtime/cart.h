@@ -1,9 +1,10 @@
 /* Cartridge: iNES loading and mappers.
  * Supported: 0 NROM, 1 MMC1, 2 UxROM, 3 CNROM, 4 MMC3, 7 AxROM, 11 Color
  * Dreams, 66 GxROM, 71 Camerica, 79 NINA-03/06, 87 Jaleco J87, 185 CNROM
- * with CHR protection, 206 Namco 108, 21/22/23/25 Konami VRC2/VRC4 (nesdev
- * wiki, see cart.c). Every mapper only sets the bank tables below; reads go
- * through them. */
+ * with CHR protection, 206 Namco 108, 21/22/23/25 Konami VRC2/VRC4, 5 MMC5,
+ * 19 Namco 163 (nesdev wiki, see cart.c). Every mapper only sets the bank
+ * tables below; reads go through them. MMC5 and Namco 163 also map the
+ * nametables (cart_nt_read), and MMC5 has its own background banks. */
 #ifndef NES_CART_H
 #define NES_CART_H
 
@@ -16,8 +17,10 @@ typedef struct Cart {
     uint8_t *prg, *chr;
     uint32_t prg_size, chr_size;
     int chr_ram, mapper, submapper, mirroring, four_screen, battery;  /* submapper: NES 2.0, else 0 */
-    uint8_t prg_ram[0x2000];         /* $6000-$7FFF */
+    uint8_t prg_ram[0x10000];        /* $6000-$7FFF: 8 KB, MMC5 up to 64 KB in 8 KB banks */
+    uint32_t prg_ram_size, ram_off;  /* ram_off: the bank at $6000 (battery saves: prg_ram_size) */
     uint32_t prg_off[4];             /* PRG offset mapped at $8000/$A000/$C000/$E000 */
+    uint8_t prg_ram_window;          /* bit w: window w maps PRG RAM, prg_off[w] into prg_ram (MMC5) */
     uint32_t chr_off[8];             /* CHR offset of each 1 KB PPU page */
     /* mapper registers */
     uint8_t reg[8];                  /* MMC1: control, chr0, chr1, prg; MMC3: R0-R7 */
@@ -33,7 +36,21 @@ typedef struct Cart {
     uint8_t vrc_prg[2], vrc_swap, vrc2;  /* vrc_swap: $8000 and $C000 exchanged; vrc2: no IRQ */
     uint8_t vrc_irq_ctrl;            /* bit 0 A (E after ack), 1 E (enabled), 2 M (cycle mode) */
     int16_t vrc_prescaler;           /* scanline mode: 341, minus 3 per CPU cycle */
-    uint64_t vrc_cycle;              /* CPU cycle the IRQ counter has been run to */
+    uint64_t irq_cycle;              /* VRC4, Namco 163: CPU cycle the IRQ counter has run to */
+    /* MMC5 */
+    uint8_t mmc5_prg_mode, mmc5_chr_mode, mmc5_exram_mode, mmc5_nt, mmc5_fill_tile, mmc5_fill_attr;
+    uint8_t mmc5_prg[5];             /* $5113 (RAM at $6000), $5114-$5117 */
+    uint16_t mmc5_chr[12];           /* $5120-$5127 (set A), $5128-$512B (set B), with $5130 bits */
+    uint8_t mmc5_chr_upper, mmc5_last_b, mmc5_sprite16;  /* sprite16: from $2000 writes */
+    uint8_t mmc5_irq_compare, mmc5_irq_enable, mmc5_irq_pending, mmc5_in_frame, mmc5_counter;
+    uint8_t mmc5_mul[2];
+    uint8_t exram[0x400];
+    uint32_t chr_off_bg[8];          /* background CHR pages (set B with 8x16 sprites) */
+    /* Namco 163 */
+    uint8_t n163_chr[8], n163_nt[4], n163_prg[3];
+    uint8_t n163_ram[128], n163_addr; /* sound/data RAM behind $4800, address at $F800 */
+    uint16_t n163_counter;           /* 15-bit IRQ counter, counts CPU cycles up to $7FFF */
+    uint8_t n163_irq_enable;
 } Cart;
 
 /* Returns 0 on success, else writes a message to err. Copies the data. */
@@ -48,13 +65,29 @@ uint8_t cart_cpu_read(Cart *c, uint16_t a, uint8_t open_bus);
 static inline int cart_is_reg(const Cart *c, uint16_t a) {
     if (a >= 0x8000) return c->mapper != 0;
     if (c->mapper == 79) return (a & 0xE100) == 0x4100;
+    if (c->mapper == 5) return a >= 0x5000 && a < 0x6000;
+    if (c->mapper == 19) return a >= 0x4800 && a < 0x6000;
     return c->mapper == 87 && a >= 0x6000;
 }
+/* A CPU read the PPU must be caught up for first (MMC5 scanline IRQ status). */
+static inline int cart_read_syncs(const Cart *c, uint16_t a) { return c->mapper == 5 && a == 0x5204; }
 /* Returns 1 if the PRG mapping may have changed (the bus re-maps its pages). */
 int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cpu_cycle);
 /* PPU $0000-$1FFF (inline: the PPU fetches every few dots) */
 static inline uint8_t cart_chr_read(Cart *c, uint16_t a) { return c->chr[c->chr_off[(a >> 10) & 7] + (a & 0x3FF)]; }
 void cart_chr_write(Cart *c, uint16_t a, uint8_t v);
+/* MMC5 and Namco 163 map each 1 KB nametable themselves: cart_nt_read/write
+ * (ciram = the PPU's nametable RAM). The rest use cart_nt_index. */
+static inline int cart_custom_nt(const Cart *c) { return c->mapper == 5 || c->mapper == 19; }
+uint8_t cart_nt_read(Cart *c, const uint8_t *ciram, uint16_t a);
+void cart_nt_write(Cart *c, uint8_t *ciram, uint16_t a, uint8_t v);
+/* MMC5 background fetches (v = the PPU's VRAM address, for ExRAM's per-tile
+ * banks and palettes), the scanline IRQ (called at dot 0 of lines 0-240) and
+ * the sprite size it snoops from $2000 writes. */
+uint8_t cart_mmc5_bg_read(Cart *c, uint16_t a, uint16_t v);
+int cart_mmc5_attr(const Cart *c, uint16_t v, int at_bits);
+void cart_mmc5_scanline(Cart *c, int line, int rendering);
+void cart_mmc5_ppuctrl(Cart *c, uint8_t ctrl);
 /* PPU $2000-$3EFF -> index into the PPU's 4 KB nametable RAM */
 static inline uint16_t cart_nt_index(Cart *c, uint16_t a) {
     a &= 0x0FFF;
@@ -71,7 +104,7 @@ void cart_ppu_address(Cart *c, uint16_t a, uint64_t ppu_dot);
 /* MMC3: the IRQ could assert at the next A12 rise (the bus then catches up
  * the PPU finely around sprite fetches). */
 int cart_irq_armed(const Cart *c);
-/* VRC4: the IRQ counter counts CPU cycles. cart_run runs it to `cycle` (the
+/* VRC4, Namco 163: the IRQ counter counts CPU cycles. cart_run runs it to `cycle` (the
  * bus calls it before reading irq_line); cart_cycles_to_irq says how many
  * cycles after `cycle` it fires next, -1 if it is off. */
 void cart_run(Cart *c, uint64_t cycle);

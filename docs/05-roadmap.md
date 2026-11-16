@@ -159,6 +159,14 @@ M7a (runtime):
   the VRC4 IRQ (scanline and cycle mode) counted in closed form and planned
   like an APU event. 3,109 of 4,031 ROMs (89% of licensed). IRQ count and
   timing checked by unit ROMs; six games identical to the interpreter (06).
+- [x] M7e: MMC5 (5) and Namco 163 (19). MMC5: four PRG modes with PRG RAM
+  in any switchable window (64 KB), CHR sets A/B by sprite size (snooped
+  from $2000), ExRAM (extra nametable, extended attributes, CPU RAM), fill
+  mode, scanline IRQ (a catch-up planned at every line start while on),
+  multiplier. Namco 163: 1 KB CHR, nametables from RAM or CHR ROM, 15-bit
+  cycle IRQ (closed form, like VRC4), the RAM port. Not done: expansion
+  audio, MMC5 split screen, N163 CHR from nametable RAM. 3,173 of 4,031
+  ROMs (91% of licensed); 42 games boot; 8 identical to the interpreter.
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

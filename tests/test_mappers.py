@@ -17,6 +17,15 @@ CHR_READ = bytes([0xA9, 0x00, 0x8D, 0x06, 0x20, 0x8D, 0x06, 0x20,  # $2006 = $00
 END = bytes([0x85, 0x00, 0x18, 0x90, 0xFE])                          # STA $00, then loop
 
 
+def ppu_read(addr):  # LDA from PPU address `addr` ($2007, buffered: read twice)
+    return bytes([0xA9, addr >> 8, 0x8D, 0x06, 0x20, 0xA9, addr & 0xFF, 0x8D, 0x06, 0x20,
+                  0xAD, 0x07, 0x20, 0xAD, 0x07, 0x20])
+
+
+def ram_loop(start):  # INC $10 / BNE / INC $11 / JMP: 8 cycles a turn, no slow bus access
+    return bytes([0xE6, 0x10, 0xD0, 0xFC, 0xE6, 0x11, 0x4C, start & 0xFF, start >> 8])
+
+
 def lda_sta(value, addr):
     return bytes([0xA9, value, 0x8D, addr & 0xFF, addr >> 8])
 
@@ -25,12 +34,13 @@ def lda_abs(addr):
     return bytes([0xAD, addr & 0xFF, addr >> 8])
 
 
-def ines(mapper, prg, chr_=b"", submapper=None):
+def ines(mapper, prg, chr_=b"", submapper=None, ram_sizes=None):
     hdr = bytearray(b"NES\x1a" + bytes([len(prg) // 0x4000, len(chr_) // 0x2000,
                                         (mapper & 0x0F) << 4, mapper & 0xF0]) + bytes(8))
-    if submapper is not None:  # NES 2.0
+    if submapper is not None or ram_sizes is not None:  # NES 2.0
         hdr[7] |= 0x08
-        hdr[8] = submapper << 4
+        hdr[8] = (submapper or 0) << 4
+        hdr[10] = ram_sizes or 0  # PRG RAM / NVRAM size shifts
     return bytes(hdr) + bytes(prg) + bytes(chr_)
 
 
@@ -161,6 +171,92 @@ class TestMappers(unittest.TestCase):
         vectors(prg, 0x8000, 0xE200, irq=0xE400)
         rom = ines(25, prg, submapper=1)
         self.assertAlmostEqual(peek(rom, 0) + 256 * peek(rom, 1), 284, delta=1)
+
+    # ---- MMC5 (5): power-on mode 3 with the last bank at $E000 ----
+    def test_5_mmc5_two_ram_chips(self):  # 8 KB RAM + 8 KB NVRAM: $5113 bit 2 picks the chip
+        code = (lda_sta(0x00, 0x5113) + lda_sta(0x11, 0x6000) + lda_sta(0x04, 0x5113) + lda_sta(0x44, 0x6000) +
+                lda_sta(0x01, 0x5113) + lda_abs(0x6000) + bytes([0x85, 0x01]) +  # bank 1 = chip 0 again
+                lda_sta(0x00, 0x5113) + lda_abs(0x6000) + END)
+        rom = self.mmc5(code, ram_sizes=0x77)
+        self.assertEqual(peek(rom, 0), 0x11)  # 0x44 if banks 0 and 4 shared memory
+        self.assertEqual(peek(rom, 1), 0x11)
+
+    @staticmethod
+    def mmc5(code, chr_=b"", ram_sizes=None):
+        prg = bytearray(0x20000)
+        for b in range(16):
+            prg[b * 0x2000 + 0x100] = 0x60 + b
+        put(prg, 0x1E200, code)
+        put(prg, 0x1E400, bytes([0xA5, 0x10, 0x85, 0x00, 0xA5, 0x11, 0x85, 0x01,  # IRQ: $00/$01 = loop
+                                 0xAD, 0x04, 0x52, 0xA9, 0x00, 0x8D, 0x04, 0x52, 0x40]))  # ack, IRQ off
+        vectors(prg, 0x20000, 0xE200, irq=0xE400)
+        return ines(5, prg, chr_, ram_sizes=ram_sizes)
+
+    def test_5_mmc5_prg(self):  # mode 3: $5114 (bit 7 = ROM) at $8000
+        self.assertEqual(peek(self.mmc5(lda_sta(0x03, 0x5100) + lda_sta(0x82, 0x5114) + lda_abs(0x8100) + END)), 0x62)
+
+    def test_5_mmc5_prg_ram_window(self):  # bit 7 clear: PRG RAM; the same 8 KB bank at $6000
+        code = (lda_sta(0x03, 0x5100) + lda_sta(0x01, 0x5114) + lda_sta(0x77, 0x8005) +
+                lda_sta(0x01, 0x5113) + lda_abs(0x6005) + END)
+        self.assertEqual(peek(self.mmc5(code)), 0x77)
+
+    def test_5_mmc5_multiplier(self):
+        self.assertEqual(peek(self.mmc5(lda_sta(13, 0x5205) + lda_sta(11, 0x5206) + lda_abs(0x5205) + END)), 143)
+
+    def test_5_mmc5_nametables(self):  # $5105: fill mode, and ExRAM as a nametable
+        fill = WAIT_VBLANK + lda_sta(0xFF, 0x5105) + lda_sta(0x42, 0x5106) + ppu_read(0x2010) + END
+        self.assertEqual(peek(self.mmc5(fill)), 0x42)
+        exram = (WAIT_VBLANK + lda_sta(0x00, 0x5104) + lda_sta(0xAA, 0x5105) + lda_sta(0x99, 0x5C10) +
+                 ppu_read(0x2410) + END)
+        self.assertEqual(peek(self.mmc5(exram)), 0x99)
+
+    def test_5_mmc5_scanline_irq(self):
+        """IRQ at line 100 ($5203), background on: from the vblank flag at
+        (241, 1) to line 100 is 41,260 dots = 13,753 CPU cycles; less ~13 for
+        the wait loop, $5204 read and CLI, at 8 cycles a turn plus 7 per
+        wrap of the low byte (6): ~1,712 turns (the bus plans a catch-up
+        every line, so the IRQ is on time without slow accesses)."""
+        code = (bytes([0x78]) + lda_sta(0x40, 0x4017) + WAIT_VBLANK + lda_sta(100, 0x5203) +
+                lda_sta(0x80, 0x5204) + lda_sta(0x08, 0x2001) +
+                bytes([0x2C, 0x02, 0x20, 0x10, 0xFB]) +  # wait for vblank,
+                lda_abs(0x5204) + bytes([0x58]))           # drop last frame's pending IRQ, CLI
+        code += ram_loop(0xE200 + len(code))
+        rom = self.mmc5(code)
+        self.assertAlmostEqual(peek(rom, 0) + 256 * peek(rom, 1), 1712, delta=3)
+
+    # ---- Namco 163 (19): $E000 = last bank ----
+    @staticmethod
+    def n163(code, chr_=b""):
+        prg = bytearray(0x20000)
+        for b in range(16):
+            prg[b * 0x2000 + 0x100] = 0x60 + b
+        put(prg, 0x1E200, code)
+        put(prg, 0x1E400, bytes([0xA5, 0x10, 0x85, 0x00, 0xA5, 0x11, 0x85, 0x01,  # IRQ: $00/$01 = loop
+                                 0xA9, 0x00, 0x8D, 0x00, 0x58, 0x40]))            # IRQ off (+ ack), RTI
+        vectors(prg, 0x20000, 0xE200, irq=0xE400)
+        return ines(19, prg, chr_)
+
+    def test_19_n163_prg_and_nametable(self):
+        self.assertEqual(peek(self.n163(lda_sta(0x03, 0xE000) + lda_abs(0x8100) + END)), 0x63)
+        chr_ = bytearray(0x8000)
+        for page in range(32):
+            chr_[page * 0x400 + 0x10] = 0x80 + page
+        # $C000 < $E0: the first nametable is CHR ROM page 5
+        code = WAIT_VBLANK + lda_sta(0x05, 0xC000) + ppu_read(0x2010) + END
+        self.assertEqual(peek(self.n163(code, chr_)), 0x85)
+
+    def test_19_n163_ram_port(self):  # $F800 bit 7: auto-increment
+        code = (lda_sta(0x80, 0xF800) + lda_sta(0x11, 0x4800) + lda_sta(0x22, 0x4800) +
+                lda_sta(0x81, 0xF800) + lda_abs(0x4800) + END)
+        self.assertEqual(peek(self.n163(code)), 0x22)
+
+    def test_19_n163_irq_on_time(self):  # counter $7FFF - 1000: IRQ after 1,000 cycles = ~125 turns
+        start = 0x7FFF - 1000
+        code = (bytes([0x78]) + lda_sta(0x40, 0x4017) + lda_sta(start & 0xFF, 0x5000) +
+                lda_sta(0x80 | start >> 8, 0x5800) + bytes([0x58]))
+        code += ram_loop(0xE200 + len(code))
+        rom = self.n163(code)
+        self.assertAlmostEqual(peek(rom, 0) + 256 * peek(rom, 1), 125, delta=2)
 
 
 if __name__ == "__main__":

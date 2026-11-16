@@ -25,7 +25,7 @@ static uint8_t mem_read(Ppu *p, uint16_t a) {
     a &= 0x3FFF;
     bus_address(p, a);
     if (a < 0x2000) return cart_chr_read(p->cart, a);
-    if (a < 0x3F00) return p->nt[cart_nt_index(p->cart, a)];
+    if (a < 0x3F00) return cart_custom_nt(p->cart) ? cart_nt_read(p->cart, p->nt, a) : p->nt[cart_nt_index(p->cart, a)];
     return p->pal[pal_index(a)];
 }
 
@@ -33,7 +33,10 @@ static void mem_write(Ppu *p, uint16_t a, uint8_t v) {
     a &= 0x3FFF;
     bus_address(p, a);
     if (a < 0x2000) cart_chr_write(p->cart, a, v);
-    else if (a < 0x3F00) p->nt[cart_nt_index(p->cart, a)] = v;
+    else if (a < 0x3F00) {
+        if (cart_custom_nt(p->cart)) cart_nt_write(p->cart, p->nt, a, v);
+        else p->nt[cart_nt_index(p->cart, a)] = v;
+    }
     else p->pal[pal_index(a)] = v & 0x3F;
 }
 
@@ -64,6 +67,11 @@ static void load_shifters(Ppu *p) {
     p->at_hi = (p->at_hi & 0xFF00) | ((p->at_bits & 2) ? 0xFF : 0x00);
 }
 
+/* Background pattern bytes: MMC5 banks them apart from sprites (cart.c). */
+static inline uint8_t bg_pattern(Ppu *p, uint16_t a) {
+    return p->cart->mapper == 5 ? cart_mmc5_bg_read(p->cart, a, p->v) : mem_read(p, a);
+}
+
 static void fetch_step(Ppu *p) {
     uint16_t bg_table = (p->ctrl & 0x10) ? 0x1000 : 0;
     uint16_t fine_y = (p->v >> 12) & 7;
@@ -77,10 +85,11 @@ static void fetch_step(Ppu *p) {
         if (p->v & 0x40) at >>= 4;  /* coarse Y bit 1 */
         if (p->v & 0x02) at >>= 2;  /* coarse X bit 1 */
         p->at_bits = at & 3;
+        if (p->cart->mapper == 5) p->at_bits = (uint8_t)cart_mmc5_attr(p->cart, p->v, p->at_bits);
         break;
     }
-    case 4: p->pt_lo = mem_read(p, bg_table + p->nt_byte * 16 + fine_y); break;
-    case 6: p->pt_hi = mem_read(p, bg_table + p->nt_byte * 16 + fine_y + 8); break;
+    case 4: p->pt_lo = bg_pattern(p, (uint16_t)(bg_table + p->nt_byte * 16 + fine_y)); break;
+    case 6: p->pt_hi = bg_pattern(p, (uint16_t)(bg_table + p->nt_byte * 16 + fine_y + 8)); break;
     case 7: inc_x(p); break;
     }
 }
@@ -244,6 +253,7 @@ void ppu_step(Ppu *p) {
     int line = p->scanline, dot = p->dot;
     p->dots++;
     int visible = line < 240, pre = line == 261;
+    if (dot == 0 && line <= 240 && p->cart->mapper == 5) cart_mmc5_scanline(p->cart, line, RENDERING(p) != 0);
 
     if ((visible || pre) && RENDERING(p)) {
         if ((dot >= 2 && dot <= 257) || (dot >= 322 && dot <= 337)) {
@@ -417,6 +427,7 @@ void ppu_reg_write(Ppu *p, uint16_t reg, uint8_t v) {
         /* disabling NMI right after vblank starts still prevents it (blargg 08) */
         if (!(v & 0x80) && p->scanline == 241 && (p->dot == 2 || p->dot == 3)) p->nmi_cancel = 1;
         p->ctrl = v;
+        if (p->cart->mapper == 5) cart_mmc5_ppuctrl(p->cart, v);  /* MMC5 snoops the sprite size */
         p->t = (uint16_t)((p->t & 0xF3FF) | ((v & 3) << 10));
         p->nmi_out = (p->status & 0x80) && (p->ctrl & 0x80);
         break;

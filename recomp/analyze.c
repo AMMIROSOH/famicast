@@ -145,6 +145,9 @@ int assumed_layout(const Rom *r, int layout[4]) {
         layout[2] = n8 - 2;
         layout[3] = n8 - 1;
         return 0;
+    case 5: case 19:             /* MMC5 at power-on ($5117 = $FF), Namco 163: $E000 = last bank */
+        layout[3] = n8 - 1;
+        return 0;
     }
     return -1;
 }
@@ -162,6 +165,7 @@ int prg_bank_reg(const Rom *r) {
     switch (r->mapper) {
     case 0: case 3: case 87: case 185: return 0;
     case 79: return 0x4100;
+    case 5: return 0x5100;
     default: return 0x8000;
     }
 }

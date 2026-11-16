@@ -11,8 +11,10 @@
  * and --diff (docs/06). The APU (M6) is caught up the same way; its events
  * are the frame IRQ and DMC sample fetches. The MMC3 IRQ (M7) asserts on a
  * PPU A12 rise: while it is armed, the PPU is caught up every cycle around
- * the sprite fetches (dots 255-330 of rendering lines). The VRC4 IRQ counts
- * CPU cycles: like an APU event, the next one ends the batch (cart_run). */
+ * the sprite fetches (dots 255-330 of rendering lines). The VRC4 and Namco
+ * 163 IRQs count CPU cycles: like an APU event, the next one ends the batch
+ * (cart_run). The MMC5 counts scanlines: while its IRQ is on, every line
+ * start ends a batch, and a $5204 read catches the PPU up first. */
 #include "nes.h"
 
 #include <stdio.h>
@@ -32,6 +34,10 @@ static void plan_next_event(Nes *n) {
     if (apu < d) d = apu;
     int64_t vrc = cart_cycles_to_irq(&n->cart, n->cpu.cycles);
     if (vrc >= 0 && n->cpu.bus_pending + 3 * vrc < d) d = n->cpu.bus_pending + 3 * vrc;
+    if (n->cart.mapper == 5 && n->cart.mmc5_irq_enable && (n->ppu.mask & 0x18)) {
+        int64_t m = LINE - n->ppu.dot + 1;  /* through dot 0 of the next line (cart_mmc5_scanline) */
+        if (m < d) d = m;
+    }
     /* MMC3: the counter is clocked on A12 rises during rendering (around dot
      * 260 or 324, or at dot 5 of the pre-render line, depending on the
      * pattern tables). While the IRQ is enabled, check the counter at dots 0
@@ -111,6 +117,7 @@ static uint8_t read_no_tick(Nes *n, uint16_t a) {
         return apu_read_status(&n->apu, n->cpu.open_bus);
     }
     if (a < 0x4020) return n->cpu.open_bus;  /* write-only APU registers */
+    if (a < 0x6000) cart_run(&n->cart, n->cpu.cycles);  /* Namco 163 counter reads */
     return cart_cpu_read(&n->cart, a, n->cpu.open_bus);
 }
 
@@ -120,7 +127,7 @@ static void map_memory(Nes *n);
 /* One bus read in the current cycle (n->cpu.cycles already counts it), with
  * every side effect a CPU read has. The CPU and the DMA unit both use it. */
 static uint8_t read_cycle(Nes *n, uint16_t a) {
-    if (!is_ppu(a)) {
+    if (!is_ppu(a) && !cart_read_syncs(&n->cart, a)) {
         add_dots(n, 3);
         n->cpu.open_bus = read_no_tick(n, a);
         sync_apu(n);
@@ -241,11 +248,14 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
 static void map_memory(Nes *n) {
     Cpu *c = &n->cpu;
     for (int i = 0; i < 4; i++) c->read_map[i] = c->write_map[i] = n->ram;
-    for (int i = 12; i < 16; i++) c->read_map[i] = c->write_map[i] = n->cart.prg_ram + (i - 12) * 0x800;
+    for (int i = 12; i < 16; i++) c->read_map[i] = c->write_map[i] = n->cart.prg_ram + n->cart.ram_off + (i - 12) * 0x800;
     if (n->cart.mapper == 87)  /* $6000-$7FFF is its register: writes take the slow path */
         for (int i = 12; i < 16; i++) c->write_map[i] = NULL;
-    for (int i = 16; i < 32; i++)  /* 8 KB windows from the mapper, 4 pages each */
-        c->read_map[i] = n->cart.prg + n->cart.prg_off[(i - 16) >> 2] + ((i & 3) * 0x800);
+    for (int i = 16; i < 32; i++) {  /* 8 KB windows from the mapper, 4 pages each */
+        int w = (i - 16) >> 2;
+        const uint8_t *mem = (n->cart.prg_ram_window >> w & 1) ? n->cart.prg_ram : n->cart.prg;
+        c->read_map[i] = (uint8_t *)mem + n->cart.prg_off[w] + ((i & 3) * 0x800);
+    }
     c->bus_step = 3;
 }
 
@@ -287,7 +297,7 @@ void nes_step(Nes *n) {
             return;
         }
     }
-    int kind = c->poll_prev ? FALLBACK_INTERRUPT : c->pc < 0x8000 ? FALLBACK_RAM : FALLBACK_ROM;
+    int kind = c->poll_prev ? FALLBACK_INTERRUPT : nes_miss_slot(n, c->pc) < 0x8000 ? FALLBACK_RAM : FALLBACK_ROM;
     if (c->poll_prev) {
         n->steps_interrupt++;
     } else {
@@ -306,7 +316,7 @@ void nes_step(Nes *n) {
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 2 };  /* 2: submapper, VRC2/VRC4 fields */
+enum { STATE_VERSION = 3 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM */
 
 typedef struct {
     char magic[4];  /* "NESS" */
@@ -365,7 +375,11 @@ void nes_run_frame(Nes *n) {
     while (!n->ppu.frame_done && !n->cpu.jammed) nes_step(n);
 }
 
-uint32_t nes_prg_bank(Nes *n, uint16_t a) { return n->cart.prg_off[(a >> 13) & 3] >> 13; }
+/* PRG RAM in a ROM window (MMC5) has no bank: UINT32_MAX, which no recompiled table has */
+uint32_t nes_prg_bank(Nes *n, uint16_t a) {
+    int w = (a >> 13) & 3;
+    return (n->cart.prg_ram_window >> w & 1) ? UINT32_MAX : n->cart.prg_off[w] >> 13;
+}
 
 size_t nes_miss_slots(Nes *n) { return 0x8000u + (size_t)n->cart.prg_size * 4; }
 
@@ -406,6 +420,7 @@ long nes_misses_merge(Nes *n, const char *path) {
 
 size_t nes_miss_slot(Nes *n, uint16_t a) {
     if (a < 0x8000) return a;
+    if (nes_prg_bank(n, a) == UINT32_MAX) return 0x6000u | (a & 0x1FFF);  /* PRG RAM: as RAM code */
     return 0x8000u + (((size_t)nes_prg_bank(n, a) * 4 + ((a >> 13) & 3)) << 13 | (a & 0x1FFF));
 }
 

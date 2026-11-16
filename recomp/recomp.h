@@ -67,7 +67,8 @@ typedef struct {
 int assumed_layout(const Rom *r, int layout[4]);  /* -1 = window unknown; returns 0 or -1 */
 int unit_windows(const Rom *r);
 /* Lowest CPU address of a PRG bank register (a store there may switch the
- * code being run); 0 if PRG never switches. Matches cart_is_reg (cart.h). */
+ * code being run); 0 if PRG never switches. Matches cart_is_reg (cart.h):
+ * 79 at $4100, MMC5 at $5100, the rest at $8000. */
 int prg_bank_reg(const Rom *r);
 static inline int window_of(uint32_t a) { return (int)((a - 0x8000) >> 13); }
 void view(const Rom *r, const int layout[4], uint8_t *mem /* 64 KB */);

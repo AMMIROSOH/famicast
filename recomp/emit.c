@@ -117,14 +117,15 @@ static void dynamic_body(Buf *o, const Instr *ins) {
         if (*l.s[k]) bprintf(o, "        %s\n", l.s[k]);
 }
 
-/* Could this instruction write to a PRG bank register (at bank_reg and up)? */
+/* Could this instruction write to a PRG bank register (at bank_reg and up;
+ * $6000-$7FFF is PRG RAM for every mapper that switches PRG)? */
 static int may_write_rom(const Instr *i, int bank_reg) {
     static const char STORES[] = " STA STX STY SAX AHX SHX SHY TAS ASL LSR ROL ROR INC DEC SLO RLA SRE RRA DCP ISB ";
     char key[6];
     snprintf(key, sizeof key, " %s ", i->op->mn);
     const char *m = i->op->mode;
     if (!strstr(STORES, key) || !strcmp(m, "IMP") || !strcmp(m, "ACC") || m[0] == 'Z') return 0;
-    if (!strcmp(m, "ABS")) return i->operand >= bank_reg;
+    if (!strcmp(m, "ABS")) return i->operand >= 0x8000 || (i->operand >= bank_reg && i->operand < 0x6000);
     if (!strcmp(m, "ABX") || !strcmp(m, "ABY")) return i->operand + 0xFF >= bank_reg;
     return 1;  /* (zp,X), (zp),Y: unknown address */
 }

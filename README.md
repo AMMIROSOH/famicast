@@ -6,7 +6,7 @@ A hobby, open-source **static recompiler for NES games**: it translates the
 6502 code in a ROM into C, compiles it to a native executable, and runs it on a
 small runtime (PPU, APU, mappers, SDL3 window/audio/gamepad).
 
-Built for the challenge. Runs games on 17 mappers (see [Mappers](#mappers));
+Built for the challenge. Runs games on 19 mappers (see [Mappers](#mappers));
 every recompiled game is checked cycle by cycle against a reference
 interpreter. No ROMs included: bring your own.
 
@@ -39,7 +39,7 @@ see [docs/06-verification-log.md](docs/06-verification-log.md).
 
 ## Mappers
 The mapper is the cartridge's banking hardware; the iNES header names it.
-These cover about 89% of licensed releases (77% of a full ~4,000-ROM set,
+These cover about 91% of licensed releases (79% of a full ~4,000-ROM set,
 including unlicensed and pirate carts).
 
 | Mapper | Board | Examples |
@@ -49,8 +49,10 @@ including unlicensed and pirate carts).
 | 2 | UxROM | Mega Man, Castlevania, Contra |
 | 3 | CNROM | Gradius, Paperboy, Solomon's Key |
 | 4 | MMC3 | Super Mario Bros. 3, Kirby's Adventure, Mega Man 3 |
+| 5 | MMC5 (no expansion audio, no split screen) | Castlevania III, Uncharted Waters, Metal Slader Glory |
 | 7 | AxROM | Battletoads, Marble Madness, R.C. Pro-Am |
 | 11 | Color Dreams | Crystal Mines, Bible Adventures, Chiller |
+| 19 | Namco 163 (no wavetable audio) | Rolling Thunder (Japan), Megami Tensei II, King of Kings |
 | 21 | Konami VRC4a/VRC4c | Wai Wai World 2, Ganbare Goemon Gaiden 2 |
 | 22 | Konami VRC2a | TwinBee 3, Ganbare Pennant Race! |
 | 23 | Konami VRC2b/VRC4e/VRC4f | Contra (Japan), Crisis Force, Parodius Da! |
@@ -62,8 +64,9 @@ including unlicensed and pirate carts).
 | 185 | CNROM with CHR copy protection | B-Wings, Bird Week, Mighty Bomb Jack (Japan) |
 | 206 | Namco 108 | Karnov, Gauntlet (unlicensed), Dragon Buster II |
 
-Not yet: MMC5 (5), Namco 163 (19), Jaleco SS88006 (18), Sunsoft FME-7
-(69), Bandai FCG (16) and the long tail of rarer boards. Other mappers are
+Not yet: Jaleco SS88006 (18), Sunsoft FME-7 (69), Bandai FCG (16),
+Namco 175/340 (210), expansion audio (MMC5, Namco 163, VRC6, ...) and the
+long tail of rarer boards. Other mappers are
 refused at load ("mapper N not supported yet").
 
 ## Build
