@@ -26,22 +26,23 @@ static float noise(int x, int y) {  /* fixed grain for the plastic, -1..1 */
     return (float)(h & 0xFFFF) / 32767.5f - 1;
 }
 
-void tv_frame_render(uint8_t *rgba, int lines) {
-    const float th = (float)tv_h(lines), hl = lines / 2.0f;  /* frame height; half the screen height */
-    const int W = TV_W * TV_RES, H = tv_h(lines) * TV_RES;
-    const float aa = 1.0f / TV_RES;  /* one texture pixel, in NES pixels */
-    const float sx = TV_LEFT + 128, sy = TV_TOP + hl;  /* screen centre */
-    const float led_x = TV_W - 34, led_y = th - TV_BOTTOM / 2.0f;
+void tv_frame_render(uint8_t *rgba, int width, int lines) {
+    const float tw = (float)tv_w(width), th = (float)tv_h(lines);  /* frame size */
+    const float hw = width / 2.0f, hl = lines / 2.0f;              /* half the screen */
+    const int W = tv_w(width) * TV_RES, H = tv_h(lines) * TV_RES;
+    const float aa = 1.0f / TV_RES;  /* one texture pixel, in units */
+    const float sx = TV_LEFT + hw, sy = TV_TOP + hl;  /* screen centre */
+    const float led_x = tw - 34, led_y = th - TV_BOTTOM / 2.0f;
     for (int py = 0; py < H; py++) {
         for (int px = 0; px < W; px++) {
             float x = (px + 0.5f) * aa, y = (py + 0.5f) * aa;
-            float d_body = rounded_rect(x, y, TV_W / 2.0f, th / 2.0f, TV_W / 2.0f, th / 2.0f, 16);
-            float d_scr = rounded_rect(x, y, sx, sy, 128, hl, 10);
+            float d_body = rounded_rect(x, y, tw / 2.0f, th / 2.0f, tw / 2.0f, th / 2.0f, 16);
+            float d_scr = rounded_rect(x, y, sx, sy, hw, hl, 10);
             float r, g, b, a;
             if (d_scr < 0) {
                 /* screen: transparent, darkened towards the edges (tube
                  * curvature, inner shadow) with a faint glass reflection */
-                float ex = (x - sx) / 128, ey = (y - sy) / hl;
+                float ex = (x - sx) / hw, ey = (y - sy) / hl;
                 float dark = 0.55f * (1 - smooth(0, 7, -d_scr)) + 0.25f * smooth(0.55f, 1.25f, sqrtf(ex * ex + ey * ey));
                 float gx = (x - (TV_LEFT + 70)) / 120, gy = (y - (TV_TOP + 45)) / 70;
                 float glare = 0.07f * (1 - smooth(0.2f, 1, sqrtf(gx * gx + gy * gy)));

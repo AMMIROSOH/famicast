@@ -3,6 +3,16 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · Pixel aspect setting
+- `aspect = tv` (the default) draws NES pixels 8:7 wide, the shape an NTSC
+  TV gave them: the picture is 293 units wide for 256 pixels (292.6
+  rounded, 0.14% off); `square` keeps 256. The TV frame is generated for
+  that width. The picture uses SDL's pixel-art scale mode, so the uneven
+  column widths of a non-integer horizontal scale stay sharp. Built and
+  started (4 s) without errors; the picture has not been looked at yet.
+  Aspect follows the emulated console (NTSC only), not the cartridge: a
+  PAL game here runs as on an NTSC NES.
+
 ## 2026-11-17 · Overscan setting
 - `overscan = 1` (the default) shows lines 8-231, as an NTSC TV did (the
   same window as FCEUX's NTSC default); the TV frame's screen opening is

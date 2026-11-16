@@ -24,6 +24,10 @@ static const char DEFAULT_FILE[] =
     "# leave scrolling leftovers there that nobody saw); 0 = all 240 lines\n"
     "overscan = 1\n"
     "\n"
+    "# aspect: tv = pixels 8:7 wide, the shape an NTSC TV gave them;\n"
+    "#         square = square pixels (the picture 12% narrower)\n"
+    "aspect = tv\n"
+    "\n"
     "# window_scale: starting window size, in multiples of the picture (1-8)\n"
     "window_scale = 3\n"
     "\n"
@@ -39,7 +43,7 @@ static int parse_bool(const char *v, int *out) {
 }
 
 void settings_load(Settings *s, const char *path) {
-    *s = (Settings){0, SCALE_FIT, 0, 3, 1, 1};
+    *s = (Settings){0, SCALE_FIT, 0, 3, 1, 1, 1};
     FILE *f = fopen(path, "r");
     if (!f) {
         if ((f = fopen(path, "w"))) {
@@ -62,6 +66,10 @@ void settings_load(Settings *s, const char *path) {
         else if (!strcmp(key, "tv_frame")) ok = parse_bool(val, &s->tv_frame);
         else if (!strcmp(key, "record_misses")) ok = parse_bool(val, &s->record_misses);
         else if (!strcmp(key, "overscan")) ok = parse_bool(val, &s->overscan);
+        else if (!strcmp(key, "aspect")) {
+            if (!strcmp(val, "tv")) s->aspect_tv = 1, ok = 1;
+            else if (!strcmp(val, "square")) s->aspect_tv = 0, ok = 1;
+        }
         else if (!strcmp(key, "scale")) {
             static const char *const NAMES[] = {"fit", "integer", "stretch"};
             for (int i = 0; i < 3; i++)

@@ -90,10 +90,10 @@ static void gamepad_event(const SDL_Event *e) {
     }
 }
 
-static SDL_Texture *make_tv_frame(SDL_Renderer *ren, int lines) {
-    const int w = TV_W * TV_RES, h = tv_h(lines) * TV_RES;
+static SDL_Texture *make_tv_frame(SDL_Renderer *ren, int width, int lines) {
+    const int w = tv_w(width) * TV_RES, h = tv_h(lines) * TV_RES;
     uint8_t *px = SDL_malloc((size_t)w * h * 4);
-    tv_frame_render(px, lines);
+    tv_frame_render(px, width, lines);
     SDL_Texture *t = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, w, h);
     if (t) {
         SDL_UpdateTexture(t, NULL, px, w * 4);
@@ -105,11 +105,14 @@ static SDL_Texture *make_tv_frame(SDL_Renderer *ren, int lines) {
 }
 
 /* Draw the picture's visible lines (240, or 224 with the overscan hidden:
- * centred) and the frame over it, scaled into the output. */
-static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int scale, int lines) {
+ * centred), `width` units wide (256 square pixels, or 293 for 8:7), and the
+ * frame over it, scaled into the output. Integer scaling applies to the
+ * lines; with 8:7 pixels the width follows (the pixel-art scale mode keeps
+ * the uneven columns sharp). */
+static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int scale, int width, int lines) {
     int W, H;
     SDL_GetCurrentRenderOutputSize(ren, &W, &H);
-    float cw = frame ? TV_W : NES_W, ch = (float)(frame ? tv_h(lines) : lines);  /* content, in NES pixels */
+    float cw = (float)(frame ? tv_w(width) : width), ch = (float)(frame ? tv_h(lines) : lines);  /* content, in units */
     float sx = W / cw, sy = H / ch;
     if (scale != SCALE_STRETCH) {
         sx = sy = SDL_min(sx, sy);
@@ -117,7 +120,7 @@ static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int
     }
     SDL_FRect content = {SDL_floorf((W - cw * sx) / 2), SDL_floorf((H - ch * sy) / 2), cw * sx, ch * sy};
     SDL_FRect picture = {content.x + (frame ? TV_LEFT * sx : 0), content.y + (frame ? TV_TOP * sy : 0),
-                         NES_W * sx, lines * sy};
+                         width * sx, lines * sy};
     SDL_FRect src = {0, (NES_H - lines) / 2.0f, NES_W, (float)lines};
     SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
     SDL_RenderClear(ren);
@@ -196,7 +199,8 @@ int main(int argc, char **argv) {
     SDL_Renderer *ren;
     /* starting size: window_scale x the content, smaller if the screen is */
     const int lines = cfg.overscan ? NES_H - 16 : NES_H;  /* visible lines */
-    int k = cfg.window_scale, cw = cfg.tv_frame ? TV_W : NES_W, ch = cfg.tv_frame ? tv_h(lines) : lines;
+    const int width = cfg.aspect_tv ? (NES_W * 8 + 3) / 7 : NES_W;  /* 8:7: 292.6, rounded */
+    int k = cfg.window_scale, cw = cfg.tv_frame ? tv_w(width) : width, ch = cfg.tv_frame ? tv_h(lines) : lines;
     SDL_Rect usable;
     if (SDL_GetDisplayUsableBounds(SDL_GetPrimaryDisplay(), &usable))
         while (k > 1 && (cw * k > usable.w || ch * k > usable.h - 40)) k--;
@@ -211,11 +215,11 @@ int main(int argc, char **argv) {
     const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(win));
     if (!mode || mode->refresh_rate == 0 || mode->refresh_rate >= 59) SDL_SetRenderVSync(ren, 1);
     if (cfg.fullscreen) SDL_SetWindowFullscreen(win, true);
-    SDL_Texture *frame_tex = cfg.tv_frame ? make_tv_frame(ren, lines) : NULL;
+    SDL_Texture *frame_tex = cfg.tv_frame ? make_tv_frame(ren, width, lines) : NULL;
     uint64_t message_until = 0;  /* a short message in the title bar */
     SDL_Texture *tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_XRGB8888,
                                          SDL_TEXTUREACCESS_STREAMING, NES_W, NES_H);
-    SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
+    SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_PIXELART);
 
     uint32_t palette[512];
     nes_palette_rgb(palette);
@@ -243,7 +247,7 @@ int main(int argc, char **argv) {
                     SDL_SetWindowFullscreen(win, !(SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN));
                 if (e.key.key == SDLK_F10) {
                     if (frame_tex) SDL_DestroyTexture(frame_tex), frame_tex = NULL;
-                    else frame_tex = make_tv_frame(ren, lines);
+                    else frame_tex = make_tv_frame(ren, width, lines);
                 }
                 if (e.key.key == SDLK_F2) msg = nes_state_save(&nes, state_path) == 0 ? "state saved" : "could not save state";
                 if (e.key.key == SDLK_F4) {
@@ -287,7 +291,7 @@ int main(int argc, char **argv) {
         }
         for (int i = 0; i < NES_W * NES_H; i++) fb[i] = palette[nes.ppu.fb[i] & 0x1FF];
         SDL_UpdateTexture(tex, NULL, fb, NES_W * sizeof fb[0]);
-        present(ren, tex, frame_tex, cfg.scale, lines);
+        present(ren, tex, frame_tex, cfg.scale, width, lines);
         if (message_until && SDL_GetTicks() > message_until) {
             SDL_SetWindowTitle(win, name);
             message_until = 0;
