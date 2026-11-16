@@ -26,6 +26,13 @@ class TestInes(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("mapper 65 not supported", text)
 
+    def test_nes2_mapper_bits_8_to_11(self):
+        rom = bytearray(make_rom(f6=0x30, f7=0x08))  # NES 2.0, low byte 3
+        rom[8] = 0x02  # mapper 515, not CNROM
+        code, text = info(bytes(rom))
+        self.assertEqual(code, 2)
+        self.assertIn("mapper 515 not supported", text)
+
     def test_trainer_and_chr_ram(self):
         code, text = info(make_rom(prg_units=8, chr_units=0, f6=0x20, trainer=True))
         self.assertEqual(code, 0)
