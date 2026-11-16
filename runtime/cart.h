@@ -3,8 +3,8 @@
  * Dreams, 66 GxROM, 71 Camerica, 79 NINA-03/06, 87 Jaleco J87, 185 CNROM
  * with CHR protection, 206 Namco 108, 21/22/23/25 Konami VRC2/VRC4, 5 MMC5,
  * 19 Namco 163, 9 MMC2, 10 MMC4, 18 Jaleco SS88006, 69 Sunsoft FME-7, 210
- * Namco 175/340, 16/153/157/159 Bandai FCG, 118 TxSROM (nesdev wiki, see
- * cart.c). Every mapper only sets the bank
+ * Namco 175/340, 16/153/157/159 Bandai FCG, 118 TxSROM, 75 Konami VRC1
+ * (nesdev wiki, see cart.c). Every mapper only sets the bank
  * tables below; reads go through them. MMC5 and Namco 163 also map the
  * nametables (cart_nt_read), and MMC5 has its own background banks. */
 #ifndef NES_CART_H
@@ -64,9 +64,9 @@ typedef struct Cart {
     uint8_t n163_ram[128], n163_addr; /* sound/data RAM behind $4800, address at $F800 */
     uint16_t n163_counter;           /* 15-bit IRQ counter, counts CPU cycles up to $7FFF */
     uint8_t n163_irq_enable;
-    /* MMC2/MMC4 (9, 10), SS88006 (18), FME-7 (69) */
+    /* MMC2/MMC4 (9, 10), SS88006 (18), FME-7 (69), VRC1 (75) */
     uint8_t prg_bank[3];             /* 8 KB banks at $8000/$A000/$C000 (MMC2/MMC4: [0] only) */
-    uint8_t chr_bank[8];             /* 1 KB banks (MMC2/MMC4: four 4 KB, $B000-$E000) */
+    uint8_t chr_bank[8];             /* 1 KB banks (MMC2/MMC4: four 4 KB, $B000-$E000; VRC1: two 4 KB) */
     uint8_t chr_latch[2];            /* MMC2/MMC4: 0 = $FD, 1 = $FE, per pattern table */
     uint8_t fme7_cmd, fme7_6000, irq_ctrl;  /* irq_ctrl: FME-7 command $D, SS88006 $F001 */
     uint16_t irq_count16, irq_reload16;     /* 16-bit down counters (SS88006 reload: $E000-$E003) */

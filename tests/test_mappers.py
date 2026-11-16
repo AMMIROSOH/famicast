@@ -429,6 +429,26 @@ class TestMappers(unittest.TestCase):
                 code = self.i2c(*write, ("start",), ("byte", wire), ("read",), ("stop",))
                 self.assertEqual(peek(self.bandai(code + END[2:], mapper=159, submapper=0)), expect)
 
+    # ---- Konami VRC1 (75) ----
+    def test_75_vrc1_prg_and_chr_high_bits(self):
+        """$A000 = 3: 8 KB bank 3 at $A000. CHR low bits at $E000/$F000 (1, 2)
+        plus bit 4 from $9000 bit 1 (the $0000 bank only; bit 2 is the $1000
+        bank's): 4 KB banks 17 and 2."""
+        prg, chr_ = bytearray(0x20000), bytearray(0x20000)
+        for b in range(16):
+            prg[b * 0x2000 + 0x100] = 0x60 + b
+        for b in range(32):
+            chr_[b * 0x1000 + 0x10] = 0x80 + b
+        code = (WAIT_VBLANK + lda_sta(0x03, 0xA000) + lda_abs(0xA100) + bytes([0x85, 0x01]) +
+                lda_sta(0x01, 0xE000) + lda_sta(0x02, 0xF000) + lda_sta(0x02, 0x9000) +
+                ppu_read(0x0010) + bytes([0x85, 0x02]) + ppu_read(0x1010) + END)
+        put(prg, 0x1E200, code)
+        vectors(prg, 0x20000, 0xE200)
+        rom = ines(75, prg, chr_)
+        self.assertEqual(peek(rom, 1), 0x63)
+        self.assertEqual(peek(rom, 2), 0x91)
+        self.assertEqual(peek(rom, 0), 0x82)
+
     # ---- TxSROM (118): CHR bank bit 7 picks each nametable's CIRAM page ----
     def test_118_txsrom_nametables(self):
         """R0 = R1 = $80: every nametable is page 1 (one screen; $A000 =

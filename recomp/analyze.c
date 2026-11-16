@@ -158,7 +158,7 @@ int assumed_layout(const Rom *r, int layout[4]) {
         for (int w = 1; w < 4; w++) layout[w] = n8 - 4 + w;
         return 0;
     case 5: case 19: case 210:   /* MMC5 at power-on ($5117 = $FF), Namco 163/175/340: $E000 = last bank */
-    case 18: case 69:            /* SS88006, FME-7 */
+    case 18: case 69: case 75:   /* SS88006, FME-7, VRC1 */
         layout[3] = n8 - 1;
         return 0;
     }

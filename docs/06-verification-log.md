@@ -3,6 +3,24 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · M7i: Konami VRC1 (75)
+- **Unit ROM** (`tests/test_mappers.py`): PRG at $A000; CHR banks 17 and 2
+  from the low bits at $E000/$F000 and $9000 bit 1 (the $0000 bank's bit 4
+  only). Mutation caught: the two high bits swapped (the first version set
+  both, which could not tell them apart).
+- **Boot smoke**: the 7 licensed titles reach a title, menu or play screen.
+  The Switch collection's Ninja JaJaMaru (an English re-release) has a
+  NES 2.0 header with 256 KB PRG and battery RAM, beyond the chip's 4 PRG
+  bits: it ran garbage from the wrong bank until a fifth bit was kept
+  (no effect on 128 KB games, where it vanishes in the bank modulo).
+- **Recompiled with `NES_AUTO_HINTS`, `--diff` 3,000 frames**: all identical.
+
+  | Game | Recompiled cycles |
+  |---|---|
+  | Ganbare Goemon! Karakuri Douchuu (Japan, VC) | 99.98% |
+  | King Kong 2: Ikari no Megaton Punch (Japan) | 99.98% |
+  | Ninja JaJaMaru: The Ninja Skill Book (Switch) | 99.98% |
+
 ## 2026-11-17 · M7h: TxSROM (118)
 - **Unit ROM** (`tests/test_mappers.py`): R0 = R1 = $80 makes all four
   nametables CIRAM page 1 ($2C00 shows a $2000 write; the mirroring

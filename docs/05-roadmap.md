@@ -183,6 +183,10 @@ M7a (runtime):
   of the CHR bank register for that page; MMC3 banking and IRQ reused.
   3,280 of 4,031 ROMs (95% of licensed); 7 games boot; 3 identical to the
   interpreter (06).
+- [x] M7i: Konami VRC1 (75): three 8 KB PRG banks, two 4 KB CHR banks with
+  bit 4 in the mirroring register. A fifth PRG bit for a 256 KB re-release.
+  3,288 of 4,031 ROMs (95% of licensed); 7 games boot; 3 identical to the
+  interpreter (06).
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color
