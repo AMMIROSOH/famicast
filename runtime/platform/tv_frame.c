@@ -26,21 +26,22 @@ static float noise(int x, int y) {  /* fixed grain for the plastic, -1..1 */
     return (float)(h & 0xFFFF) / 32767.5f - 1;
 }
 
-void tv_frame_render(uint8_t *rgba) {
-    const int W = TV_W * TV_RES, H = TV_H * TV_RES;
+void tv_frame_render(uint8_t *rgba, int lines) {
+    const float th = (float)tv_h(lines), hl = lines / 2.0f;  /* frame height; half the screen height */
+    const int W = TV_W * TV_RES, H = tv_h(lines) * TV_RES;
     const float aa = 1.0f / TV_RES;  /* one texture pixel, in NES pixels */
-    const float sx = TV_LEFT + 128, sy = TV_TOP + 120;  /* screen centre */
-    const float led_x = TV_W - 34, led_y = TV_H - TV_BOTTOM / 2.0f;
+    const float sx = TV_LEFT + 128, sy = TV_TOP + hl;  /* screen centre */
+    const float led_x = TV_W - 34, led_y = th - TV_BOTTOM / 2.0f;
     for (int py = 0; py < H; py++) {
         for (int px = 0; px < W; px++) {
             float x = (px + 0.5f) * aa, y = (py + 0.5f) * aa;
-            float d_body = rounded_rect(x, y, TV_W / 2.0f, TV_H / 2.0f, TV_W / 2.0f, TV_H / 2.0f, 16);
-            float d_scr = rounded_rect(x, y, sx, sy, 128, 120, 10);
+            float d_body = rounded_rect(x, y, TV_W / 2.0f, th / 2.0f, TV_W / 2.0f, th / 2.0f, 16);
+            float d_scr = rounded_rect(x, y, sx, sy, 128, hl, 10);
             float r, g, b, a;
             if (d_scr < 0) {
                 /* screen: transparent, darkened towards the edges (tube
                  * curvature, inner shadow) with a faint glass reflection */
-                float ex = (x - sx) / 128, ey = (y - sy) / 120;
+                float ex = (x - sx) / 128, ey = (y - sy) / hl;
                 float dark = 0.55f * (1 - smooth(0, 7, -d_scr)) + 0.25f * smooth(0.55f, 1.25f, sqrtf(ex * ex + ey * ey));
                 float gx = (x - (TV_LEFT + 70)) / 120, gy = (y - (TV_TOP + 45)) / 70;
                 float glare = 0.07f * (1 - smooth(0.2f, 1, sqrtf(gx * gx + gy * gy)));
@@ -49,7 +50,7 @@ void tv_frame_render(uint8_t *rgba) {
                 r = g = b = a > 0 ? 255 * glare / a : 0;
             } else {
                 /* bezel plastic: vertical gradient and grain */
-                float t = y / TV_H;
+                float t = y / th;
                 float base = 62 - 30 * t + 1.6f * noise(px, py);
                 r = base, g = base * 0.97f, b = base * 0.94f;
                 /* rounded outer edge: lit from above */
@@ -69,8 +70,8 @@ void tv_frame_render(uint8_t *rgba) {
                 float shade = -12 + 28 * smooth(sy - 90, sy + 90, y);
                 r += bevel * shade, g += bevel * shade, b += bevel * shade;
                 /* speaker grille: slots in the chin */
-                if (x > 26 && x < 70 && y > TV_H - 28 && y < TV_H - 8) {
-                    float slot = fmodf(y - (TV_H - 28), 4);
+                if (x > 26 && x < 70 && y > th - 28 && y < th - 8) {
+                    float slot = fmodf(y - (th - 28), 4);
                     if (slot > 1.2f && slot < 2.6f) r *= 0.45f, g *= 0.45f, b *= 0.45f;
                 }
                 /* power LED with a small glow */

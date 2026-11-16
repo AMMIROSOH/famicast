@@ -3,6 +3,13 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · Overscan setting
+- `overscan = 1` (the default) shows lines 8-231, as an NTSC TV did (the
+  same window as FCEUX's NTSC default); the TV frame's screen opening is
+  generated for the 224 visible lines, so nothing is stretched. Built and
+  started with the frame on; the picture itself is checked by eye (the
+  frontend has no automated test).
+
 ## 2026-11-17 · M7j: Irem G-101 (32)
 - **Unit ROM** (`tests/test_mappers.py`): PRG mode 1 puts the $8000
   register at $C000 and the second-to-last bank at $8000; a CHR bank at

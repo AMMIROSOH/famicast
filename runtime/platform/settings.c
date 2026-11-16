@@ -20,6 +20,10 @@ static const char DEFAULT_FILE[] =
     "# tv_frame: 1 = show the picture inside a TV-like frame\n"
     "tv_frame = 0\n"
     "\n"
+    "# overscan: 1 = hide the top and bottom 8 lines, as a TV did (games\n"
+    "# leave scrolling leftovers there that nobody saw); 0 = all 240 lines\n"
+    "overscan = 1\n"
+    "\n"
     "# window_scale: starting window size, in multiples of the picture (1-8)\n"
     "window_scale = 3\n"
     "\n"
@@ -35,7 +39,7 @@ static int parse_bool(const char *v, int *out) {
 }
 
 void settings_load(Settings *s, const char *path) {
-    *s = (Settings){0, SCALE_FIT, 0, 3, 1};
+    *s = (Settings){0, SCALE_FIT, 0, 3, 1, 1};
     FILE *f = fopen(path, "r");
     if (!f) {
         if ((f = fopen(path, "w"))) {
@@ -57,6 +61,7 @@ void settings_load(Settings *s, const char *path) {
         if (!strcmp(key, "fullscreen")) ok = parse_bool(val, &s->fullscreen);
         else if (!strcmp(key, "tv_frame")) ok = parse_bool(val, &s->tv_frame);
         else if (!strcmp(key, "record_misses")) ok = parse_bool(val, &s->record_misses);
+        else if (!strcmp(key, "overscan")) ok = parse_bool(val, &s->overscan);
         else if (!strcmp(key, "scale")) {
             static const char *const NAMES[] = {"fit", "integer", "stretch"};
             for (int i = 0; i < 3; i++)
