@@ -67,6 +67,11 @@ if(NES_FRONTEND)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
     set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+    # Only video, 2D render, audio and gamepads are used (SDL_INIT_* in sdl3_main.c).
+    # Vulkan: the 2D renderer uses D3D11/12 on Windows, OpenGL elsewhere.
+    foreach(unused CAMERA HAPTIC POWER SENSOR DIALOG TRAY GPU RENDER_GPU VULKAN RENDER_VULKAN)
+        set(SDL_${unused} OFF CACHE BOOL "" FORCE)
+    endforeach()
     FetchContent_Declare(SDL3
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
         GIT_TAG release-3.4.20
