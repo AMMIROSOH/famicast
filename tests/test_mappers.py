@@ -416,6 +416,19 @@ class TestMappers(unittest.TestCase):
         self.assertEqual(peek(self.bandai(c02 + END[2:], ram_sizes=0x20)), 0x4B)  # END without STA $00
         self.assertEqual(peek(self.bandai(c01 + END[2:], mapper=159, submapper=0)), 0x4B)
 
+    def test_159_x24c01_sequential_write_is_msb_first(self):
+        """The X24C01 increments its address MSB-first, though Bandai's code
+        sends addresses LSB-first (nesdev, INES Mapper 159). Two bytes written
+        from address 0: the second lands at the chip's address 1, which the
+        game, sending LSB-first, reaches as address 64 (wire byte $03); the
+        game's own address 1 (wire byte $81 = 1 reversed, then R) is still
+        blank. Decoding LSB-first instead would swap these two results."""
+        write = (("start",), ("byte", 0x00), ("byte", 0x11), ("byte", 0x22), ("stop",))
+        for wire, expect in ((0x03, 0x22), (0x81, 0x00)):
+            with self.subTest(read=hex(wire)):
+                code = self.i2c(*write, ("start",), ("byte", wire), ("read",), ("stop",))
+                self.assertEqual(peek(self.bandai(code + END[2:], mapper=159, submapper=0)), expect)
+
 
 if __name__ == "__main__":
     unittest.main()

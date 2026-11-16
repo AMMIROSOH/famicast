@@ -532,10 +532,17 @@ static void n175_write(Cart *c, uint16_t a, uint8_t v) {
  * is high, STOP = SDA rises; a bit per SCL rise, MSB first; after 8 bits an
  * acknowledge clock (the receiver pulls SDA low). 24C02: device byte $A0
  * (write) / $A1 (read), then for writes a word address and data (8-byte
- * pages). X24C01: no device byte; 7 address bits then R/W, data in 4-byte
- * pages (its MSB-first order reverses the LSB-first bytes Bandai's code
- * sends; the game reads them back the same way). Reads go on while the CPU
- * acknowledges each byte. The chip changes its SDA while SCL is low. */
+ * pages. Reads go on while the CPU acknowledges each byte. The chip changes
+ * its SDA while SCL is low.
+ * X24C01 bit order, on purpose: the chip takes address and data MSB first,
+ * but Bandai's code sends them LSB first (nesdev "INES Mapper 159": the
+ * X24C01 "is actually still a big-endian device, and multi-byte reads and
+ * writes increment the address as MSB-first"). So the game's address A is
+ * the chip's bit-reversed A, and a sequential write from A goes on at
+ * reversed(A) + 1, not at the game's A + 1. That is what the games ran on;
+ * decoding LSB first (as some emulators do) would differ from it whenever
+ * a sequential access is mixed with a random one. Saves (.sav) hold the
+ * bytes in the chip's order. */
 enum { EE_IDLE, EE_DEVICE, EE_ADDR, EE_WRITE, EE_READ };
 
 static void ee_rise(Eeprom *e, int sda) {
