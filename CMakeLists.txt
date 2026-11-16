@@ -149,6 +149,8 @@ endif()
 # hints are read from games/<name>.toml when present.
 set(NES_GAMES "" CACHE STRING "ROM files to recompile (semicolon-separated)")
 foreach(rom IN LISTS NES_GAMES)
+    # Build commands run from the build directory; resolve user paths here.
+    get_filename_component(rom "${rom}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
     get_filename_component(stem "${rom}" NAME_WLE)
     string(REGEX REPLACE "[ ]*[[(][^])]*[])]" "" stem "${stem}")  # drop (U), [!], ...
     string(TOLOWER "${stem}" name)
