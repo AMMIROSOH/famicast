@@ -145,7 +145,15 @@ int assumed_layout(const Rom *r, int layout[4]) {
         layout[2] = n8 - 2;
         layout[3] = n8 - 1;
         return 0;
-    case 5: case 19:             /* MMC5 at power-on ($5117 = $FF), Namco 163: $E000 = last bank */
+    case 10:                     /* MMC4: 16 KB at $8000, the last fixed */
+        layout[2] = n8 - 2;
+        layout[3] = n8 - 1;
+        return 0;
+    case 9:                      /* MMC2: the last three 8 KB fixed */
+        for (int w = 1; w < 4; w++) layout[w] = n8 - 4 + w;
+        return 0;
+    case 5: case 19: case 210:   /* MMC5 at power-on ($5117 = $FF), Namco 163/175/340: $E000 = last bank */
+    case 18: case 69:            /* SS88006, FME-7 */
         layout[3] = n8 - 1;
         return 0;
     }
@@ -157,7 +165,7 @@ int assumed_layout(const Rom *r, int layout[4]) {
 int unit_windows(const Rom *r) {
     int m = r->mapper;
     if (m == 7 || m == 11 || m == 66 || m == 79) return 4;  /* 32 KB */
-    if (m == 1 || m == 2 || m == 71) return 2;  /* 16 KB (MMC1 32 KB mode = two units) */
+    if (m == 1 || m == 2 || m == 10 || m == 71) return 2;  /* 16 KB (MMC1 32 KB mode = two units) */
     return 1;                                   /* MMC3, Namco 108, VRC: 8 KB windows independent */
 }
 

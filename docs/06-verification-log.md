@@ -3,6 +3,35 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-16 · M7f: MMC2 (9), MMC4 (10), SS88006 (18), FME-7 (69), Namco 175/340 (210)
+- **Unit ROMs** (`tests/test_mappers.py`): MMC2/MMC4 PRG and CHR latches
+  (reading $0FD8 selects the $FD bank; $0FE9 switches the MMC4 only, as
+  MMC2's left table triggers on $0FE8 exactly); SS88006 PRG from two
+  nibbles and its IRQ in 12-bit mode on time (125 turns of a RAM loop;
+  16 bits would be ~7,800); FME-7 PRG, ROM and then RAM at $6000, IRQ on
+  time (125 turns); Namco 340 PRG and vertical mirroring from $E000.
+  Mutations caught: MMC2 left latch on any row, 12-bit mode counting 16 bits.
+- **Missed NMIs** (fixed separately, `tests/test_bus.py`): Plasma Ball,
+  Top Striker and Chibi Maruko-chan hung on a black screen after one NMI.
+  They enable NMI inside vblank and wait in a RAM loop, so one lazy batch
+  ran from that vblank to the next and the NMI line went low and high
+  inside it. Not mapper-specific; batches now also end at vblank end while
+  the line is high.
+- **Boot smoke**: one dump of each of the 46 licensed titles (2 MMC2, 3
+  MMC4, 18 SS88006, 11 FME-7, 12 Namco 175/340) reaches a title, menu or
+  play screen.
+- **Recompiled with `NES_AUTO_HINTS`, `--diff`**: all identical.
+
+  | Mapper | Game | Frames | Recompiled cycles |
+  |---|---|---|---|
+  | 9 | Punch-Out!! (Europe, VC) | 18,000 | 99.97% |
+  | 10 | Fire Emblem (Japan) | 18,000 | 99.81% |
+  | 18 | Saiyuuki World 2 (Japan) | 3,000 | 99.98% |
+  | 18 | Plasma Ball (Japan) | 3,000 | 99.94% |
+  | 69 | Batman (Japan) | 3,000 | 99.96% |
+  | 210 | Splatterhouse: Wanpaku Graffiti (Japan) | 3,000 | 99.98% |
+  | 210 | Top Striker (Japan, Namco 340) | 3,000 | 99.98% |
+
 ## 2026-11-16 · M7e: MMC5 (5) and Namco 163 (19)
 - **Unit ROMs** (`tests/test_mappers.py`): MMC5 PRG mode 3, PRG RAM in a
   ROM window (written at $8005, read back through $6000 with the same
