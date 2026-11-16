@@ -449,6 +449,33 @@ class TestMappers(unittest.TestCase):
         self.assertEqual(peek(rom, 2), 0x91)
         self.assertEqual(peek(rom, 0), 0x82)
 
+    # ---- Irem G-101 (32) ----
+    def test_32_g101(self):
+        """$8000 = 3 with $9000 bit 1 (PRG mode 1): bank 3 at $C000 and the
+        second-to-last (14) at $8000; $B005 = 9 at PPU $1400. Submapper 1
+        (Major League) ignores $9000 (bank 3 stays at $8000) and is one
+        screen, page 1: $2C00 shows a $2000 write (not so with the header's
+        horizontal mirroring)."""
+        prg, chr_ = bytearray(0x20000), bytearray(0x8000)
+        for b in range(16):
+            prg[b * 0x2000 + 0x100] = 0x60 + b
+        for b in range(32):
+            chr_[b * 0x400 + 0x10] = 0x80 + b
+        ppu_write = lda_sta(0x20, 0x2006) + lda_sta(0x00, 0x2006) + lda_sta(0x5A, 0x2007)
+        code = (WAIT_VBLANK + lda_sta(0x03, 0x8000) + lda_sta(0x02, 0x9000) +
+                lda_abs(0xC100) + bytes([0x85, 0x01]) + lda_abs(0x8100) + bytes([0x85, 0x02]) +
+                lda_sta(0x09, 0xB005) + ppu_read(0x1410) + bytes([0x85, 0x03]) +
+                ppu_write + ppu_read(0x2C00) + END)
+        put(prg, 0x1E200, code)
+        vectors(prg, 0x20000, 0xE200)
+        rom = ines(32, prg, chr_)
+        self.assertEqual(peek(rom, 1), 0x63)
+        self.assertEqual(peek(rom, 2), 0x6E)
+        self.assertEqual(peek(rom, 3), 0x89)
+        major = ines(32, prg, chr_, submapper=1)
+        self.assertEqual(peek(major, 2), 0x63)
+        self.assertEqual(peek(major, 0), 0x5A)
+
     # ---- TxSROM (118): CHR bank bit 7 picks each nametable's CIRAM page ----
     def test_118_txsrom_nametables(self):
         """R0 = R1 = $80: every nametable is page 1 (one screen; $A000 =

@@ -6,7 +6,7 @@ A hobby, open-source **static recompiler for NES games**: it translates the
 6502 code in a ROM into C, compiles it to a native executable, and runs it on a
 small runtime (PPU, APU, mappers, SDL3 window/audio/gamepad).
 
-Built for the challenge. Runs games on 30 mappers (see [Mappers](#mappers));
+Built for the challenge. Runs games on 31 mappers (see [Mappers](#mappers));
 every recompiled game is checked cycle by cycle against a reference
 interpreter. No ROMs included: bring your own.
 
@@ -61,6 +61,7 @@ including unlicensed and pirate carts).
 | 22 | Konami VRC2a | TwinBee 3, Ganbare Pennant Race! |
 | 23 | Konami VRC2b/VRC4e/VRC4f | Contra (Japan), Crisis Force, Parodius Da! |
 | 25 | Konami VRC2c/VRC4b/VRC4d | Gradius II, Teenage Mutant Ninja Turtles (Japan), Bio Miracle Bokutte Upa |
+| 32 | Irem G-101 | Image Fight (Japan), Major League, Kaiketsu Yancha Maru 2 |
 | 66 | GxROM | Super Mario Bros. / Duck Hunt, Dragon Power, Gumshoe |
 | 69 | Sunsoft FME-7 (no 5B audio) | Batman: Return of the Joker, Mr. Gimmick, Hebereke |
 | 71 | Camerica / Codemasters | Micro Machines, The Fantastic Adventures of Dizzy, Bee 52 |
@@ -75,8 +76,7 @@ including unlicensed and pirate carts).
 | 206 | Namco 108 | Karnov, Gauntlet (unlicensed), Dragon Buster II |
 | 210 | Namco 175/340 | Famista '91-'94, Splatterhouse: Wanpaku Graffiti, Wagyan Land 3 |
 
-Not yet: Taito (33, 48, 80),
-Irem G-101 (32), expansion audio (MMC5, Namco 163, Sunsoft 5B,
+Not yet: Taito (33, 48, 80), expansion audio (MMC5, Namco 163, Sunsoft 5B,
 VRC6, ...) and the long tail of rarer boards. Other mappers are
 refused at load ("mapper N not supported yet").
 
