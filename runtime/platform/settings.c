@@ -5,7 +5,7 @@
 #include <string.h>
 
 static const char DEFAULT_FILE[] =
-    "# nes-recomp display settings. Edit, then restart the game.\n"
+    "# famicast display settings. Edit, then restart the game.\n"
     "# While playing: F11 or Alt+Enter = fullscreen, F10 = TV frame (not saved here).\n"
     "\n"
     "# fullscreen: 0 = window, 1 = fullscreen (desktop resolution)\n"

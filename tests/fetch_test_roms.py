@@ -33,7 +33,7 @@ def fetch(name):
     os.makedirs(ROMS, exist_ok=True)
     for url in urls:
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "nes-recomp-tests"})
+            req = urllib.request.Request(url, headers={"User-Agent": "famicast-tests"})
             data = urllib.request.urlopen(req, timeout=30).read()
         except OSError as e:
             print(f"  {url}: {e}")
@@ -65,7 +65,7 @@ def fetch_sst(opcode):
     if os.path.exists(path):
         return path
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    req = urllib.request.Request(SST_URL % (SST_COMMIT, opcode), headers={"User-Agent": "nes-recomp-tests"})
+    req = urllib.request.Request(SST_URL % (SST_COMMIT, opcode), headers={"User-Agent": "famicast-tests"})
     tests = json.loads(urllib.request.urlopen(req, timeout=120).read())
     out = [struct.pack("<I", len(tests))]
     for t in tests:
@@ -140,7 +140,7 @@ def fetch_ntr(path):
     local = os.path.join(ROMS, "ntr", *path.split("/"))
     if not os.path.exists(local):
         os.makedirs(os.path.dirname(local), exist_ok=True)
-        req = urllib.request.Request(NTR_URL % (NTR_COMMIT, path), headers={"User-Agent": "nes-recomp-tests"})
+        req = urllib.request.Request(NTR_URL % (NTR_COMMIT, path), headers={"User-Agent": "famicast-tests"})
         data = urllib.request.urlopen(req, timeout=60).read()
         with open(local + ".tmp", "wb") as f:
             f.write(data)

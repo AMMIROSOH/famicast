@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(nes_recomp C)
+project(famicast C)
 
 # Release unless asked otherwise: tests, timings and playable speed assume it.
 # (Multi-config generators such as Visual Studio: cmake --build build --config Release.)

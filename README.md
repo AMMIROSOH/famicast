@@ -1,10 +1,14 @@
-# nes-recomp (working title)
+# famicast
+
+[![ci](https://github.com/Viper-Bit/famicast/actions/workflows/ci.yml/badge.svg)](https://github.com/Viper-Bit/famicast/actions/workflows/ci.yml)
 
 A hobby, open-source **static recompiler for NES games**: it translates the
 6502 code in a ROM into C, compiles it to a native executable, and runs it on a
 small runtime (PPU, APU, mappers, SDL3 window/audio/gamepad).
 
-Built for the challenge. First target: **Battle City** (mapper 0 / NROM).
+Built for the challenge. Runs games on mappers 0, 1, 2, 3, 4, 7, 11 and 66;
+every recompiled game is checked cycle by cycle against a reference
+interpreter. No ROMs included: bring your own.
 
 ## How it works (short version)
 1. `recomp/` (`nesrecomp`, C, built and run by CMake) finds all reachable
