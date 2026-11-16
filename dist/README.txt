@@ -45,12 +45,13 @@ The program is build/my_game (build/my_game.exe on Windows), plus
 build/my_game_headless. Several games: separate the paths with ";".
 A relative path is relative to the folder you run cmake from.
 
-Code the recompiler cannot find on its own runs in the interpreter. Two ways
-to recompile more of it:
-  - add -DNES_AUTO_HINTS=ON to the first command: the build plays the game
-    for a while first and recompiles everything that ran;
-  - play: the game notes code it had to interpret in build/my_game.misses,
-    and the next "cmake --build build --config Release" recompiles it.
+Code the recompiler cannot find on its own runs in the interpreter. Two
+things recompile more of it:
+  - the build plays each game for a while first (scripted, about 6 seconds)
+    and recompiles everything that ran; -DNES_AUTO_HINTS=OFF skips this;
+  - your own play: the game notes code it had to interpret in
+    build/my_game.misses, and the next
+    "cmake --build build --config Release" recompiles it.
 
 DO NOT SHARE RECOMPILED PROGRAMS: they contain the game.
 

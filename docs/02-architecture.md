@@ -141,7 +141,7 @@ jumps, JMP through a RAM pointer, and runs code from RAM (see 06). Plan:
    them into the hints. Run without recompiled code, `--misses` lists every
    instruction executed, so one interpreter run is a complete trace of that
    session and no rebuild-and-retry rounds are needed. With
-   `-DNES_AUTO_HINTS=ON` the build does this itself with scripted input
+   `NES_AUTO_HINTS` (on by default) the build does this itself with scripted input
    (`--play`) before recompiling (M8a). Coverage is limited to what the
    input reaches; your own play reaches further: recompiled games write
    `<program>.misses` next to themselves, and the next build reads it.
