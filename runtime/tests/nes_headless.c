@@ -39,9 +39,26 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "input_log.h"
 #include "nes.h"
+
+static double timer_seconds(void) {
+#ifdef _WIN32
+    /* MinGW builds using MSVCRT do not provide C11 timespec_get. */
+    LARGE_INTEGER counter, frequency;
+    QueryPerformanceCounter(&counter);
+    QueryPerformanceFrequency(&frequency);
+    return (double)counter.QuadPart / (double)frequency.QuadPart;
+#else
+    struct timespec now;
+    timespec_get(&now, TIME_UTC);
+    return (double)now.tv_sec + now.tv_nsec / 1e9;
+#endif
+}
 
 static uint8_t *read_file(const char *path, long *size) {
     FILE *f = fopen(path, "rb");
@@ -312,8 +329,7 @@ int main(int argc, char **argv) {
     int result = 0;
     long reset_at = -1, frames_run = 0;
     int reset_armed = 1;  /* $6000 left $81 since the last reset */
-    struct timespec t0, t1;
-    timespec_get(&t0, TIME_UTC);
+    double t0 = timer_seconds();
     for (long f = 0; f < frames; f++) {
         InputFrame in = {{0, 0}, 0};
         if (f < log.count) in = log.frames[f];
@@ -362,9 +378,9 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 256 * 240; i++) h = (h ^ nes.ppu.fb[i]) * 16777619u;
         printf("HASH %08X cycles=%llu\n", h, (unsigned long long)nes.cpu.cycles);
     }
-    timespec_get(&t1, TIME_UTC);
+    double t1 = timer_seconds();
     if (timing) {
-        double sec = (double)(t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+        double sec = t1 - t0;
         printf("TIME %.2f s for %ld frames (%.1fx real time)\n", sec, frames_run, frames_run / 60.0988 / sec);
     }
     if (diff) printf("DIFF OK: %ld frames, recompiled and interpreter identical\n", frames);
