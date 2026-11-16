@@ -214,7 +214,7 @@ int main(int argc, char **argv) {
                                          SDL_TEXTUREACCESS_STREAMING, NES_W, NES_H);
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
 
-    uint32_t palette[64];
+    uint32_t palette[512];
     nes_palette_rgb(palette);
     static uint32_t fb[NES_W * NES_H];
     /* Audio: mono float at the APU's 48 kHz. Video sets the pace (60.1 Hz);
@@ -282,7 +282,7 @@ int main(int argc, char **argv) {
             SDL_Log("CPU jammed at $%04X", nes.cpu.pc);
             break;
         }
-        for (int i = 0; i < NES_W * NES_H; i++) fb[i] = palette[nes.ppu.fb[i] & 0x3F];
+        for (int i = 0; i < NES_W * NES_H; i++) fb[i] = palette[nes.ppu.fb[i] & 0x1FF];
         SDL_UpdateTexture(tex, NULL, fb, NES_W * sizeof fb[0]);
         present(ren, tex, frame_tex, cfg.scale);
         if (message_until && SDL_GetTicks() > message_until) {

@@ -73,13 +73,13 @@ static uint8_t *read_file(const char *path, long *size) {
 }
 
 static void write_ppm(Nes *n, const char *path) {
-    uint32_t pal[64];
+    uint32_t pal[512];
     nes_palette_rgb(pal);
     FILE *f = fopen(path, "wb");
     if (!f) { perror(path); exit(2); }
     fprintf(f, "P6 256 240 255\n");
     for (int i = 0; i < 256 * 240; i++) {
-        uint32_t c = pal[n->ppu.fb[i] & 0x3F];
+        uint32_t c = pal[n->ppu.fb[i] & 0x1FF];
         uint8_t rgb[3] = {(uint8_t)(c >> 16), (uint8_t)(c >> 8), (uint8_t)c};
         fwrite(rgb, 1, 3, f);
     }
