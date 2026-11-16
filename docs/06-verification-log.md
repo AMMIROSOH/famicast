@@ -10,6 +10,23 @@ reproducible check is not "verified".
   started (4 s, frame and overscan on) without errors; the picture itself
   has not been looked at yet (the frontend has no automated test).
 
+## 2026-11-17 · Colour emphasis ($2001 bits 5-7)
+- **Model**: in the NTSC signal model of `runtime/palette.c`, the signal is
+  attenuated (x0.816328 of the absolute voltage) while the colour wave of
+  phase 0, 4 or 8 is high, except in columns $xE/$xF. Grey $10 comes out
+  (167,144,139) with red, (136,161,130) green, (147,146,182) blue,
+  (126,126,126) with all three (from (174,174,174)); $0F stays black.
+- **Unit ROM** (`tests/test_emphasis.py`): a white backdrop read from the
+  PPM: each bit makes its colour the strongest channel, all three dim it
+  evenly. Mutation caught: emphasis left out of the frame buffer.
+- **Games**: of the 25 commercial games on nesdev's "Colour-emphasis games"
+  list that run here, 20 set emphasis within 9,000 frames of scripted
+  play; a before/after of the first such frame (after boot, at least 6
+  colours) shows the expected dimming (most use all three bits) or tint.
+  Aladdin (Europe), a PAL game, tints red rather than green: on an NTSC
+  PPU its bit is red. Frame hashes of games without emphasis are unchanged
+  (the frame buffer is 16-bit now; its values are the same).
+
 ## 2026-11-17 · M7j: Irem G-101 (32)
 - **Unit ROM** (`tests/test_mappers.py`): PRG mode 1 puts the $8000
   register at $C000 and the second-to-last bank at $8000; a CHR bank at
