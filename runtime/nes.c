@@ -21,7 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { DOTS_BEFORE_ACCESS = 2, LINE = 341, VBLANK_POS = 241 * LINE + 1, FRAME_SHORT = 262 * LINE - 1 };
+enum { DOTS_BEFORE_ACCESS = 2, LINE = 341, VBLANK_POS = 241 * LINE + 1, FRAME_SHORT = 262 * LINE - 1,
+       PRE_CLEAR = 261 * LINE + 2 };  /* just past (261, 1), where vblank ends */
 
 /* How many dots may pile up before the bus must catch up: until vblank
  * start (241, 1) has been processed (assuming the odd-frame skipped dot, so
@@ -30,6 +31,11 @@ static void plan_next_event(Nes *n) {
     int pos = n->ppu.scanline * LINE + n->ppu.dot;
     int64_t d = VBLANK_POS - pos + 1;
     if (d <= 0) d += FRAME_SHORT;
+    /* NMI line high: also stop once the pre-render line has cleared it at
+     * (261, 1), or a batch through to the next vblank would see high -> high
+     * and miss the edge (a game waiting in a RAM loop after enabling NMI
+     * inside vblank) */
+    if (n->ppu.nmi_out && pos < PRE_CLEAR && PRE_CLEAR - pos < d) d = PRE_CLEAR - pos;
     int64_t apu = n->cpu.bus_pending + 3 * apu_cycles_to_event(&n->apu);
     if (apu < d) d = apu;
     int64_t vrc = cart_cycles_to_irq(&n->cart, n->cpu.cycles);
@@ -77,7 +83,8 @@ static void sync_apu(Nes *n) {
 
 /* The NMI line only rises at vblank start (or on a $2000/$2002 access, which
  * catches up right away), and a batch never runs past vblank start by more
- * than the current cycle, so one edge check per batch sees every rise. */
+ * than the current cycle, nor past vblank end while the line is high, so one
+ * edge check per batch sees every rise. */
 static void catch_up(Nes *n) {
     ppu_run(&n->ppu, n->cpu.bus_pending);
     n->cpu.yield |= n->ppu.frame_done;  /* the frame loop needs control back */
