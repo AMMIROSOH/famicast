@@ -43,6 +43,7 @@ From the folder this file is in:
 
 The program is build/my_game (build/my_game.exe on Windows), plus
 build/my_game_headless. Several games: separate the paths with ";".
+A relative path is relative to the folder you run cmake from.
 
 Code the recompiler cannot find on its own runs in the interpreter. Two ways
 to recompile more of it:

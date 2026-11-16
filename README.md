@@ -129,6 +129,8 @@ the interpreter. Two ways to recompile it too:
   ```
 `build/game_one_headless --play 1 --diff --misses` runs the interpreter in
 lockstep and reports the first difference, then what was still interpreted.
+Relative `NES_GAMES` paths are relative to the folder cmake is run from
+(else to the source folder), and are stored as absolute paths in the cache.
 Target names drop "(...)"/"[...]" tags from the file name; hints live in
 `games/<name>.toml` and record the PRG hash of the dump they were made for.
 On Windows with Git Bash, give `NES_GAMES` Windows paths (`pwd -W`).

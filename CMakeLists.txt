@@ -165,9 +165,31 @@ endif()
 # non-alphanumerics -> '_' (e.g. "Arkista's Ring (U) [!].nes" -> arkista_s_ring);
 # hints are read from games/<name>.toml when present.
 set(NES_GAMES "" CACHE STRING "ROM files to recompile (semicolon-separated)")
+# Relative paths are relative to the folder cmake was run from (for the
+# release kit that is the archive folder, not kit/), else to this source
+# folder. CMake has no variable for the former, but a cmake -P child sees it
+# as CMAKE_SOURCE_DIR. The absolute paths go back into the cache, so later
+# re-configures (from cmake --build, an IDE) resolve nothing again.
+if(NES_GAMES)
+    file(WRITE ${CMAKE_BINARY_DIR}/print_cwd.cmake
+        "execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E echo \"\${CMAKE_SOURCE_DIR}\")\n")
+    execute_process(COMMAND ${CMAKE_COMMAND} -P ${CMAKE_BINARY_DIR}/print_cwd.cmake
+        OUTPUT_VARIABLE cwd OUTPUT_STRIP_TRAILING_WHITESPACE)
+    set(absolute_roms "")
+    foreach(rom IN LISTS NES_GAMES)
+        get_filename_component(from_cwd "${rom}" ABSOLUTE BASE_DIR "${cwd}")
+        get_filename_component(from_src "${rom}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+        if(EXISTS "${from_cwd}")
+            list(APPEND absolute_roms "${from_cwd}")
+        elseif(EXISTS "${from_src}")
+            list(APPEND absolute_roms "${from_src}")
+        else()
+            message(FATAL_ERROR "NES_GAMES: ROM not found: ${rom} (looked in ${cwd} and ${CMAKE_SOURCE_DIR})")
+        endif()
+    endforeach()
+    set(NES_GAMES "${absolute_roms}" CACHE STRING "ROM files to recompile (semicolon-separated)" FORCE)
+endif()
 foreach(rom IN LISTS NES_GAMES)
-    # Build commands run from the build directory; resolve user paths here.
-    get_filename_component(rom "${rom}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
     get_filename_component(stem "${rom}" NAME_WLE)
     string(REGEX REPLACE "[ ]*[[(][^])]*[])]" "" stem "${stem}")  # drop (U), [!], ...
     string(TOLOWER "${stem}" name)
