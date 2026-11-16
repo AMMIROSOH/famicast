@@ -3,6 +3,34 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-16 · M7g: Bandai FCG (16, 153, 157, 159)
+- **Unit ROMs** (`tests/test_mappers.py`): PRG register and IRQ on time
+  (counter 1000: 125 turns of a RAM loop) for the FCG-1/2 (registers at
+  $6000, counter loaded directly) and the LZ93D50 ($8000, latch copied by
+  the enable write); a byte written to a 24C02 (device $A0, address,
+  data) and to an X24C01 (address + R/W byte), then read back by bit-banged
+  I2C. Mutations caught: the LZ93D50 not copying its latch, EEPROM read
+  bits sent LSB first. The first test byte, $5A, reads the same reversed;
+  replaced by $4B.
+- **Famicom Jump II** (153) jammed at frame 24 on zeroed battery RAM, as
+  the wiki warns; it boots with RAM filled with $FF at power-on.
+- **EEPROM probe** (temporary): Dragon Ball Z II, Battle Rush, SD Gundam
+  Gaiden 2 and DBZ: Kyoushuu! Saiya Jin write their EEPROMs in 6,000
+  frames of scripted play; the save menus show empty slots on a blank chip.
+- **Boot smoke**: one dump of each of the 26 licensed titles (14 on 16, 1
+  on 153, 7 Datach, 4 on 159) reaches a title, menu or play screen.
+- **Recompiled with `NES_AUTO_HINTS`, `--diff` 3,000 frames**: all
+  identical. Dragon Ball 3 switches PRG with stores to $6008 (the recompiler
+  now treats $6000-$7FFF stores as possible bank switches for mapper 16).
+
+  | Mapper | Game | Recompiled cycles |
+  |---|---|---|
+  | 16 (LZ93D50, 24C02) | Dragon Ball Z II (Japan, Rev 1) | 99.95% |
+  | 16 (FCG-1/2) | Dragon Ball 3 (Japan, Rev 1) | 99.86% |
+  | 153 | Famicom Jump II (Japan) | 99.89% |
+  | 157 | Battle Rush (Japan, Datach) | 99.93% |
+  | 159 | Magical Taruruuto-kun 2 (Japan) | 99.95% |
+
 ## 2026-11-16 · M7f: MMC2 (9), MMC4 (10), SS88006 (18), FME-7 (69), Namco 175/340 (210)
 - **Unit ROMs** (`tests/test_mappers.py`): MMC2/MMC4 PRG and CHR latches
   (reading $0FD8 selects the $FD bank; $0FE9 switches the MMC4 only, as

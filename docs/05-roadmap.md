@@ -173,6 +173,12 @@ M7a (runtime):
   FME-7 PRG ROM at $6000; 210 reuses the Namco 163's banking. Not done:
   the SS88006 speech chip and Sunsoft 5B audio. 3,239 of 4,031 ROMs (93%
   of licensed); 46 games boot; 7 identical to the interpreter (06).
+- [x] M7g: Bandai FCG (16, 153, 157, 159): FCG-1/2 and LZ93D50 registers by
+  address range (NES 2.0 submapper, else both), the 16-bit cycle IRQ, 24C02
+  and X24C01 EEPROMs over I2C saved like battery RAM, 153's outer PRG bank
+  and battery RAM, the Datach's two EEPROMs. Not done: the Datach barcode
+  reader. 3,270 of 4,031 ROMs (95% of licensed); 26 games boot; 5
+  identical to the interpreter (06).
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color
