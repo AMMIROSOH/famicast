@@ -65,7 +65,7 @@ recompiler.)
   per-dot sprite evaluation with the overflow bug, vblank/NMI races, open-bus
   decay), `nes.c` (CPU bus, OAM DMA, controllers), `palette.c` (NTSC model).
 - [x] CPU interrupt polling on the second-to-last cycle (`cpu_ops.h`).
-- [x] SDL3 frontend: ROM loading, keyboard, integer scaling, 60.1 Hz pacing.
+- [x] SDL3 frontend: ROM loading, keyboard, integer scaling, 60.1 Hz pacing (vsync on displays of 59 Hz and up, against tearing).
 - [x] `nes_headless` runner: blargg $6000 protocol, zero-page result codes,
   PPM screenshots, frame hash, scripted input (`--press`).
 - [x] 52/52 test ROMs pass (`tests/test_roms.py`, list in 06).

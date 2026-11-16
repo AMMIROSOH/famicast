@@ -202,6 +202,11 @@ int main(int argc, char **argv) {
         SDL_Log("window: %s", SDL_GetError());
         return 1;
     }
+    /* vsync, so scrolling does not tear; the 60.1 Hz pacing below still sets the
+     * speed. Not on displays under 59 Hz: waiting for them would slow the game.
+     * shortcut: checked once at start, not when the window moves to another display */
+    const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(win));
+    if (!mode || mode->refresh_rate == 0 || mode->refresh_rate >= 59) SDL_SetRenderVSync(ren, 1);
     if (cfg.fullscreen) SDL_SetWindowFullscreen(win, true);
     SDL_Texture *frame_tex = cfg.tv_frame ? make_tv_frame(ren) : NULL;
     uint64_t message_until = 0;  /* a short message in the title bar */
