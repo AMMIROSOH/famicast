@@ -3,6 +3,13 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · Overscan setting
+- `overscan = 1` (the default) shows lines 8-231, as an NTSC TV did (the
+  same window as FCEUX's NTSC default); the TV frame's screen opening is
+  generated for the 224 visible lines, so nothing is stretched. Built and
+  started (4 s, frame and overscan on) without errors; the picture itself
+  has not been looked at yet (the frontend has no automated test).
+
 ## 2026-11-17 · Colour emphasis ($2001 bits 5-7)
 - **Model**: in the NTSC signal model of `runtime/palette.c`, the signal is
   attenuated (x0.816328 of the absolute voltage) while the colour wave of

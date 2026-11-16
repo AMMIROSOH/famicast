@@ -11,6 +11,7 @@ typedef struct {
     int tv_frame;      /* 0/1 */
     int window_scale;  /* starting window size, multiples of the content size */
     int record_misses; /* recompiled games: keep interpreted ROM code in <program>.misses */
+    int overscan;      /* 1: hide the top and bottom 8 lines, as a TV did */
 } Settings;
 
 /* Fills s with defaults, then the values found in path. Writes a commented

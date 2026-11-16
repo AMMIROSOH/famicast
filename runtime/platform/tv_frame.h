@@ -7,14 +7,16 @@
 
 #include <stdint.h>
 
-/* Layout in NES pixels: the picture (256x240) sits at (TV_LEFT, TV_TOP). */
+/* Layout in NES pixels: the picture (256 x `lines`: 240, or 224 with the
+ * overscan hidden) sits at (TV_LEFT, TV_TOP). */
 enum {
     TV_LEFT = 24, TV_TOP = 20, TV_BOTTOM = 36,
-    TV_W = 256 + 2 * TV_LEFT, TV_H = 240 + TV_TOP + TV_BOTTOM,
+    TV_W = 256 + 2 * TV_LEFT,
     TV_RES = 4  /* texture pixels per NES pixel, so the frame stays smooth when scaled up */
 };
+static inline int tv_h(int lines) { return lines + TV_TOP + TV_BOTTOM; }
 
-/* rgba: (TV_W * TV_RES) x (TV_H * TV_RES) pixels, bytes R, G, B, A. */
-void tv_frame_render(uint8_t *rgba);
+/* rgba: (TV_W * TV_RES) x (tv_h(lines) * TV_RES) pixels, bytes R, G, B, A. */
+void tv_frame_render(uint8_t *rgba, int lines);
 
 #endif
