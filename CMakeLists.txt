@@ -2,10 +2,16 @@ cmake_minimum_required(VERSION 3.20)
 project(famicast C)
 
 # Release unless asked otherwise: tests, timings and playable speed assume it.
-# (Multi-config generators such as Visual Studio: cmake --build build --config Release.)
+# (Multi-config generators such as Visual Studio: cmake --build build --config Release;
+# without it, cmake --build always asks MSBuild for Debug.)
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
+
+# Programs in build/ with every generator (the $<> stops Visual Studio adding
+# Release/ or Debug/): NAME.misses is written next to the program and read
+# from here, and the tests look for build/NAME.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}>)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -21,11 +27,15 @@ add_executable(nesrecomp recomp/main.c recomp/ops.c recomp/c6502.c recomp/analyz
 target_include_directories(nesrecomp PRIVATE runtime)
 
 set(GEN_DIR ${CMAKE_BINARY_DIR}/gen)
+# WORKING_DIRECTORY on custom commands that run our programs: without it the
+# Visual Studio generator writes a bare "nesrecomp.exe" (relative to build/),
+# which MSBuild's cmd does not look for in the current folder.
 add_custom_command(
     OUTPUT ${GEN_DIR}/cpu_switch.inc
     COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN_DIR}
     COMMAND nesrecomp --cpu-switch ${GEN_DIR}/cpu_switch.inc
     DEPENDS nesrecomp
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Generating the interpreter's opcode switch")
 
 add_library(nescpu STATIC runtime/cpu.c ${GEN_DIR}/cpu_switch.inc)
@@ -106,6 +116,7 @@ function(nes_recompile name rom)
             OUTPUT ${trace}
             COMMAND nes_headless "${rom}" --play 1 --frames ${NES_AUTO_HINTS_FRAMES} --misses --out ${trace}
             DEPENDS "${rom}" nes_headless
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             COMMENT "Tracing ${name} in the interpreter (${NES_AUTO_HINTS_FRAMES} frames)")
         list(APPEND hint_args --misses ${trace} --save-hints ${GEN_DIR}/${name}.toml)
     endif()
@@ -121,6 +132,7 @@ function(nes_recompile name rom)
         OUTPUT ${out}
         COMMAND nesrecomp "${rom}" -o ${out} ${hint_args}
         DEPENDS "${rom}" ${hints} ${trace} ${played} nesrecomp
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Recompiling ${name}")
     add_library(${name}_code STATIC ${out})
     # bus helpers out of line in generated code: thousands of blocks with them

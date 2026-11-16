@@ -23,39 +23,42 @@ See [docs/02-architecture.md](docs/02-architecture.md) and the plan in
 
 ## Status
 M0-M3 done: verified opcode table and decoder, a reference interpreter (nestest,
-SingleStepTests) and a PPU passing 52 blargg-style test ROMs. Battle City runs
-on the interpreter and recompiled (M5: lockstep-identical to the interpreter
-over 10 minutes of play, no interpreted code left), about 30x faster than a
-real NES in both modes (M5b), with sound (M6). Mappers 0-4, 7, 11, 66 run in
+SingleStepTests) and a PPU passing 52 blargg-style test ROMs. A first example
+game runs on the interpreter and recompiled (M5: lockstep-identical to the
+interpreter over 10 minutes of play, no interpreted code left), about 30x
+faster than a real NES in both modes (M5b), with sound (M6). Mappers 0-4, 7, 11, 66 run in
 the interpreter and recompile with bank-aware code (M7); one game per mapper
 is verified identical to the interpreter. The recompiler is plain C and runs
 inside the CMake build; it can trace a game first to find code by itself
 (M8a). Save states, a coverage report, frame-hash regression tests and
 display settings (fullscreen, scaling, TV frame) came with M8b. Recompiled
-Kirby's Adventure runs at about 33x real time, Battle City at 38x. See
+example games run at about 33-38x real time. See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
 
 ## Build
-Needs CMake ≥ 3.20, a C11 compiler (clang/gcc/MSVC) and Ninja. SDL3 is
-downloaded and built by CMake. Python ≥ 3.11 is only needed for the tests.
+Needs CMake ≥ 3.20 and a C11 compiler (clang/gcc/MSVC); any CMake generator
+works (Visual Studio, Ninja, Makefiles). SDL3 is downloaded and built by
+CMake. Python ≥ 3.11 is only needed for the tests.
 ```
-cmake -S . -B build -G Ninja
-cmake --build build
+cmake -S . -B build
+cmake --build build --config Release
 build/nes path/to/game.nes      # any game on a supported mapper, interpreted
 ```
-The build type defaults to **Release**; tests, timings and full-speed play
-assume it. With a multi-config generator (Visual Studio), build with
-`cmake --build build --config Release`. Headless (no SDL3): add
-`-DNES_FRONTEND=OFF`. On Windows the game programs open no console window;
+Builds are **Release**; tests, timings and full-speed play assume it. Keep
+`--config Release` with Visual Studio (the default generator with MSVC):
+without it `cmake --build` builds Debug, which is too slow to play.
+Ninja and Makefiles ignore the flag and build Release anyway. Programs are
+put in `build/` with every generator (no `Release/` or `Debug/` subfolder).
+Headless (no SDL3): add `-DNES_FRONTEND=OFF`. On Windows the game programs open no console window;
 use the `_headless` programs for text output.
 
 ## Recompiling a game
 ```
-cmake -S . -B build -DNES_GAMES="path/to/Battle City.nes;path/to/Metroid (E) [!].nes"
-cmake --build build              # -> build/battle_city, build/metroid (+ _headless)
-build/battle_city                # the ROM is embedded: no path needed
+cmake -S . -B build -DNES_GAMES="path/to/Game One.nes;path/to/Game Two (E) [!].nes"
+cmake --build build --config Release   # -> build/game_one, build/game_two (+ _headless)
+build/game_one                         # the ROM is embedded: no path needed
 ```
 The whole ROM is embedded in the executable (graphics and data are read
 through pointers no analysis can bound), so **do not share these builds**:
@@ -72,15 +75,17 @@ the interpreter. Two ways to recompile it too:
   to `games/` to keep them without tracing.
 - By playing: a recompiled game notes ROM code it had to interpret in
   `build/<name>.misses` (setting `record_misses` in its `.ini`); the next
-  `cmake --build build` recompiles it.
+  `cmake --build build --config Release` sees the file changed and
+  recompiles the game with those addresses (the build always passes
+  `build/<name>.misses` to `nesrecomp`).
 - By hand, from a recording (reaches what the script cannot):
   ```
   build/nes game.nes --record run.nesi
   build/nes_headless game.nes --replay run.nesi --misses --out misses.txt
-  build/nesrecomp game.nes --hints games/battle_city.toml --misses misses.txt --save-hints games/battle_city.toml
-  cmake --build build
+  build/nesrecomp game.nes --hints games/game.toml --misses misses.txt --save-hints games/game.toml
+  cmake --build build --config Release
   ```
-`build/battle_city_headless --play 1 --diff --misses` runs the interpreter in
+`build/game_one_headless --play 1 --diff --misses` runs the interpreter in
 lockstep and reports the first difference, then what was still interpreted.
 Target names drop "(...)"/"[...]" tags from the file name; hints live in
 `games/<name>.toml` and record the PRG hash of the dump they were made for.
@@ -98,7 +103,7 @@ hot-plug; D-pad or left stick, East = A, South = B, Back = Select, Start.
 | F11 or Alt+Enter | fullscreen on/off |
 
 Display settings live in `<program>.ini` next to the program
-(`build/battle_city.ini`, `build/nes.ini`), written with defaults and
+(`build/game_one.ini`, `build/nes.ini`), written with defaults and
 comments on first run:
 ```
 fullscreen = 0      # 1 = fullscreen at desktop resolution
@@ -124,7 +129,7 @@ hashes in `tests/data/frame_hashes.json`) run for the games the build was
 configured with and are skipped otherwise. After an intended output change:
 `NES_UPDATE_HASHES=1 python -m unittest tests.test_regression`.
 
-Coverage of a recompiled game: `build/battle_city_headless --play 1 --coverage`
+Coverage of a recompiled game: `build/game_one_headless --play 1 --coverage`
 (share of CPU cycles in recompiled code; `--misses` also lists the
 addresses that were interpreted).
 
