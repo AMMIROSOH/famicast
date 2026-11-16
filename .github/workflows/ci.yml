@@ -15,21 +15,27 @@ jobs:
           - {os: windows-latest, cc: cl}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: ilammy/msvc-dev-cmd@v1
-        if: runner.os == 'Windows'
-      - name: Install Ninja (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
       - name: Fetch public test ROMs
         run: python tests/fetch_test_roms.py
-      - name: Configure
-        # headless: the SDL3 frontend needs X11/Wayland dev packages on Linux
-        run: cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DNES_FRONTEND=OFF
-      - name: Build
-        run: cmake --build build
+      # headless: the SDL3 frontend needs X11/Wayland dev packages on Linux
+      - name: Configure and build (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build
+          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DNES_FRONTEND=OFF
+          cmake --build build
+      - name: Configure and build (Windows, MSVC)
+        if: runner.os == 'Windows'
+        shell: cmd
+        # MSVC environment from Visual Studio itself (vswhere ships with it)
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSDIR=%%i
+          call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DNES_FRONTEND=OFF || exit /b 1
+          cmake --build build
       - name: Test
         run: python -m unittest discover -s tests -t . -v
