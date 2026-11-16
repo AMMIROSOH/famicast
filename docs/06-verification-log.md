@@ -7,8 +7,8 @@ reproducible check is not "verified".
 - `overscan = 1` (the default) shows lines 8-231, as an NTSC TV did (the
   same window as FCEUX's NTSC default); the TV frame's screen opening is
   generated for the 224 visible lines, so nothing is stretched. Built and
-  started with the frame on; the picture itself is checked by eye (the
-  frontend has no automated test).
+  started (4 s, frame and overscan on) without errors; the picture itself
+  has not been looked at yet (the frontend has no automated test).
 
 ## 2026-11-17 · M7j: Irem G-101 (32)
 - **Unit ROM** (`tests/test_mappers.py`): PRG mode 1 puts the $8000
