@@ -2,7 +2,11 @@
 # only (fetched by tests/fetch_test_roms.py); no game ROMs, so the tests of
 # recompiled games skip. SingleStepTests (~1 GB) are not downloaded here.
 name: ci
-on: [push, pull_request]
+# main and pull requests only: tags and PR branches were tested twice
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 jobs:
   build-test:
