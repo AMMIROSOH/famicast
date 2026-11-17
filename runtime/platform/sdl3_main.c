@@ -107,8 +107,10 @@ static SDL_Texture *make_tv_frame(SDL_Renderer *ren, int width, int lines) {
  * centred), `width` units wide (256 square pixels, 293 for 8:7, 355 for PAL), and the
  * frame over it, scaled into the output. Integer scaling applies to the
  * lines; with 8:7 pixels the width follows (the pixel-art scale mode keeps
- * the uneven columns sharp). */
-static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int scale, int width, int lines) {
+ * the uneven columns sharp). banner: NULL-terminated lines of text drawn
+ * over the picture in SDL's built-in 8x8 font, one font pixel per NES pixel. */
+static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int scale, int width, int lines,
+                    const char *const *banner) {
     int W, H;
     SDL_GetCurrentRenderOutputSize(ren, &W, &H);
     float cw = (float)(frame ? tv_w(width) : width), ch = (float)(frame ? tv_h(lines) : lines);  /* content, in units */
@@ -125,6 +127,16 @@ static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int
     SDL_RenderClear(ren);
     SDL_RenderTexture(ren, pic, &src, &picture);
     if (frame) SDL_RenderTexture(ren, frame, NULL, &content);
+    const float k = SDL_max(1.0f, SDL_floorf(sy));
+    SDL_SetRenderScale(ren, k, k);
+    for (int i = 0; banner && banner[i]; i++) {
+        float x = picture.x / k + 16, y = picture.y / k + 16 + i * 12;
+        SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
+        SDL_RenderFillRect(ren, &(SDL_FRect){x - 2, y - 2, SDL_strlen(banner[i]) * 8.0f + 4, 12});
+        SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+        SDL_RenderDebugText(ren, x, y, banner[i]);
+    }
+    SDL_SetRenderScale(ren, 1, 1);
     SDL_RenderPresent(ren);
 }
 
@@ -169,7 +181,8 @@ int main(int argc, char **argv) {
     SDL_snprintf(ini_path, sizeof ini_path, "%s%s.ini", SDL_GetBasePath(), NES_APP_NAME);
     Settings cfg;
     settings_load(&cfg, ini_path);
-    if (cfg.region >= 0 && cfg.region != nes.cart.region) nes_set_region(&nes, cfg.region);
+    const int forced = cfg.region >= 0 && cfg.region != nes.cart.region;
+    if (forced) nes_set_region(&nes, cfg.region);
     char misses_path[1024];
     SDL_snprintf(misses_path, sizeof misses_path, "%s%s.misses", SDL_GetBasePath(), NES_APP_NAME);
     if (nes.recomp && cfg.record_misses) nes.misses = SDL_calloc(nes_miss_slots(&nes), sizeof *nes.misses);
@@ -242,6 +255,7 @@ int main(int argc, char **argv) {
     static float samples[APU_BUF];
     uint64_t next = SDL_GetTicksNS();
     int running = 1, reset_pressed = 0;
+    char jam_line[32] = "";
     for (long frame = 0; running && (max_frames <= 0 || frame < max_frames); frame++) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
@@ -293,13 +307,19 @@ int main(int argc, char **argv) {
             float ratio = 1.0f + 0.005f * (queued - target) / target;
             SDL_SetAudioStreamFrequencyRatio(audio, ratio < 0.995f ? 0.995f : ratio > 1.005f ? 1.005f : ratio);
         }
-        if (nes.cpu.jammed) {
-            SDL_Log("CPU jammed at $%04X", nes.cpu.pc);
-            break;
+        /* A KIL opcode halts a real 6502 until reset while the TV keeps the
+         * last picture: stay open on it, so F5 or F4 can recover.
+         * shortcut: the PPU and APU stop too (on hardware they run on, so a
+         * held note drones); fine for a game that is dead anyway */
+        if (nes.cpu.jammed && !jam_line[0]) {
+            SDL_snprintf(jam_line, sizeof jam_line, "CPU jammed at $%04X", nes.cpu.pc);
+            SDL_Log("%s", jam_line);
         }
+        if (!nes.cpu.jammed) jam_line[0] = 0;
+        const char *jam_banner[] = {jam_line, "F5 reset, F4 load state", forced ? "(region forced in nes.ini)" : NULL, NULL};
         for (int i = 0; i < NES_W * NES_H; i++) fb[i] = palette[nes.ppu.fb[i] & 0x1FF];
         SDL_UpdateTexture(tex, NULL, fb, NES_W * sizeof fb[0]);
-        present(ren, tex, frame_tex, cfg.scale, width, lines);
+        present(ren, tex, frame_tex, cfg.scale, width, lines, jam_line[0] ? jam_banner : NULL);
         if (message_until && SDL_GetTicks() > message_until) {
             SDL_SetWindowTitle(win, heading);
             message_until = 0;

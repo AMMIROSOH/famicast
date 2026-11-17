@@ -193,6 +193,10 @@ aspect = tv         # tv = pixels as on a TV (8:7 NTSC, 1.39:1 PAL), square = sq
 region = auto       # auto (from the ROM header), ntsc, pal, dendy
 window_scale = 3    # starting window size
 ```
+Forcing `region`: NTSC games on `pal` run slower but usually work;
+PAL-only games on `ntsc` often freeze or jam, as on a real NTSC console.
+A jammed CPU (a crash on hardware too) leaves the last picture on screen
+with a message; F5 resets, F4 loads a state.
 Save states work across builds of the same version: a state saved by the
 interpreter (`build/nes`) loads in the recompiled program and the reverse.
 
