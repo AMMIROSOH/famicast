@@ -3,6 +3,42 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · M7k: Taito TC0190 (33), TC0690 (48), X1-005 (80, 207)
+- **Unit ROMs** (`tests/test_mappers.py`): 33 and 48 PRG banks at
+  $8000/$A000 (second-to-last at $C000), a 2 KB CHR bank numbered in 2 KB
+  units, a 1 KB bank, and mirroring from $8000 (33) or $E000 (48) against
+  the header's; the 48 IRQ against MMC3's with the same code: the latch
+  written inverted, never earlier, at most one 8-cycle loop turn later,
+  and later in the cycle phases where 4 cycles cross a turn; X1-005 PRG at
+  all three windows, the A7 register mirror, 2 KB CHR with bit 0 ignored,
+  mirroring, RAM written and read only while enabled ($A3) and mirrored
+  at $7F80; 207 nametable pages from $7EF0/$7EF1 bit 7 against the
+  header's. Mutations caught (13): no delay, no inversion, 2 KB numbers as
+  1 KB, CHR bit 0 kept, RAM ungated (read, write), RAM unmirrored, A7
+  decoded, 207 nametables off, mirroring inverted (33/48, 80), X1-005
+  $C000 fixed, 48 $E000 ignored. The 207 test first used one screen, which
+  "nametables off" also gives (all page 0); it now splits the pages.
+- **Boot smoke**: the 23 licensed titles (9 on 33, 6 on 48, 7 on 80, 1 on
+  207) reach a title, menu, name entry or play screen. Akira was black at
+  frame 1,500: its intro loops, with black between scenes.
+- **IRQ delay (48)**: the six 48 games under `--play` input gave the same
+  frame hashes every 100 frames to 3,000 with and without the delay. The
+  delay follows the wiki (games shake without it); these runs do not show
+  it either way.
+- **Recompiled with `NES_AUTO_HINTS`, `--diff` 3,000 frames** (scripted
+  presses): all identical.
+
+  | Game | Mapper | Recompiled cycles |
+  |---|---|---|
+  | Insector X (Japan) | 33 | 99.96% |
+  | Don Doko Don (Japan) | 33 | 99.98% |
+  | Bubble Bobble 2 (Japan) | 48 | 99.98% |
+  | The Flintstones: The Rescue of Dino & Hoppy (Japan) | 48 | 99.94% |
+  | The Jetsons: Cogswell's Caper (Japan) | 48 | 99.90% |
+  | Mirai Shinwa Jarvas (Japan) | 80 | 99.94% |
+  | Kyonshiizu 2 (Japan) | 80 | 99.98% |
+  | Fudou Myouou Den (Japan) | 207 | 99.98% |
+
 ## 2026-11-17 · Emitter guard
 - `static_body` (`recomp/emit.c`) now checks the operand fetches it found in
   the interpreter's C: every operand byte (offsets 1 to size-1) fetched and

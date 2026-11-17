@@ -6,8 +6,9 @@
  * "MMC4" (10), "INES Mapper 018" (Jaleco SS88006), "Sunsoft FME-7" (69),
  * "INES Mapper 210" (Namco 175/340), "Bandai FCG board", "INES Mapper 016",
  * "INES Mapper 153", "INES Mapper 157", "INES Mapper 159", "INES Mapper 118"
- * (TxSROM), "VRC1" (75), "INES Mapper 032" (Irem G-101) and "NES 2.0
- * submappers" (032: 1); the EEPROMs from
+ * (TxSROM), "VRC1" (75), "INES Mapper 032" (Irem G-101), "INES Mapper 033"
+ * (Taito TC0190), "INES Mapper 048" (TC0690), "Taito X1-005" (80), "INES
+ * Mapper 207" and "NES 2.0 submappers" (032: 1); the EEPROMs from
  * the 24C02/X24C01 datasheets' I2C protocol. */
 #include "cart.h"
 
@@ -404,7 +405,7 @@ static uint8_t n163_read(Cart *c, uint16_t a, uint8_t open_bus) {
 
 uint8_t cart_nt_read(Cart *c, const uint8_t *ciram, uint16_t a) {
     int q = (a >> 10) & 3, off = a & 0x3FF;
-    if (c->mapper == 118) return ciram[c->txsrom_nt[q] * 0x400 + off];
+    if (c->mapper == 118 || c->mapper == 207) return ciram[c->txsrom_nt[q] * 0x400 + off];
     if (c->mapper == 19) {
         uint8_t v = c->n163_nt[q];
         return v >= 0xE0 ? ciram[(v & 1) * 0x400 + off] : c->chr[((uint32_t)v * 0x400 + (uint32_t)off) % c->chr_size];
@@ -419,7 +420,7 @@ uint8_t cart_nt_read(Cart *c, const uint8_t *ciram, uint16_t a) {
 
 void cart_nt_write(Cart *c, uint8_t *ciram, uint16_t a, uint8_t v) {
     int q = (a >> 10) & 3, off = a & 0x3FF;
-    if (c->mapper == 118) { ciram[c->txsrom_nt[q] * 0x400 + off] = v; return; }
+    if (c->mapper == 118 || c->mapper == 207) { ciram[c->txsrom_nt[q] * 0x400 + off] = v; return; }
     if (c->mapper == 19) {
         if (c->n163_nt[q] >= 0xE0) ciram[(c->n163_nt[q] & 1) * 0x400 + off] = v;  /* CHR ROM: ignored */
         return;
@@ -537,6 +538,62 @@ static void g101_write(Cart *c, uint16_t a, uint8_t v) {
         break;
     }
     g101_update(c);
+}
+
+/* ---- Taito: TC0190 (33) and TC0690 (48) write $8000/$8001 8 KB PRG at
+ * $8000/$A000 (6 bits), $8002/$8003 2 KB CHR (numbered in 2 KB units),
+ * $A000-$A003 1 KB CHR; $C000 and $E000 are fixed to the last two banks.
+ * 33: $8000 bit 6 mirroring (0 vertical, 1 horizontal). 48: $E000 bit 6
+ * mirroring, and $C000-$C003 drive MMC3's IRQ ($C000 latch inverted, $C001
+ * reload, $C002 enable, $C003 disable and acknowledge), which fires about 4
+ * CPU cycles after MMC3's would (games shake without the delay).
+ * X1-005 (80, 207): registers at $7EF0-$7EFF ($7E70 mirrors): $7EF0/$7EF1 2
+ * KB CHR (1 KB numbers, bit 0 ignored), $7EF2-$7EF5 1 KB CHR, $7EF6 bit 0
+ * mirroring (0 horizontal, 1 vertical; 80 only), $7EF8/$7EF9 $A3 enables the
+ * 128 bytes of RAM at $7F00 (mirrored at $7F80), $7EFA/$7EFC/$7EFE (and the
+ * odd mirrors) 8 KB PRG at $8000/$A000/$C000; $E000 is fixed to the last
+ * bank. 207 wires $7EF0/$7EF1 bit 7 to the nametables instead: $2000/$2400
+ * and $2800/$2C00, like TxSROM. */
+static int is_x1005(const Cart *c) { return c->mapper == 80 || c->mapper == 207; }
+
+static void taito_update(Cart *c) {
+    uint32_t n8 = c->prg_size / 0x2000;
+    int x1005 = is_x1005(c);
+    for (int w = 0; w < 3; w++) c->prg_off[w] = ((w < 2 || x1005 ? c->prg_bank[w] : n8 - 2) % n8) * 0x2000;
+    c->prg_off[3] = (n8 - 1) * 0x2000;
+    for (int i = 0; i < 2; i++)
+        set_chr(c, i * 2, 2, x1005 ? c->chr_bank[i] & (c->mapper == 207 ? 0x7E : 0xFE) : c->chr_bank[i] * 2u);
+    for (int i = 2; i < 6; i++) set_chr(c, i + 2, 1, c->chr_bank[i]);
+}
+
+static void mmc3_write(Cart *c, uint16_t a, uint8_t v);
+
+static void taito_write(Cart *c, uint16_t a, uint8_t v) {
+    int r = a & 3, mirror = -1;
+    switch (a & 0xE000) {
+    case 0x8000:
+        if (r < 2) c->prg_bank[r] = v & 0x3F;
+        else c->chr_bank[r - 2] = v;
+        if (r == 0 && c->mapper == 33) mirror = v & 0x40;
+        break;
+    case 0xA000: c->chr_bank[2 + r] = v; break;
+    case 0xC000:  /* as MMC3's $C000, $C001, $E001, $E000 */
+        if (c->mapper == 48) mmc3_write(c, (uint16_t)(r < 2 ? 0xC000 | r : 0xE000 | (r == 2)), r == 0 ? v ^ 0xFF : v);
+        break;
+    case 0xE000: if (c->mapper == 48 && r == 0) mirror = v & 0x40; break;
+    }
+    if (mirror >= 0 && !c->four_screen) c->mirroring = mirror ? MIRROR_HORIZONTAL : MIRROR_VERTICAL;
+    taito_update(c);
+}
+
+static void x1005_write(Cart *c, uint16_t a, uint8_t v) {
+    int r = a & 0x0F;
+    if (r < 6) c->chr_bank[r] = v;
+    else if (r == 6 && c->mapper == 80 && !c->four_screen) c->mirroring = (v & 1) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
+    else if (r == 8 || r == 9) c->latch = v;  /* RAM enable */
+    else if (r >= 10) c->prg_bank[(r - 10) >> 1] = v & 0x3F;
+    if (c->mapper == 207 && r < 2) c->txsrom_nt[r * 2] = c->txsrom_nt[r * 2 + 1] = v >> 7;
+    taito_update(c);
 }
 
 /* ---- Jaleco SS88006 (18): decodes A12-A14 and A0-A1, data D0-D3, so each
@@ -722,6 +779,7 @@ static void update_banks(Cart *c) {
     case 4: case 118: mmc3_update(c); break;
     case 75: vrc1_update(c); break;
     case 32: g101_update(c); break;
+    case 33: case 48: case 80: case 207: taito_update(c); break;
     case 7:
         set_prg32(c, c->latch & 7);
         set_chr(c, 0, 8, 0);
@@ -774,8 +832,8 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         snprintf(err, errlen, "file shorter than its header says");
         return -1;
     }
-    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 25, 32, 66, 69, 71,
-                                    75, 79, 87, 118, 153, 157, 159, 185, 206, 210};
+    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 25, 32, 33, 48, 66, 69,
+                                    71, 75, 79, 80, 87, 118, 153, 157, 159, 185, 206, 207, 210};
     int ok = 0;
     for (size_t i = 0; i < sizeof SUPPORTED / sizeof *SUPPORTED; i++) ok |= c->mapper == SUPPORTED[i];
     if (!ok) {
@@ -799,6 +857,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
     /* power-on RAM is not zero on hardware; Famicom Jump II (153) jams on
      * all-zero RAM with no save (nesdev), $FF boots it */
     if (c->mapper == 153) memset(c->prg_ram, 0xFF, 0x2000);
+    if (is_x1005(c)) c->prg_ram_size = 128;  /* the chip's own RAM (battery-backed on some boards) */
     if (c->mapper == 5) {
         /* NES 2.0 byte 10: PRG RAM and NVRAM sizes (64 << shift); else the most a board has */
         uint32_t ram = (d[10] & 15) ? 64u << (d[10] & 15) : 0, nv = (d[10] >> 4) ? 64u << (d[10] >> 4) : 0;
@@ -841,6 +900,7 @@ uint8_t cart_cpu_read(Cart *c, uint16_t a, uint8_t open_bus) {
         return (uint8_t)((open_bus & (c->mapper == 157 ? 0xE7 : 0xEF)) | sda << 4);
     }
     if (a >= 0x6000 && is_bandai(c) && c->mapper != 153) return open_bus;
+    if (a >= 0x6000 && is_x1005(c)) return a >= 0x7F00 && c->latch == 0xA3 ? c->prg_ram[a & 0x7F] : open_bus;
     if (a >= 0x6000) return (c->rom_at_6000 ? c->prg : c->prg_ram)[c->ram_off + (a - 0x6000)];
     if (c->mapper == 5 && a >= 0x5000) return mmc5_read(c, a, open_bus);
     if (c->mapper == 19) return n163_read(c, a, open_bus);
@@ -881,7 +941,7 @@ static void mmc3_write(Cart *c, uint16_t a, uint8_t v) {
         else { c->irq_counter = 0; c->irq_reload = 1; }
         break;
     case 3:
-        if (!odd) { c->irq_enabled = 0; c->irq_line = 0; }
+        if (!odd) { c->irq_enabled = 0; c->irq_line = 0; c->irq_due_dot = 0; }
         else c->irq_enabled = 1;
         break;
     }
@@ -892,6 +952,7 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
         if (c->mapper == 5) return mmc5_write(c, a, v);
         if (c->mapper == 19) { n163_write(c, a, v); return 0; }
         if (c->mapper == 16) { fcg_write(c, a, v); return 1; }
+        if (is_x1005(c)) { x1005_write(c, a, v); return 1; }
         c->latch = v;
         update_banks(c);
         return c->mapper == 79;  /* 87 switches CHR only */
@@ -899,6 +960,7 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     if (a < 0x6000) return 0;
     if (a < 0x8000) {
         if (!c->rom_at_6000 && !cart_6000_is_io(c)) c->prg_ram[c->ram_off + (a - 0x6000)] = v;
+        else if (is_x1005(c) && a >= 0x7F00 && c->latch == 0xA3) c->prg_ram[a & 0x7F] = v;
         return 0;
     }
     if (c->prg_ram_window >> ((a >> 13) & 3) & 1) {  /* MMC5: PRG RAM in a ROM window */
@@ -915,6 +977,8 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     case 18: ss88006_write(c, a, v); return 1;
     case 75: vrc1_write(c, a, v); return 1;
     case 32: g101_write(c, a, v); return 1;
+    case 33: case 48: taito_write(c, a, v); return 1;
+    case 80: case 207: return 0;  /* registers at $7EFx */
     case 69: fme7_write(c, a, v); return 1;  /* command 8 can map ROM or RAM at $6000 */
     case 210: n175_write(c, a, v); return 1;
     case 16: if (c->submapper == 4) return 0; /* FCG-1/2: $6000-$7FFF only */ /* fall through */
@@ -936,6 +1000,7 @@ void cart_chr_write(Cart *c, uint16_t a, uint8_t v) {
 
 void cart_ppu_address(Cart *c, uint16_t a, uint64_t dot) {
     if (!cart_is_mmc3(c)) return;
+    if (c->irq_due_dot && dot >= c->irq_due_dot) { c->irq_due_dot = 0; c->irq_line = 1; }  /* TC0690 */
     uint8_t a12 = (a >> 12) & 1;
     if (a12 && !c->a12) {
         if (dot - c->a12_low_since >= A12_FILTER_DOTS) {
@@ -945,7 +1010,12 @@ void cart_ppu_address(Cart *c, uint16_t a, uint64_t dot) {
             } else {
                 c->irq_counter--;
             }
-            if (c->irq_counter == 0 && c->irq_enabled) c->irq_line = 1;
+            /* TC0690: about 4 CPU cycles later; the PPU fetches every 2 dots
+             * through the rest of the line, so the next one past that asserts */
+            if (c->irq_counter == 0 && c->irq_enabled) {
+                if (c->mapper == 48) c->irq_due_dot = dot + 12;
+                else c->irq_line = 1;
+            }
         }
     } else if (!a12 && c->a12) {
         c->a12_low_since = dot;
