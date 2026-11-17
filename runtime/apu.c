@@ -17,6 +17,7 @@ enum { CPU_HZ = 1789773 };
 static void mixer_tables(void);
 static float PULSE_OUT[31], TND_OUT[203];  /* mixer tables, see mix() */
 static float MMC5_PCM_STEP;                /* one step of the MMC5 DAC, see mix() */
+static float S5B_LEVEL[32];                /* Sunsoft 5B: 5-bit level -> amplitude, see mix() */
 /* $4017 writes take effect on even APU clocks: one cycle later when written
  * on the other parity (blargg 2005 "Clock Jitter"; parity chosen by test). */
 enum { FC_JITTER_PARITY = 1 };
@@ -43,6 +44,8 @@ void apu_reset(Apu *a, Cart *cart, int power_on) {
      * pulse, 0.1494); the middle of each, and 15 dB when not given.
      * Submappers 1 and 2: the sound is not wired out (the chip still runs). */
     a->has_mmc5 = cart && cart->mapper == 5;
+    a->has_5b = cart && cart->mapper == 69;
+    if (power_on) a->s5b.lfsr = 1;
     a->n163_gain = 0;
     if (cart && cart->n163_sound && cart->submapper != 1 && cart->submapper != 2) {
         /* 10^(dB/20) for 12, 16.5, 18.75 and 15 dB */
@@ -226,6 +229,10 @@ static void mixer_tables(void) {
     for (int p = 1; p < 31; p++) PULSE_OUT[p] = 95.52f / (8128.0f / (float)p + 100.0f);
     for (int t = 1; t < 203; t++) TND_OUT[t] = 163.67f / (24329.0f / (float)t + 100.0f);
     MMC5_PCM_STEP = TND_OUT[127] / 127.0f;
+    /* 5B: 1.5 dB per level, levels 0 and 1 silent; level 31 (volume 15) is
+     * about 8 dB over a full APU square (0.1494) */
+    float v = 0.1494f * 2.51189f;
+    for (int i = 31; i >= 2; i--, v *= 0.841395f) S5B_LEVEL[i] = v;
 }
 
 static float mix(Apu *a) {
@@ -250,6 +257,22 @@ static float mix(Apu *a) {
             if (q->len && DUTY[q->duty][q->seq]) m += q->env.constant ? q->env.period : q->env.decay;
         }
         out -= PULSE_OUT[m] + MMC5_PCM_STEP * a->mmc5.pcm;
+    }
+    /* 5B: a channel sounds while its tone (or tone disabled) and its noise
+     * (or noise disabled) are both high; volume bit 4 takes the envelope's
+     * level, else volume v is level 2v + 1. Summed linearly; its signals
+     * swing from rest to negative. shortcut: the amplifier compresses near
+     * full volume (a ~2.6:1 knee per the nesdev forum measurements, not
+     * settled); not modelled, upgrade if Gimmick! clips. */
+    if (a->has_5b) {
+        const Sunsoft5b *s = &a->s5b;
+        float sum = 0;
+        for (int i = 0; i < 3; i++) {
+            int tone = (s->reg[7] >> i & 1) || s->tone_out[i], noise = (s->reg[7] >> (3 + i) & 1) || (s->lfsr & 1);
+            int vol = s->reg[8 + i], level = (vol & 0x10) ? s->env_level : (vol & 15) ? (vol & 15) * 2 + 1 : 0;
+            if (tone && noise) sum += S5B_LEVEL[level];
+        }
+        out -= sum;
     }
     return out;
 }
@@ -299,6 +322,43 @@ static void mmc5_clock(Apu *a) {
     }
 }
 
+/* 5B: every 16 CPU cycles, tone counters flip their square at the period
+ * (Clock / (32 * period)), noise takes a new LFSR bit every second period
+ * (Clock / (32 * period)), the envelope steps once a period (32 steps a
+ * ramp). A period of 0 acts as 1. */
+static void s5b_clock(Apu *a) {
+    Sunsoft5b *s = &a->s5b;
+    if (s->tick) { s->tick--; return; }
+    s->tick = 15;
+    for (int i = 0; i < 3; i++) {
+        unsigned p = (unsigned)(s->reg[i * 2 + 1] & 0x0F) << 8 | s->reg[i * 2];
+        if (++s->tone_count[i] >= (p ? p : 1)) s->tone_count[i] = 0, s->tone_out[i] ^= 1, a->mix_dirty = 1;
+    }
+    unsigned np = s->reg[6] & 0x1F;
+    if (++s->noise_count >= (np ? np : 1)) {
+        s->noise_count = 0;
+        if ((s->noise_half ^= 1) == 0) {  /* 17-bit LFSR, taps 16 and 13 */
+            s->lfsr = (s->lfsr >> 1) | (((s->lfsr ^ (s->lfsr >> 3)) & 1) << 16);
+            a->mix_dirty = 1;
+        }
+    }
+    unsigned ep = (unsigned)s->reg[0x0C] << 8 | s->reg[0x0B];
+    if (++s->env_count >= (ep ? ep : 1)) {
+        s->env_count = 0;
+        if (!s->env_hold && ++s->env_step == 32) {  /* end of a ramp: shape bits C A a H */
+            uint8_t shape = s->reg[0x0D];
+            s->env_step = 0;
+            if (!(shape & 8)) s->env_hold = 1, s->env_level = 0;
+            else {
+                if (shape & 2) s->env_attack ^= 1;  /* alternate */
+                if (shape & 1) s->env_hold = 1, s->env_level = s->env_attack ? 31 : 0;
+            }
+        }
+        if (!s->env_hold) s->env_level = s->env_attack ? s->env_step : (uint8_t)(31 - s->env_step);
+        a->mix_dirty = 1;
+    }
+}
+
 void apu_run(Apu *a, uint64_t target) {
     while (a->cycle < target) {
         a->cycle++;
@@ -306,6 +366,7 @@ void apu_run(Apu *a, uint64_t target) {
         timers(a);
         if (a->cart && a->cart->n163_sound && cart_n163_clock(a->cart) && a->n163_gain != 0) a->mix_dirty = 1;
         if (a->has_mmc5) mmc5_clock(a);
+        if (a->has_5b) s5b_clock(a);
         output(a);
     }
 }
@@ -474,6 +535,21 @@ void apu_mmc5_write(Apu *a, uint16_t addr, uint8_t v) {
         m->enabled = v & 3;
         for (int i = 0; i < 2; i++)
             if (!(m->enabled >> i & 1)) m->pulse[i].len = 0;
+    }
+}
+
+void apu_5b_write(Apu *a, uint16_t addr, uint8_t v) {
+    Sunsoft5b *s = &a->s5b;
+    if (addr < 0xE000) { s->addr = v; return; }
+    if (s->addr & 0xF0) return;  /* writes disabled, like the YM2149F's chip select */
+    s->reg[s->addr] = v;
+    a->mix_dirty = 1;
+    if (s->addr == 0x0D) {  /* the shape restarts the envelope */
+        s->env_step = 0;
+        s->env_hold = 0;
+        s->env_count = 0;
+        s->env_attack = (v >> 2) & 1;
+        s->env_level = s->env_attack ? 0 : 31;
     }
 }
 

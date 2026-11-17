@@ -48,6 +48,20 @@ typedef struct {
     uint16_t frame;                   /* CPU cycles since the last envelope/length clock */
 } Mmc5Audio;
 
+/* Sunsoft 5B sound (nesdev "Sunsoft 5B audio"): a YM2149F with SEL low.
+ * Three square channels, noise and an envelope, all stepped by one tick
+ * every 16 CPU cycles. */
+typedef struct {
+    uint8_t addr, reg[16];            /* $C000 select (high nibble set: $E000 writes ignored), registers */
+    uint8_t tick;                     /* CPU cycles to the next 16-cycle tick */
+    uint16_t tone_count[3];
+    uint8_t tone_out[3];
+    uint8_t noise_count, noise_half;  /* a new noise bit every second period */
+    uint32_t lfsr;                    /* 17 bits */
+    uint16_t env_count;
+    uint8_t env_step, env_attack, env_hold, env_level;  /* level 0-31 */
+} Sunsoft5b;
+
 enum { APU_SAMPLE_RATE = 48000, APU_BUF = 8192 };
 
 typedef struct Apu {
@@ -71,6 +85,8 @@ typedef struct Apu {
     float n163_gain;          /* Namco 163 sound: its level -> mixer units (0: none) */
     uint8_t has_mmc5;
     Mmc5Audio mmc5;
+    uint8_t has_5b;           /* mapper 69 (FME-7 boards without the 5B ignore these writes) */
+    Sunsoft5b s5b;
     float mix_last;           /* mixer output, recomputed only when mix_dirty: */
     uint8_t mix_dirty;        /* set wherever channel state can change */
     int64_t frac;
@@ -91,6 +107,8 @@ static inline int apu_irq(const Apu *a) {
 /* MMC5 sound registers: $5000-$5007, $5010, $5011, $5015 (reads: $5010, $5015) */
 void apu_mmc5_write(Apu *a, uint16_t addr, uint8_t v);
 uint8_t apu_mmc5_read(Apu *a, uint16_t addr, uint8_t open_bus);
+/* Sunsoft 5B: $C000-$DFFF register select, $E000-$FFFF data */
+void apu_5b_write(Apu *a, uint16_t addr, uint8_t v);
 int apu_take_samples(Apu *a, float *out, int max);   /* drain the 48 kHz output */
 
 #endif
