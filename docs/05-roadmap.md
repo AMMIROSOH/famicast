@@ -227,6 +227,16 @@ M9 (expansion audio; numbered M8a-M8d in the PRs, which clashed with M8 below):
   since the wiki does not give them. 3,330 of 4,031 ROMs (97% of
   licensed); 2 games boot; 2 identical to the interpreter, audio included.
 - [ ] FDS (not a mapper: the disk system needs its own loader).
+
+M10 (TV regions):
+- [x] PAL and Dendy (NES 2.0 byte 12, iNES byte 9): the bus clock in
+  master clocks (CPU 12/16/15, dot 4/5/5: 3.2 dots a cycle on PAL), 312
+  lines, no odd-frame skip, vblank at line 241 (Dendy 291), PAL noise,
+  DMC and frame counter tables, the region's CPU clock for the audio,
+  red/green emphasis swapped, 50 Hz pacing, PAL pixel aspect. `region =
+  auto|ntsc|pal|dendy` in the ini (`--region` in nes_headless); the window
+  title names the console. NTSC unchanged (123 games bit-identical). The
+  PAL CPU/PPU phase and its OAM refresh are marked shortcuts (04, 06).
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

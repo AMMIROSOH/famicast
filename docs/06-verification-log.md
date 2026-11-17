@@ -3,6 +3,48 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · M10: PAL and Dendy
+- **Sources**: nesdev "Cycle reference chart" (clocks, lines, vblank,
+  emphasis order), "APU Frame Counter", "APU Noise", "APU DMC" (PAL
+  tables; the Dendy uses NTSC's), read this session; table in 04. The
+  NES 2.0 region field is set in every dump of the local collection
+  (No-Intro): 429 PAL, 263 Dendy.
+- **Unit ROMs** (`tests/test_region.py`): CPU cycles per frame with
+  rendering on (NTSC 29780.5, multi-region as NTSC, PAL 33247.5, Dendy
+  35464) and the first vblank (Dendy at line 291); pulse pitch at each
+  region's clock; DMC rate 0 and periodic noise at the PAL periods (Dendy:
+  NTSC's); a length-254 note lasting 254 half frames of each frame counter
+  (PAL 2.54 s); `--region` overriding the header both ways.
+  `tests/test_emphasis.py`: PAL and Dendy bit 5 green, 6 red. Mutations
+  caught (17 of 17): region ignored, multi-region not mapped to NTSC, PAL
+  CPU 15 clocks, PAL dot 4 clocks, clock remainder dropped, fast path at
+  NTSC's step, Dendy vblank at 241, PAL 262 lines, PAL odd-frame skip,
+  emphasis not swapped, vblank-line skip jumping over the vblank dot (a
+  hang), each PAL table replaced by NTSC's (noise, DMC, frame counter),
+  PAL or Dendy clock NTSC's, the Dendy on PAL tables.
+- **NTSC unchanged**: 123 games on 68 mappers, 1,200 frames of scripted
+  play: frame hash, cycle count and audio hash identical to main.
+- **Games**: every PAL and Dendy dump booted 1,500 frames with presses,
+  old build (NTSC timing) against this one. PAL: 411 of 429 show a
+  picture (was 408); Double Dragon III and both Probotector II dumps
+  jammed under NTSC timing and now run, Solstice was blank and now shows
+  its picture; Mighty Final Fight (Europe) now shows its first picture
+  after frame 1,500 instead of before (its intro at 50 Hz). The other
+  failures are unsupported mappers (8) or blank in both builds. Dendy: 90
+  of 263 show a picture, as before; 159 are unsupported mappers; three
+  pirates that jammed now stay blank. Window title "(PAL)" and the
+  `region` ini override (Battle City as "(Dendy)") checked in the
+  running frontend.
+- **Recompiled, `--diff` 3,000 frames**: Balloon Fight, Asterix,
+  Aladdin, Mr. Gimmick, Mike Tyson's Punch-Out!!, Castlevania III,
+  Probotector II (all Europe) and Battle Tank (Dendy) identical,
+  `--audio-hash` equal to the interpreter's.
+- **Not checked**: the PAL CPU/PPU phase (the access stays 2 dots into the
+  cycle, as measured on NTSC); the 2C07's OAM refresh in late vblank
+  (writes there are not corrupted here); the PAL palette (the NTSC signal
+  model is used); the PAL pixel aspect 1.3862 is from memory of nesdev
+  "Overscan". None against a PAL console.
+
 ## 2026-11-17 · M9e: Konami VRC7 (85) and its FM sound
 - **Sources**: the wiki gives the registers, the 15-patch ROM dump, the
   multiplier and feedback tables and the pitch formula, not the operator
@@ -197,8 +239,8 @@ reproducible check is not "verified".
   that width. The picture uses SDL's pixel-art scale mode, so the uneven
   column widths of a non-integer horizontal scale stay sharp. Built and
   started (4 s) without errors; the picture has not been looked at yet.
-  Aspect follows the emulated console (NTSC only), not the cartridge: a
-  PAL game here runs as on an NTSC NES.
+  Aspect follows the emulated console, not the cartridge (since M10 a
+  PAL game runs as on a PAL NES, with PAL pixels).
 
 ## 2026-11-17 · Overscan setting
 - `overscan = 1` (the default) shows lines 8-231, as an NTSC TV did (the

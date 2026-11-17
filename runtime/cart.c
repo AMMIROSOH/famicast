@@ -948,6 +948,8 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
     /* NES 2.0: mapper bits 8-11 in byte 8 (else mapper 515 would load as 3) */
     c->mapper = (d[6] >> 4) | (junk ? 0 : (d[7] & 0xF0)) | (nes2 ? (d[8] & 0x0F) << 8 : 0);
     c->submapper = nes2 ? d[8] >> 4 : 0;
+    /* NES 2.0 byte 12: 0 NTSC, 1 PAL, 2 multi-region (run as NTSC), 3 Dendy */
+    c->region = nes2 ? ((d[12] & 3) == 2 ? REGION_NTSC : d[12] & 3) : (!junk && (d[9] & 1)) ? REGION_PAL : REGION_NTSC;
     c->four_screen = (d[6] & 0x08) != 0;
     c->mirroring = c->four_screen ? MIRROR_FOUR : (d[6] & 0x01) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
     c->battery = (d[6] & 0x02) != 0;

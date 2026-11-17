@@ -1,4 +1,5 @@
-/* 2C02 PPU, stepped one dot at a time (3 dots per CPU cycle, docs/04).
+/* 2C02 PPU (and the PAL 2C07 and Dendy timings: ppu_reset), stepped one dot
+ * at a time (3 dots per CPU cycle, 3.2 on PAL; docs/04).
  * References: nesdev wiki "PPU registers", "PPU scrolling" (loopy v/t/x/w),
  * "PPU rendering", "PPU sprite evaluation", "PPU frame timing". */
 #ifndef NES_PPU_H
@@ -22,7 +23,8 @@ typedef struct Ppu {
     uint8_t pal[32];
     uint8_t oam[256];
     /* timing */
-    int scanline, dot;    /* scanline 0-261 (261 = pre-render), dot 0-340 */
+    int scanline, dot;    /* scanline 0-pre_line, dot 0-340 */
+    int vbl_line, pre_line;  /* NTSC 241, 261; PAL 241, 311; Dendy 291, 311 */
     uint8_t odd_frame, rendering_prev;
     uint64_t frame;
     uint64_t dots;        /* PPU dots since power-on (MMC3 A12 filter) */

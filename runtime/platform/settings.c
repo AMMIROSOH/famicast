@@ -1,11 +1,13 @@
 #include "settings.h"
 
+#include "../cart.h"  /* REGION_* */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static const char DEFAULT_FILE[] =
-    "# famicast display settings. Edit, then restart the game.\n"
+    "# famicast settings. Edit, then restart the game.\n"
     "# While playing: F11 or Alt+Enter = fullscreen, F10 = TV frame (not saved here).\n"
     "\n"
     "# fullscreen: 0 = window, 1 = fullscreen (desktop resolution)\n"
@@ -24,9 +26,16 @@ static const char DEFAULT_FILE[] =
     "# leave scrolling leftovers there that nobody saw); 0 = all 240 lines\n"
     "overscan = 1\n"
     "\n"
-    "# aspect: tv = pixels 8:7 wide, the shape an NTSC TV gave them;\n"
-    "#         square = square pixels (the picture 12% narrower)\n"
+    "# aspect: tv = pixels the shape a TV gave them (NTSC 8:7, PAL games 1.39:1);\n"
+    "#         square = square pixels (the picture 12% narrower, PAL 28%)\n"
     "aspect = tv\n"
+    "\n"
+    "# region: the console to run as: auto = what the ROM says (NES 2.0 header),\n"
+    "#         ntsc (USA/Japan, 60 Hz), pal (Europe, 50 Hz), dendy (Russian famiclone)\n"
+    "#         Forcing a region the game wasn't made for: NTSC games on pal run\n"
+    "#         slower but usually work; PAL-only games on ntsc often freeze or jam,\n"
+    "#         as on a real NTSC console (shorter frame, much shorter vblank)\n"
+    "region = auto\n"
     "\n"
     "# window_scale: starting window size, in multiples of the picture (1-8)\n"
     "window_scale = 3\n"
@@ -43,7 +52,7 @@ static int parse_bool(const char *v, int *out) {
 }
 
 void settings_load(Settings *s, const char *path) {
-    *s = (Settings){0, SCALE_FIT, 0, 3, 1, 1, 1};
+    *s = (Settings){0, SCALE_FIT, 0, 3, 1, 1, 1, -1};
     FILE *f = fopen(path, "r");
     if (!f) {
         if ((f = fopen(path, "w"))) {
@@ -69,6 +78,12 @@ void settings_load(Settings *s, const char *path) {
         else if (!strcmp(key, "aspect")) {
             if (!strcmp(val, "tv")) s->aspect_tv = 1, ok = 1;
             else if (!strcmp(val, "square")) s->aspect_tv = 0, ok = 1;
+        }
+        else if (!strcmp(key, "region")) {
+            static const char *const NAMES[] = {"auto", "ntsc", "pal", "dendy"};
+            static const int VALUES[] = {-1, REGION_NTSC, REGION_PAL, REGION_DENDY};
+            for (int i = 0; i < 4; i++)
+                if (!strcmp(val, NAMES[i])) s->region = VALUES[i], ok = 1;
         }
         else if (!strcmp(key, "scale")) {
             static const char *const NAMES[] = {"fit", "integer", "stretch"};

@@ -25,10 +25,15 @@ typedef struct {
     uint16_t base, size;
 } Eeprom;
 
+/* TV system (nesdev "Cycle reference chart"): NTSC, PAL (2A07/2C07) or
+ * Dendy (the UA6538 famiclones: PAL video, NTSC-like CPU and APU) */
+enum { REGION_NTSC = 0, REGION_PAL = 1, REGION_DENDY = 3 };
+
 typedef struct Cart {
     uint8_t *prg, *chr;
     uint32_t prg_size, chr_size;
     int chr_ram, mapper, submapper, mirroring, four_screen, battery;  /* submapper: NES 2.0, else 0 */
+    int region;                      /* REGION_*: NES 2.0 byte 12, iNES byte 9 bit 0 */
     uint8_t prg_ram[0x10000];        /* $6000-$7FFF: 8 KB, MMC5 up to 64 KB in 8 KB banks */
     uint32_t prg_ram_size, ram_off;  /* ram_off: the bank at $6000 (battery saves: prg_ram_size) */
     uint8_t rom_at_6000;             /* FME-7: $6000 maps PRG ROM at ram_off, not RAM */

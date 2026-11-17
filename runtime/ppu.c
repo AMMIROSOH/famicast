@@ -7,7 +7,23 @@
 void ppu_reset(Ppu *p, Cart *cart) {
     memset(p, 0, sizeof *p);
     p->cart = cart;
-    p->scanline = 261;  /* start on the pre-render line */
+    /* PAL and Dendy (nesdev "Cycle reference chart"): 312 lines (341 x 312
+     * dots, so no odd-frame skip), 70 or 20 vblank lines after NMI (Dendy:
+     * 51 post-render lines first). shortcut: the 2C07 refreshes OAM from
+     * 24 lines after NMI, so later $2004 writes fail there; not modelled
+     * (writes always land), add it if a PAL game's sprites need it */
+    int ntsc = !cart || cart->region == REGION_NTSC;
+    p->vbl_line = cart && cart->region == REGION_DENDY ? 291 : 241;
+    p->pre_line = ntsc ? 261 : 311;
+    p->scanline = p->pre_line;  /* start on the pre-render line */
+}
+
+/* $2001 bits 5-7 as stored in the frame buffer, in NTSC order (red, green,
+ * blue): PAL and Dendy swap red and green ("Cycle reference chart") */
+static inline uint16_t emphasis(const Ppu *p) {
+    unsigned e = p->mask & 0xE0;
+    if (p->pre_line != 261) e = (e & 0x80) | (e & 0x40) >> 1 | (e & 0x20) << 1;
+    return (uint16_t)(e << 1);
 }
 
 /* ---- PPU address space ---- */
@@ -183,7 +199,7 @@ static void sprite_fetch_dot(Ppu *p) {
     }
     if (phase != 4 && phase != 6) return;
     int h = (p->ctrl & 0x20) ? 16 : 8;
-    int n = p->scanline == 261 ? 0 : p->ev_found / 4;
+    int n = p->scanline == p->pre_line ? 0 : p->ev_found / 4;
     const uint8_t *s = &p->sec_oam[i * 4];
     uint8_t y = i < n ? s[0] : 0xFF, tile = i < n ? s[1] : 0xFF, attr = i < n ? s[2] : 0xFF;
     int row = (p->scanline - y) & (h - 1);
@@ -250,13 +266,13 @@ static void render_pixel(Ppu *p) {
     if (!RENDERING(p) && (p->v & 0x3F00) == 0x3F00) color = p->pal[pal_index(p->v)];  /* palette hack */
     else color = p->pal[idx ? idx : 0];
     if (p->mask & 0x01) color &= 0x30;  /* greyscale */
-    p->fb[p->scanline * 256 + x] = (uint16_t)(color | (p->mask & 0xE0) << 1);  /* + emphasis */
+    p->fb[p->scanline * 256 + x] = (uint16_t)(color | emphasis(p));
 }
 
 void ppu_step(Ppu *p) {
     int line = p->scanline, dot = p->dot;
     p->dots++;
-    int visible = line < 240, pre = line == 261;
+    int visible = line < 240, pre = line == p->pre_line;
     if (dot == 0 && line <= 240 && p->cart->mapper == 5) cart_mmc5_scanline(p->cart, line, RENDERING(p) != 0);
 
     if ((visible || pre) && RENDERING(p)) {
@@ -280,7 +296,7 @@ void ppu_step(Ppu *p) {
         p->sp_zero_on_line = p->sp_zero_next;
     }
 
-    if (line == 241 && dot == 1) {
+    if (line == p->vbl_line && dot == 1) {
         if (!p->vbl_suppress) p->status |= 0x80;
         p->vbl_suppress = 0;
         p->frame_done = 1;
@@ -290,11 +306,11 @@ void ppu_step(Ppu *p) {
 
     /* advance; odd frames skip the last dot of the pre-render line when rendering */
     /* the skip uses the rendering-enable state as of the previous dot (blargg 10-even_odd_timing) */
-    if (pre && dot == 339 && p->odd_frame && p->rendering_prev) p->dot = 340;
+    if (pre && dot == 339 && p->odd_frame && p->rendering_prev && p->pre_line == 261) p->dot = 340;
     p->rendering_prev = RENDERING(p) != 0;
     if (++p->dot > 340) {
         p->dot = 0;
-        if (++p->scanline > 261) {
+        if (++p->scanline > p->pre_line) {
             p->scanline = 0;
             p->odd_frame ^= 1;
             p->frame++;
@@ -313,7 +329,7 @@ static void visible_dots(Ppu *p, int n) {
     const int bg_on = mask & 0x08, bg_left = mask & 0x02;
     const int sp_on = (mask & 0x10) && p->sp_count, sp_left = mask & 0x04;
     const uint8_t grey = (mask & 0x01) ? 0x30 : 0x3F;
-    const uint16_t emph = (uint16_t)((mask & 0xE0) << 1);
+    const uint16_t emph = emphasis(p);
     const int first = p->dot - 1;
     uint16_t line[256];
     for (; n > 0; n--) {
@@ -343,14 +359,17 @@ static void visible_dots(Ppu *p, int n) {
     p->nmi_out = (p->status & 0x80) && (p->ctrl & 0x80);
 }
 
-/* Lines 241 (from dot 2) to 260 have no per-dot effects: no rendering, no
- * fetches, the flags only change at (241,1) and (261,1), and the end-of-line
- * sprite reset is a no-op after line 240. Skip them in one step. */
+/* Lines 241 to 260 (PAL, Dendy: to 310) have no per-dot effects but the
+ * vblank flag at (vbl_line, 1): no rendering, no fetches, the flag clears at
+ * (pre_line, 1), and the end-of-line sprite reset is a no-op after line 240.
+ * Skip them in one step, up to the vblank dot and from just past it. */
 void ppu_run(Ppu *p, int k) {
     while (k > 0) {
         int line = p->scanline;
-        if ((line == 241 && p->dot >= 2) || (line > 241 && line <= 260)) {
-            int left = (261 - line) * 341 - p->dot;  /* dots until (261, 0) */
+        int idle = line > 240 && line < p->pre_line && !(line == p->vbl_line && p->dot < 2);
+        if (idle) {
+            int end = line < p->vbl_line ? p->vbl_line * 341 + 1 : p->pre_line * 341;  /* (vbl, 1) or (pre, 0) */
+            int left = end - line * 341 - p->dot;
             int n = k < left ? k : left;
             int pos = line * 341 + p->dot + n;
             p->scanline = pos / 341;
@@ -395,8 +414,8 @@ uint8_t ppu_reg_read(Ppu *p, uint16_t reg) {
         /* Races at vblank start (nesdev "PPU frame timing", blargg 06-suppression):
          * read one dot early -> flag reads clear and is never set, no NMI;
          * read on the set dot or the next one -> flag reads set, but no NMI. */
-        if (p->scanline == 241 && p->dot == 1) p->vbl_suppress = 1;
-        if (p->scanline == 241 && (p->dot == 2 || p->dot == 3)) p->nmi_cancel = 1;
+        if (p->scanline == p->vbl_line && p->dot == 1) p->vbl_suppress = 1;
+        if (p->scanline == p->vbl_line && (p->dot == 2 || p->dot == 3)) p->nmi_cancel = 1;
         latch_drive(p, (uint8_t)((p->status & 0xE0) | (latch_value(p) & 0x1F)), 0xE0);
         p->status &= ~0x80;
         p->w = 0;
@@ -430,7 +449,7 @@ void ppu_reg_write(Ppu *p, uint16_t reg, uint8_t v) {
     switch (reg & 7) {
     case 0:
         /* disabling NMI right after vblank starts still prevents it (blargg 08) */
-        if (!(v & 0x80) && p->scanline == 241 && (p->dot == 2 || p->dot == 3)) p->nmi_cancel = 1;
+        if (!(v & 0x80) && p->scanline == p->vbl_line && (p->dot == 2 || p->dot == 3)) p->nmi_cancel = 1;
         p->ctrl = v;
         if (p->cart->mapper == 5) cart_mmc5_ppuctrl(p->cart, v);  /* MMC5 snoops the sprite size */
         p->t = (uint16_t)((p->t & 0xF3FF) | ((v & 3) << 10));

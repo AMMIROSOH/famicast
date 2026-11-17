@@ -25,6 +25,8 @@ typedef struct Nes {
     uint8_t pad_shift[2], strobe;
     uint8_t nmi_prev;
     uint8_t oam_dma_pending, oam_dma_page;  /* $4014 written: DMA at the next read */
+    int32_t clk_cpu, clk_dot, clk_rem;  /* master clocks per CPU cycle and per PPU dot
+                                           (region); clocks counted but not yet a dot */
     /* recompiled code (NULL: interpret everything) and fallback statistics */
     RecompFn (*recomp)(uint16_t pc, uint32_t bank);
     uint32_t *misses;     /* optional [nes_miss_slots()]: interpreted instructions
@@ -42,6 +44,10 @@ int nes_load(Nes *n, const uint8_t *rom, size_t size, char *err, size_t errlen);
 void nes_reset(Nes *n);                /* reset button */
 void nes_step(Nes *n);                 /* one block, or one interpreted instruction */
 void nes_run_frame(Nes *n);            /* run until the next vblank starts */
+double nes_frame_rate(const Nes *n);  /* Hz: 60.0988 NTSC, 50.0070 PAL and Dendy */
+/* Run as another console than the header says (REGION_*), right after
+ * nes_load: powers on again. */
+void nes_set_region(Nes *n, int region);
 uint8_t nes_peek(Nes *n, uint16_t a);  /* read without side effects (debug, tests) */
 uint32_t nes_prg_bank(Nes *n, uint16_t a);  /* 8 KB PRG bank mapped at a ($8000+) */
 /* Fallback statistics: slot = RAM address (< $8000), or for ROM

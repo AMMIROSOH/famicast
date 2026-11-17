@@ -9,11 +9,18 @@ static const uint8_t DUTY[4][8] = {{0, 1, 0, 0, 0, 0, 0, 0}, {0, 1, 1, 0, 0, 0, 
                                    {0, 1, 1, 1, 1, 0, 0, 0}, {1, 0, 0, 1, 1, 1, 1, 1}};
 static const uint8_t TRIANGLE[32] = {15, 14, 13, 12, 11, 10, 9,  8,  7,  6,  5,  4,  3,  2,  1,  0,
                                      0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15};
-/* NTSC periods in CPU cycles (nesdev "APU Noise", "APU DMC") */
-static const uint16_t NOISE_PERIOD[16] = {4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068};
-static const uint16_t DMC_PERIOD[16] = {428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54};
-
-enum { CPU_HZ = 1789773 };
+/* Periods in CPU cycles, NTSC and PAL (nesdev "APU Noise", "APU DMC"; the
+ * Dendy uses the NTSC tables) */
+static const uint16_t NOISE_PERIOD[2][16] = {
+    {4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068},
+    {4, 8, 14, 30, 60, 88, 118, 148, 188, 236, 354, 472, 708, 944, 1890, 3778}};
+static const uint16_t DMC_PERIOD[2][16] = {
+    {428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54},
+    {398, 354, 316, 298, 276, 236, 210, 198, 176, 148, 132, 118, 98, 78, 66, 50}};
+/* Frame counter steps in CPU cycles after a $4017 write (count 0): the
+ * wiki's APU cycles x 2 + 3 ("APU Frame Counter"): 3728, 7456, 11185, the
+ * IRQ at 14914 (GET), 18640 in mode 1; PAL 4156, 8313, 12469, 16626, 20782 */
+static const int32_t FC_STEP[2][5] = {{7459, 14915, 22373, 29830, 37283}, {8315, 16629, 24941, 33254, 41567}};
 
 static void mixer_tables(void);
 static float PULSE_OUT[31], TND_OUT[203];  /* mixer tables, see mix() */
@@ -31,11 +38,13 @@ void apu_reset(Apu *a, Cart *cart, int power_on) {
     if (power_on) {
         if (TND_OUT[1] == 0) mixer_tables();
         memset(a, 0, sizeof *a);
+        a->pal = cart && cart->region == REGION_PAL;
+        a->cpu_hz = !cart || cart->region == REGION_NTSC ? 1789773 : a->pal ? 1662607 : 1773448;
         a->noise.lfsr = 1;
-        a->noise.period = a->noise.timer = NOISE_PERIOD[0];
+        a->noise.period = a->noise.timer = NOISE_PERIOD[a->pal][0];
         a->pulse[0].ones_complement = 1;
-        a->dmc.period = DMC_PERIOD[0];
-        a->dmc.timer = DMC_PERIOD[0];
+        a->dmc.period = DMC_PERIOD[a->pal][0];
+        a->dmc.timer = DMC_PERIOD[a->pal][0];
         a->dmc.bits = 8;
         a->dmc.silence = 1;
     }
@@ -151,24 +160,14 @@ static void frame_counter(Apu *a) {
     }
     int32_t c = ++a->fc_count;
     int irq = 0;
-    if (a->fc_mode == 0) {
-        switch (c) {
-        case 7459: quarter_frame(a); break;
-        case 14915: quarter_frame(a); half_frame(a); break;
-        case 22373: quarter_frame(a); break;
-        case 29830: irq = 1; break;
-        case 29831: quarter_frame(a); half_frame(a); irq = 1; break;
-        case 29832: irq = 1; a->fc_count = 2; break;
-        }
-    } else {
-        switch (c) {
-        case 1: quarter_frame(a); half_frame(a); break;
-        case 7459: quarter_frame(a); break;
-        case 14915: quarter_frame(a); half_frame(a); break;
-        case 22373: quarter_frame(a); break;
-        case 37283: quarter_frame(a); half_frame(a); a->fc_count = 1; break;
-        }
-    }
+    const int32_t *s = FC_STEP[a->pal];
+    if (c == s[0] || c == s[2]) quarter_frame(a);
+    else if (c == s[1] || (a->fc_mode && c == 1)) { quarter_frame(a); half_frame(a); }
+    else if (a->fc_mode == 0) {
+        if (c == s[3]) irq = 1;
+        else if (c == s[3] + 1) { quarter_frame(a); half_frame(a); irq = 1; }
+        else if (c == s[3] + 2) { irq = 1; a->fc_count = 2; }
+    } else if (c == s[4]) { quarter_frame(a); half_frame(a); a->fc_count = 1; }
     if (irq && !a->fc_inhibit) a->frame_irq = 1;
 }
 
@@ -313,8 +312,8 @@ static void output(Apu *a) {
     a->acc += a->mix_last;
     a->acc_n++;
     a->frac += APU_SAMPLE_RATE;
-    if (a->frac < CPU_HZ) return;
-    a->frac -= CPU_HZ;
+    if (a->frac < a->cpu_hz) return;
+    a->frac -= a->cpu_hz;
     float x = a->acc / (float)a->acc_n;
     a->acc = 0;
     a->acc_n = 0;
@@ -540,9 +539,10 @@ int64_t apu_cycles_to_event(const Apu *a) {
     else if (a->fc_mode == 0 && !a->fc_inhibit) {
         int32_t c = a->fc_count;
         /* the CPU sees the flag a cycle after the APU sets it; at 29830-29832
-         * it is (re)set now, so visible next cycle (seen after OAM DMA:
+         * (NTSC) it is (re)set now, so visible next cycle (seen after OAM DMA:
          * cpu_interrupts_v2 4-irq_and_dma) */
-        best = c < 29830 ? 29830 - c + 1 : 1;
+        int32_t irq = FC_STEP[a->pal][3];
+        best = c < irq ? irq - c + 1 : 1;
     }
     const Dmc *d = &a->dmc;
     if (d->remaining) {  /* the buffer empties when the shift register reloads */
@@ -614,7 +614,7 @@ void apu_write(Apu *a, uint16_t addr, uint8_t v) {
         break;
     case 0x400E:
         a->noise.mode = v >> 7;
-        a->noise.period = NOISE_PERIOD[v & 15];
+        a->noise.period = NOISE_PERIOD[a->pal][v & 15];
         break;
     case 0x400F:
         load_length(a, &a->noise.len, a->noise.len_before, 3, v);
@@ -623,7 +623,7 @@ void apu_write(Apu *a, uint16_t addr, uint8_t v) {
     case 0x4010:
         a->dmc.irq_on = v >> 7;
         a->dmc.loop = (v >> 6) & 1;
-        a->dmc.period = DMC_PERIOD[v & 15];
+        a->dmc.period = DMC_PERIOD[a->pal][v & 15];
         if (!a->dmc.irq_on) a->dmc_irq = 0;
         break;
     case 0x4011: a->dmc.level = v & 0x7F; break;

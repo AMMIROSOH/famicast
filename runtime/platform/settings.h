@@ -1,4 +1,4 @@
-/* Frontend display settings: an INI-style file next to the program
+/* Frontend settings: an INI-style file next to the program
  * (<program>.ini), created with defaults and comments when missing. */
 #ifndef NES_SETTINGS_H
 #define NES_SETTINGS_H
@@ -12,7 +12,8 @@ typedef struct {
     int window_scale;  /* starting window size, multiples of the content size */
     int record_misses; /* recompiled games: keep interpreted ROM code in <program>.misses */
     int overscan;      /* 1: hide the top and bottom 8 lines, as a TV did */
-    int aspect_tv;     /* 1: pixels 8:7 wide, as on an NTSC TV; 0: square */
+    int aspect_tv;     /* 1: pixels as on a TV (8:7 NTSC, 1.39:1 PAL); 0: square */
+    int region;        /* -1 = auto (the ROM header), else REGION_* (cart.h) */
 } Settings;
 
 /* Fills s with defaults, then the values found in path. Writes a commented

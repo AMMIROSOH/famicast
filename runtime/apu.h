@@ -95,6 +95,8 @@ enum { APU_SAMPLE_RATE = 48000, APU_BUF = 8192 };
 
 typedef struct Apu {
     Cart *cart;
+    uint8_t pal;      /* PAL period and frame counter tables (the Dendy uses NTSC's) */
+    uint32_t cpu_hz;  /* by region: the audio is resampled from it */
     Pulse pulse[2];
     Triangle tri;
     Noise noise;

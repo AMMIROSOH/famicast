@@ -26,8 +26,8 @@ typedef struct Cpu {
     /* Optional fast path, set up by the bus (all NULL/0 = every access goes
      * through cpu_read/cpu_write, as the test bus wants). read_map/write_map:
      * per 2 KB page, memory that can be accessed directly with no side
-     * effects. bus_pending/bus_budget: the bus's lazy clock (nes.c: PPU dots
-     * not yet run, and how many may pile up before the PPU must run);
+     * effects. bus_pending/bus_budget: the bus's lazy clock (nes.c: master
+     * clocks not yet run, and how many may pile up before the PPU must run);
      * bus_step is added per fast access. */
     const uint8_t *read_map[32];
     uint8_t *write_map[32];
