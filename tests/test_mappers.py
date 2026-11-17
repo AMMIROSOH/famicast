@@ -210,6 +210,42 @@ class TestMappers(unittest.TestCase):
                         bpl_wait + bytes([0x78, 0xA5, 0x00]) + END)
                 self.assertEqual(peek(self.banked(mapper, code, handler)), 116)
 
+    # ---- Konami VRC7 (85): register pairs told apart by A4 (VRC7a) or A3 (VRC7b) ----
+    def test_85_vrc7(self):
+        """$8000 = 3, $8000+line = 4, $9000 = 5: 8 KB banks at $8000, $A000,
+        $C000; the last (15) at $E000. CHR $A000+line = 9 at PPU $0400, $D000
+        = 17 at $1800 ($9000+line is the sound port: it leaves $C000 alone).
+        $E000 = 1: horizontal ($2400 shows a $2000 write; the
+        header says vertical). The line is A4 ($x010) on VRC7a (submapper
+        2), A3 ($x008) on VRC7b (1)."""
+        ppu_write = lda_sta(0x20, 0x2006) + lda_sta(0x00, 0x2006) + lda_sta(0x5A, 0x2007)
+        for sub, line in ((2, 0x10), (1, 0x08)):
+            with self.subTest(submapper=sub):
+                code = (WAIT_VBLANK + lda_sta(0x03, 0x8000) + lda_sta(0x04, 0x8000 | line) + lda_sta(0x05, 0x9000) +
+                        lda_sta(0x07, 0x9000 | line) +  # the sound port: not the $C000 bank
+                        lda_sta(0x09, 0xA000 | line) + lda_sta(0x11, 0xD000) + lda_sta(0x01, 0xE000) +
+                        lda_abs(0x8100) + bytes([0x85, 0x01]) + lda_abs(0xA100) + bytes([0x85, 0x02]) +
+                        lda_abs(0xC100) + bytes([0x85, 0x03]) + lda_abs(0xE100) + bytes([0x85, 0x04]) +
+                        ppu_read(0x0410) + bytes([0x85, 0x05]) + ppu_read(0x1810) + bytes([0x85, 0x06]) +
+                        ppu_write + ppu_read(0x2400) + END)
+                rom = bytearray(self.banked(85, code, submapper=sub))
+                rom[6] |= 1  # header: vertical
+                self.assertEqual([peek(bytes(rom), a) for a in range(7)], [0x5A, 0x63, 0x64, 0x65, 0x6F, 0x89, 0x91])
+
+    def test_85_vrc7_irq(self):
+        """The VRC IRQ: latch $E000+line, control $F000, acknowledge
+        $F000+line. Cycle mode, latch 0: 116 IRQs from one vblank to the
+        next."""
+        for sub, line in ((2, 0x10), (1, 0x08)):
+            with self.subTest(submapper=sub):
+                ack = 0xF000 | line
+                handler = bytes([0xE6, 0x00, 0x8D, ack & 0xFF, ack >> 8, 0x40])  # INC $00, STA ack, RTI
+                bpl_wait = bytes([0x2C, 0x02, 0x20, 0x10, 0xFB])
+                code = (bytes([0x78]) + lda_sta(0x40, 0x4017) + WAIT_VBLANK + lda_sta(0x00, 0xE000 | line) + bpl_wait +
+                        bytes([0xA9, 0x00, 0x85, 0x00]) + lda_sta(0x07, 0xF000) + bytes([0x58]) +
+                        bpl_wait + bytes([0x78, 0xA5, 0x00]) + END)
+                self.assertEqual(peek(self.banked(85, code, handler, submapper=sub)), 116)
+
     # ---- MMC5 (5): power-on mode 3 with the last bank at $E000 ----
     def test_5_mmc5_two_ram_chips(self):  # 8 KB RAM + 8 KB NVRAM: $5113 bit 2 picks the chip
         code = (lda_sta(0x00, 0x5113) + lda_sta(0x11, 0x6000) + lda_sta(0x04, 0x5113) + lda_sta(0x44, 0x6000) +
@@ -538,7 +574,7 @@ class TestMappers(unittest.TestCase):
 
     # ---- Taito TC0190 (33), TC0690 (48), X1-005 (80, 207) ----
     @staticmethod
-    def banked(mapper, code, irq=b""):  # 128 KB PRG with bank markers, 32 KB CHR; code at $E200
+    def banked(mapper, code, irq=b"", submapper=None):  # 128 KB PRG with bank markers, 32 KB CHR; code at $E200
         prg, chr_ = bytearray(0x20000), bytearray(0x8000)
         for b in range(16):
             prg[b * 0x2000 + 0x100] = 0x60 + b
@@ -547,7 +583,7 @@ class TestMappers(unittest.TestCase):
         put(prg, 0x1E200, code)
         put(prg, 0x1E400, irq)
         vectors(prg, 0x20000, 0xE200, irq=0xE400 if irq else 0xFFF9)
-        return ines(mapper, prg, chr_)
+        return ines(mapper, prg, chr_, submapper=submapper)
 
     def test_33_48_taito_banks(self):
         """$8000 = 3, $8001 = 5: banks 3 and 5 at $8000/$A000, $C000 the

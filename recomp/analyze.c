@@ -162,6 +162,7 @@ int assumed_layout(const Rom *r, int layout[4]) {
     case 18: case 69: case 75:   /* SS88006, FME-7, VRC1 */
     case 80: case 207:           /* Taito X1-005 */
     case 24: case 26:            /* VRC6: $8000 16 KB and $C000 8 KB switchable */
+    case 85:                     /* VRC7 */
         layout[3] = n8 - 1;
         return 0;
     }

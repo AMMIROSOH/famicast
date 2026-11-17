@@ -3,7 +3,49 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
-## 2026-11-17 · M8d: Konami VRC6 (24, 26) and its sound
+## 2026-11-17 · M9e: Konami VRC7 (85) and its FM sound
+- **Sources**: the wiki gives the registers, the 15-patch ROM dump, the
+  multiplier and feedback tables and the pitch formula, not the operator
+  internals. Those follow the OPL/OPLL structure as emu2413 models it:
+  log-sin and exp tables, a 7-bit envelope in 0.375 dB steps on OPL rate
+  counters, modulator +-8 pi into the carrier and feedback 4 pi at FB 7
+  (which matches the wiki's feedback table), KSL from the OPL table,
+  tremolo 4.8 dB at 3.7 Hz, vibrato about 13 cents at 6.4 Hz. The level
+  (a channel ~11 dB over an APU square) is a forum estimate.
+- **Unit ROMs** (`tests/test_mappers.py`): PRG, CHR, mirroring and the
+  VRC IRQ on VRC7a (A4) and VRC7b (A3). (`tests/test_vrc7_audio.py`) with
+  the custom instrument as a pure sine: pitch 49716 * fnum * 2^block /
+  2^19 within 1% and the multiplier; volume 3 dB a step; the half-wave
+  sine's level; a full modulator multiplying the zero crossings; feedback
+  changing the sound; attack 0 silent; key off with release 15 silent,
+  release 0 holding; ROM patches Organ (sustained: holds) and Bells
+  (percussive: decays); $E000 bit 6 clearing the registers. Mutations
+  caught (16 of 17): VRC7b on A4, no IRQ, CHR pairs, phase without the
+  >> 1, sample every 32 cycles, multiplier ignored, 1.5 dB volume steps,
+  half-wave ignored, no modulation, no feedback, attack 0 attacking, key
+  off ignored, release 0 releasing, patch table off by one, silence
+  keeping registers, not routed. The miss, $9000+line written to the PRG
+  bank, is equivalent: nes.c sends those writes to the sound chip before
+  the mapper sees them. Two others (patch table, silence) passed the
+  first version; the Organ/Bells pair and a key off before the key on
+  were added for them.
+- **Games**: Lagrange Point (VRC7a) reaches its name entry; with and
+  without the VRC7 in the mix its music differs from 14 s on (the APU
+  part alone is small: the music is FM). Pitches: the spectral peaks and
+  the pitches its F-numbers imply sit at the same offset from equal
+  temperament (median about -10 to -14 cents: the game's own tuning), so
+  the synthesis plays what the registers say. No clipping. Tiny Toon
+  Adventures 2 (VRC7b, no sound circuit) boots to its map, sound
+  unchanged.
+- **Recompiled, `--diff` 3,000 frames**: both identical (99.96-99.98%
+  recompiled), `--audio-hash` equal to the interpreter's. Lagrange Point
+  runs at 14.9x real time with the synthesis.
+- **Not checked**: the timbres against hardware recordings (envelope
+  speeds, attack curve and modulation depth are the model's, not
+  measured); the amplifier's nonlinearity; the rhythm and test registers
+  ($0E, $0F; the games do not write them).
+
+## 2026-11-17 · M9d: Konami VRC6 (24, 26) and its sound
 - **Unit ROMs** (`tests/test_mappers.py`): on 24 and 26, a 16 KB bank at
   $8000 (8 KB banks 6 and 7), $C000, the last bank at $E000, CHR R1 and
   R6, $B003 mirroring against the header's; the VRC IRQ in cycle mode
@@ -31,7 +73,7 @@ reproducible check is not "verified".
 - **Not checked**: the polarity of the VRC6 output (not documented; not
   inverted here) and the level against hardware recordings.
 
-## 2026-11-17 · M8c: Sunsoft 5B sound
+## 2026-11-17 · M9c: Sunsoft 5B sound
 - **Unit ROMs** (`tests/test_5b_audio.py`): tone pitch Clock / (32 *
   period) within 2%; the first swing negative; volume 13 half the
   amplitude of 15 (two 3 dB steps); tone and noise both disabled is a
@@ -57,7 +99,7 @@ reproducible check is not "verified".
   3 dB over APU-only games, which includes the cartridge amplifier's gain
   on the APU (not modelled).
 
-## 2026-11-17 · M8b: MMC5 sound
+## 2026-11-17 · M9b: MMC5 sound
 - **Unit ROMs** (`tests/test_mmc5_audio.py`): pulse pitch as the APU's
   (440 Hz within 2%); $5015 = 0 silences; the first swing of a note is
   negative where the APU's is positive (inverted); length 10 runs out
@@ -80,7 +122,7 @@ reproducible check is not "verified".
 - **Not checked**: the PCM voice in a game, and how any of it sounds
   against hardware recordings.
 
-## 2026-11-17 · M8a: Namco 163 wavetable sound
+## 2026-11-17 · M9a: Namco 163 wavetable sound
 - **Unit ROMs** (`tests/test_n163_audio.py`): one channel set up through
   the RAM port, read back from `--wav`. Pitch matches the wiki's formula
   within 2% (440 Hz with one channel, 220 Hz with two); `$E000` bit 6

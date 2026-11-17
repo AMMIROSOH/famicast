@@ -6,7 +6,7 @@
  * "MMC4" (10), "INES Mapper 018" (Jaleco SS88006), "Sunsoft FME-7" (69),
  * "INES Mapper 210" (Namco 175/340), "Bandai FCG board", "INES Mapper 016",
  * "INES Mapper 153", "INES Mapper 157", "INES Mapper 159", "INES Mapper 118"
- * (TxSROM), "VRC1" (75), "VRC6" (24, 26), "INES Mapper 032" (Irem G-101), "INES Mapper 033"
+ * (TxSROM), "VRC1" (75), "VRC6" (24, 26), "VRC7" (85), "INES Mapper 032" (Irem G-101), "INES Mapper 033"
  * (Taito TC0190), "INES Mapper 048" (TC0690), "Taito X1-005" (80), "INES
  * Mapper 207" and "NES 2.0 submappers" (032: 1); the EEPROMs from
  * the 24C02/X24C01 datasheets' I2C protocol. */
@@ -92,7 +92,7 @@ static int chr_enabled_185(const Cart *c) {
  * (they do not overlap). */
 static int is_vrc(const Cart *c) {  /* the VRC IRQ: VRC4 (and VRC2, which has none: vrc2), VRC6 */
     return c->mapper == 21 || c->mapper == 22 || c->mapper == 23 || c->mapper == 25 || c->mapper == 24 ||
-           c->mapper == 26;
+           c->mapper == 26 || c->mapper == 85;
 }
 
 /* VRC IRQ control ($F001 style: M, E, A; acknowledges, reloads when E) and
@@ -165,6 +165,41 @@ static void vrc_write(Cart *c, uint16_t a, uint8_t v) {
         break;
     }
     vrc_update(c);
+}
+
+/* ---- Konami VRC7 (85): pairs of registers told apart by one address line
+ * (cart_vrc7_line). $8000/$8000+line, $9000: 8 KB PRG at $8000/$A000/$C000,
+ * $E000 the last bank; $A000-$D000 (and +line) 1 KB CHR; $E000 bits 0-1
+ * mirroring (vertical, horizontal, one screen A, B), $E000+line IRQ latch;
+ * $F000 IRQ control, $F000+line acknowledge (the VRC IRQ). $9000+line: the
+ * sound ports (runtime/apu.c), as is $E000 bit 6 (silence). shortcut: $E000
+ * bit 7 (PRG RAM enable) is ignored. */
+static void vrc7_update(Cart *c) {
+    uint32_t n8 = c->prg_size / 0x2000;
+    for (int w = 0; w < 3; w++) c->prg_off[w] = (c->prg_bank[w] % n8) * 0x2000;
+    c->prg_off[3] = (n8 - 1) * 0x2000;
+    for (int i = 0; i < 8; i++) set_chr(c, i, 1, c->chr_bank[i]);
+}
+
+static void vrc7_write(Cart *c, uint16_t a, uint8_t v) {
+    int line = cart_vrc7_line(c, a);
+    switch (a & 0xF000) {
+    case 0x8000: c->prg_bank[line] = v & 0x3F; break;
+    case 0x9000: if (!line) c->prg_bank[2] = v & 0x3F; break;
+    case 0xA000: case 0xB000: case 0xC000: case 0xD000: c->chr_bank[((a >> 12) - 0xA) * 2 + line] = v; break;
+    case 0xE000:
+        if (line) c->irq_latch = v;
+        else if (!c->four_screen) {
+            static const int MIRROR[4] = {MIRROR_VERTICAL, MIRROR_HORIZONTAL, MIRROR_SINGLE_LOW, MIRROR_SINGLE_HIGH};
+            c->mirroring = MIRROR[v & 3];
+        }
+        break;
+    case 0xF000:
+        if (line) vrc_irq_ack(c);
+        else vrc_irq_control(c, v);
+        break;
+    }
+    vrc7_update(c);
 }
 
 /* ---- Konami VRC6 (24; 26 swaps A0 and A1): $8000 16 KB PRG at $8000,
@@ -870,6 +905,7 @@ static void update_banks(Cart *c) {
     case 32: g101_update(c); break;
     case 33: case 48: case 80: case 207: taito_update(c); break;
     case 24: case 26: vrc6_update(c); break;
+    case 85: vrc7_update(c); break;
     case 7:
         set_prg32(c, c->latch & 7);
         set_chr(c, 0, 8, 0);
@@ -923,7 +959,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         return -1;
     }
     static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 24, 25, 26, 32, 33, 48,
-                                    66, 69, 71, 75, 79, 80, 87, 118, 153, 157, 159, 185, 206, 207, 210};
+                                    66, 69, 71, 75, 79, 80, 85, 87, 118, 153, 157, 159, 185, 206, 207, 210};
     int ok = 0;
     for (size_t i = 0; i < sizeof SUPPORTED / sizeof *SUPPORTED; i++) ok |= c->mapper == SUPPORTED[i];
     if (!ok) {
@@ -1070,6 +1106,7 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     case 32: g101_write(c, a, v); return 1;
     case 33: case 48: taito_write(c, a, v); return 1;
     case 24: case 26: vrc6_write(c, a, v); return 1;
+    case 85: vrc7_write(c, a, v); return 1;
     case 80: case 207: return 0;  /* registers at $7EFx */
     case 69: fme7_write(c, a, v); return 1;  /* command 8 can map ROM or RAM at $6000 */
     case 210: n175_write(c, a, v); return 1;

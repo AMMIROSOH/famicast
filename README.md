@@ -6,7 +6,7 @@ A hobby, open-source **static recompiler for NES games**: it translates the
 6502 code in a ROM into C, compiles it to a native executable, and runs it on a
 small runtime (PPU, APU, mappers, SDL3 window/audio/gamepad).
 
-Built for the challenge. Runs games on 37 mappers (see [Mappers](#mappers)).
+Built for the challenge. Runs games on 38 mappers (see [Mappers](#mappers)).
 A recompiled game can be run cycle by cycle against a reference interpreter
 (`--diff`); every game tested that way so far matches (see
 [docs/06](docs/06-verification-log.md)). No ROMs included: bring your own.
@@ -86,6 +86,7 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 75 | Konami VRC1 | Ganbare Goemon! Karakuri Douchuu, King Kong 2: Ikari no Megaton Punch, Tetsuwan Atom |
 | 79 | AVE NINA-03/06 | Krazy Kreatures, Dudes with Attitude, Deathbots |
 | 80 | Taito X1-005 | Mirai Shinwa Jarvas, Minelvaton Saga, Kyonshiizu 2 |
+| 85 | Konami VRC7 (with its FM sound) | Lagrange Point, Tiny Toon Adventures 2 (Japan) |
 | 87 | Jaleco J87 | Argus, City Connection, The Goonies (Japan) |
 | 118 | TxSROM (MMC3 with nametables from CHR bank bit 7) | Ys III (Japan), Pro Sport Hockey, NES Play Action Football |
 | 153 | Bandai LZ93D50 with 8 KB battery RAM | Famicom Jump II |
@@ -96,8 +97,8 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 207 | Taito X1-005 with nametables from CHR bank bit 7 | Fudou Myouou Den |
 | 210 | Namco 175/340 | Famista '91-'94, Splatterhouse: Wanpaku Graffiti, Wagyan Land 3 |
 
-Not yet: the other expansion audio (VRC7, ...) and the
-long tail of rarer boards. Other mappers are refused at load ("mapper N
+Not yet: the Famicom Disk System (and its sound) and the long tail of
+rarer boards. Other mappers are refused at load ("mapper N
 not supported yet").
 
 ## Downloads

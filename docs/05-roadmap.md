@@ -196,30 +196,37 @@ M7a (runtime):
   RAM at $7Exx-$7Fxx; 207: nametables from CHR bank bit 7). 3,320 of 4,031
   ROMs (96% of licensed); 23 games boot; 8 identical to the interpreter (06).
 
-M8 (expansion audio):
-- [x] M8a: Namco 163 wavetable sound: one channel every 15 CPU cycles, phase
+M9 (expansion audio; numbered M8a-M8d in the PRs, which clashed with M8 below):
+- [x] M9a: Namco 163 wavetable sound: one channel every 15 CPU cycles, phase
   and output per the wiki's model, channels averaged (as most emulators;
   the chip multiplexes them), mixed at the board's level from the NES 2.0
   submapper. The APU runs the chip, caught up before CPU reads of its RAM.
   11 games with sound checked against a silent copy; 4 identical to the
   interpreter, audio included (06).
-- [x] M8b: MMC5 sound: two pulses (the APU's, without sweep or low-period
+- [x] M9b: MMC5 sound: two pulses (the APU's, without sweep or low-period
   muting) with envelope and length clocked every 7,424 cycles (~240 Hz),
   the PCM DAC in write mode with its $00 IRQ; inverted against the APU.
   PCM read mode is a marked shortcut. 4 games use it; all 4 identical to
   the interpreter, audio included (06).
-- [x] M8c: Sunsoft 5B: three squares, noise (17-bit LFSR) and the
+- [x] M9c: Sunsoft 5B: three squares, noise (17-bit LFSR) and the
   envelope (32 steps, the shapes from bits C A a H), stepped every 16 CPU
   cycles; 1.5 dB per level, summed linearly, inverted, a full channel 8 dB
   over an APU square (a forum estimate). The amplifier's compression near
   full volume is a marked shortcut (Gimmick! stays at volume 11 or less).
-- [x] M8d: Konami VRC6 (24, 26: A0 and A1 swapped): 16 + 8 KB PRG, eight
+- [x] M9d: Konami VRC6 (24, 26: A0 and A1 swapped): 16 + 8 KB PRG, eight
   1 KB CHR, $B003 mirroring (banking mode 0 only, the one the games use:
   a marked shortcut), the VRC IRQ shared with VRC4; sound: two pulses
   with 16-step duty and a sawtooth, a linear sum about as loud as the
   APU's pulses. 3,325 of 4,031 ROMs (97% of licensed); 3 games boot; 3
   identical to the interpreter, audio included (06).
-- [ ] VRC7, FDS.
+- [x] M9e: Konami VRC7 (85; VRC7a/VRC7b by submapper: A4 or A3): 8 KB PRG x3,
+  1 KB CHR x8, mirroring, the VRC IRQ; its FM sound (YM2413-style, six
+  channels, the wiki's 15-patch ROM dump): registers, patches and pitch
+  from the wiki, the operator internals (log-sin/exp tables, envelope
+  rates, KSL, LFOs) from the OPL/OPLL structure as emu2413 models it,
+  since the wiki does not give them. 3,330 of 4,031 ROMs (97% of
+  licensed); 2 games boot; 2 identical to the interpreter, audio included.
+- [ ] FDS (not a mapper: the disk system needs its own loader).
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color
