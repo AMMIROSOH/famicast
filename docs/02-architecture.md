@@ -150,6 +150,18 @@ jumps, JMP through a RAM pointer, and runs code from RAM (see 06). Plan:
    interpreter runs far faster than real time, and misses are rare after the
    feedback loop. Code in RAM always stays interpreted or JIT-compiled.
 
+## What the lockstep diff proves, and what it does not
+The recompiler emits the interpreter's own C for each instruction (with
+known operands made constant, `recomp/emit.c`), so both share instruction
+semantics. A lockstep match proves that translation, block discovery and
+bank handling are right: the recompiled program does what the interpreter
+does. It cannot catch an instruction both get wrong. That rests on the
+interpreter's own checks: nestest, SingleStepTests (cycle-by-cycle bus
+traces) and the test ROMs (rungs 2, 3 and 6 below). The emitter finds
+operand fetches in that C by their text; it stops the build if an
+instruction's fetches stop matching its size, so a template change cannot
+silently read the wrong bytes.
+
 ## Verification ladder (each rung must pass before the next)
 1. Opcode table matches an independent table (all 256 entries: mnemonic, mode,
    size, base cycles).

@@ -3,6 +3,17 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · Emitter guard
+- `static_body` (`recomp/emit.c`) now checks the operand fetches it found in
+  the interpreter's C: every operand byte (offsets 1 to size-1) fetched and
+  nothing past the next opcode byte (the dummy read of implied
+  instructions). A first version checked how far the PC advanced and fired
+  on every JMP, whose last fetch is on the right-hand side of the PC
+  assignment; the offset mask accepts it. The build (nestest and the
+  configured games) and 21 recompiled games from M7f-M7j pass. Mutation
+  caught: `sub_pc` not recognising `rd(c, c->pc)` stops the build at the
+  first JMP.
+
 ## 2026-11-17 · Pixel aspect setting
 - `aspect = tv` (the default) draws NES pixels 8:7 wide, the shape an NTSC
   TV gave them: the picture is 293 units wide for 256 pixels (292.6

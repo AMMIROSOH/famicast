@@ -6,9 +6,10 @@ A hobby, open-source **static recompiler for NES games**: it translates the
 6502 code in a ROM into C, compiles it to a native executable, and runs it on a
 small runtime (PPU, APU, mappers, SDL3 window/audio/gamepad).
 
-Built for the challenge. Runs games on 31 mappers (see [Mappers](#mappers));
-every recompiled game is checked cycle by cycle against a reference
-interpreter. No ROMs included: bring your own.
+Built for the challenge. Runs games on 31 mappers (see [Mappers](#mappers)).
+A recompiled game can be run cycle by cycle against a reference interpreter
+(`--diff`); every game tested that way so far matches (see
+[docs/06](docs/06-verification-log.md)). No ROMs included: bring your own.
 
 ## How it works (short version)
 1. `recomp/` (`nesrecomp`, C, built and run by CMake) finds all reachable
@@ -39,8 +40,21 @@ see [docs/06-verification-log.md](docs/06-verification-log.md).
 
 ## Mappers
 The mapper is the cartridge's banking hardware; the iNES header names it.
-These cover about 95% of licensed releases (81% of a full ~4,000-ROM set,
-including unlicensed and pirate carts).
+What the numbers mean, from weakest to strongest:
+
+- **Loads**: the mapper is supported. That is about 95% of licensed releases
+  in a ~4,000-ROM survey (81% of the whole set, with unlicensed and pirate
+  carts). A game that loads may still hit something not emulated (see below).
+- **Boots**: for each mapper, one dump of every licensed title was run with
+  scripted input and reached a title, menu or play screen.
+- **Lockstep-tested**: one to seven games per mapper ran recompiled and
+  interpreted side by side (`--diff`, 3,000 frames or more) with identical
+  CPU, RAM, PPU state and frames.
+- **Recompiled share**: in those runs 99.8-99.98% of CPU cycles ran as
+  recompiled code; the rest is interrupt entry, which always goes through
+  the interpreter, and code the scripted play found that the build had not.
+
+Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 
 | Mapper | Board | Examples |
 |---|---|---|

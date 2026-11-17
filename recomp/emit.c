@@ -60,11 +60,13 @@ static void disasm(char *out, size_t len, const Instr *i, const uint8_t *mem) {
 
 /* Rewrite one line for a known address: code fetches rd(c, c->pc[++])
  * become fetch_k() with the ROM byte as a constant, other reads of c->pc
- * (not assignments, not increments) become the constant PC. */
-static void sub_pc(Buf *o, const char *s, uint16_t *pc, const uint8_t *mem) {
+ * (not assignments, not increments) become the constant PC. *fetched gets
+ * bit k for each byte fetched at instruction offset k. */
+static void sub_pc(Buf *o, const char *s, uint16_t *pc, const uint8_t *mem, uint16_t at, unsigned *fetched) {
     while (*s) {
         if (!strncmp(s, "rd(c, c->pc++)", 14) || !strncmp(s, "rd(c, c->pc)", 12)) {
             int inc = s[11] == '+';
+            *fetched |= 1u << ((uint16_t)(*pc - at) & 15);
             bprintf(o, "fetch_k(c, 0x%04X, 0x%02X)", *pc, mem[*pc]);
             if (inc) (*pc)++;
             s += inc ? 14 : 12;
@@ -85,6 +87,7 @@ static void static_body(Buf *o, const Instr *ins, const uint8_t *mem) {
     body(ins->op, &l);
     uint16_t pc = (uint16_t)(ins->pc + 1);
     int dynamic = 0;
+    unsigned fetched = 0;
     bprintf(o, "        c->pc = 0x%04X;\n", (uint16_t)(ins->pc + ins->size));
     for (int k = 0; k < l.n; k++) {
         const char *line = l.s[k];
@@ -97,12 +100,25 @@ static void static_body(Buf *o, const Instr *ins, const uint8_t *mem) {
             bprintf(o, "%s", line);
         } else if (lhs_blank) {  /* assignment: the right-hand side sees the old value */
             bprintf(o, "%.*s", (int)(as - line) + 8, line);
-            sub_pc(o, as + 8, &pc, mem);
+            sub_pc(o, as + 8, &pc, mem, ins->pc, &fetched);
             dynamic = as == line;  /* top level (RTS/RTI); an indented one is a taken branch */
         } else {
-            sub_pc(o, line, &pc, mem);
+            sub_pc(o, line, &pc, mem, ins->pc, &fetched);
         }
         bprintf(o, "\n");
+    }
+    /* sub_pc recognises operand fetches by their text. Every operand byte
+     * (offsets 1 to size-1) must have been fetched, and nothing past the
+     * next instruction's first byte (implied instructions read it as a
+     * dummy). If a change to the interpreter's instruction C writes a fetch
+     * another way, stop the build rather than emit code that reads the
+     * wrong bytes. */
+    unsigned need = ((1u << ins->size) - 1) & ~1u, allowed = (1u << (ins->size + 1)) - 2;
+    if ((fetched & need) != need || (fetched & ~allowed)) {
+        fprintf(stderr, "nesrecomp: $%04X %s: the interpreter's C fetches offsets %X (bits), the instruction"
+                        " has %d bytes (emit.c sub_pc no longer matches cpu_ops.h)\n",
+                ins->pc, ins->op->mn, fetched, ins->size);
+        exit(2);
     }
 }
 
