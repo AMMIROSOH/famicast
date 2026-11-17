@@ -62,6 +62,16 @@ typedef struct {
     uint8_t env_step, env_attack, env_hold, env_level;  /* level 0-31 */
 } Sunsoft5b;
 
+/* Konami VRC6 sound (nesdev "VRC6 audio"): two pulses with 16-step duty and
+ * a sawtooth, each on a 12-bit divider clocked every CPU cycle. */
+typedef struct {
+    uint8_t reg[3][3];                /* $9000-$9002, $A000-$A002, $B000-$B002 */
+    uint8_t freq_ctrl;                /* $9003: bit 0 halt, 1 periods >> 4, 2 periods >> 8 */
+    uint16_t timer[3];
+    uint8_t step[2];                  /* pulse duty steps, 15 down to 0 */
+    uint8_t acc, acc_clock;           /* saw accumulator; divider clocks in this ramp (0-13) */
+} Vrc6Audio;
+
 enum { APU_SAMPLE_RATE = 48000, APU_BUF = 8192 };
 
 typedef struct Apu {
@@ -87,6 +97,8 @@ typedef struct Apu {
     Mmc5Audio mmc5;
     uint8_t has_5b;           /* mapper 69 (FME-7 boards without the 5B ignore these writes) */
     Sunsoft5b s5b;
+    uint8_t has_vrc6;
+    Vrc6Audio vrc6;
     float mix_last;           /* mixer output, recomputed only when mix_dirty: */
     uint8_t mix_dirty;        /* set wherever channel state can change */
     int64_t frac;
@@ -109,6 +121,8 @@ void apu_mmc5_write(Apu *a, uint16_t addr, uint8_t v);
 uint8_t apu_mmc5_read(Apu *a, uint16_t addr, uint8_t open_bus);
 /* Sunsoft 5B: $C000-$DFFF register select, $E000-$FFFF data */
 void apu_5b_write(Apu *a, uint16_t addr, uint8_t v);
+/* VRC6: reg is the register as on mapper 24 ($9000-$9003, $A000-$A002, $B000-$B002) */
+void apu_vrc6_write(Apu *a, uint16_t reg, uint8_t v);
 int apu_take_samples(Apu *a, float *out, int max);   /* drain the 48 kHz output */
 
 #endif

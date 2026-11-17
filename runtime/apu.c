@@ -45,6 +45,8 @@ void apu_reset(Apu *a, Cart *cart, int power_on) {
      * Submappers 1 and 2: the sound is not wired out (the chip still runs). */
     a->has_mmc5 = cart && cart->mapper == 5;
     a->has_5b = cart && cart->mapper == 69;
+    a->has_vrc6 = cart && (cart->mapper == 24 || cart->mapper == 26);
+    if (power_on) a->vrc6.step[0] = a->vrc6.step[1] = 15;
     if (power_on) a->s5b.lfsr = 1;
     a->n163_gain = 0;
     if (cart && cart->n163_sound && cart->submapper != 1 && cart->submapper != 2) {
@@ -274,6 +276,19 @@ static float mix(Apu *a) {
         }
         out -= sum;
     }
+    /* VRC6: a linear 6-bit DAC over pulse + pulse + saw (0-61); a pulse at
+     * volume 15 about as loud as an APU pulse at 15 (nesdev "VRC6 audio";
+     * its polarity is not documented: not inverted here) */
+    if (a->has_vrc6) {
+        const Vrc6Audio *v = &a->vrc6;
+        int level = 0;
+        for (int i = 0; i < 2; i++) {
+            uint8_t ctl = v->reg[i][0];
+            if ((v->reg[i][2] & 0x80) && ((ctl & 0x80) || v->step[i] <= ((ctl >> 4) & 7))) level += ctl & 15;
+        }
+        if (v->reg[2][2] & 0x80) level += v->acc >> 3;
+        out += PULSE_OUT[15] / 15.0f * (float)level;
+    }
     return out;
 }
 
@@ -359,6 +374,26 @@ static void s5b_clock(Apu *a) {
     }
 }
 
+/* VRC6: each divider counts down every CPU cycle and clocks its channel
+ * after period + 1 cycles: a pulse steps its duty (16 steps, so Clock /
+ * (16 * (t + 1))); the saw adds its rate to the accumulator every second
+ * clock and clears it on the 14th (Clock / (14 * (t + 1))). Disabled
+ * channels hold (pulse at step 15, saw at 0). */
+static void vrc6_clock(Apu *a) {
+    Vrc6Audio *v = &a->vrc6;
+    if (v->freq_ctrl & 1) return;  /* halt */
+    int shift = (v->freq_ctrl & 4) ? 8 : (v->freq_ctrl & 2) ? 4 : 0;
+    for (int i = 0; i < 3; i++) {
+        if (!(v->reg[i][2] & 0x80)) continue;
+        if (v->timer[i]) { v->timer[i]--; continue; }
+        v->timer[i] = (uint16_t)((((v->reg[i][2] & 0x0F) << 8) | v->reg[i][1]) >> shift);
+        if (i < 2) v->step[i] = (v->step[i] - 1) & 15;
+        else if (++v->acc_clock == 14) v->acc = 0, v->acc_clock = 0;
+        else if (!(v->acc_clock & 1)) v->acc = (uint8_t)(v->acc + (v->reg[2][0] & 0x3F));
+        a->mix_dirty = 1;
+    }
+}
+
 void apu_run(Apu *a, uint64_t target) {
     while (a->cycle < target) {
         a->cycle++;
@@ -367,6 +402,7 @@ void apu_run(Apu *a, uint64_t target) {
         if (a->cart && a->cart->n163_sound && cart_n163_clock(a->cart) && a->n163_gain != 0) a->mix_dirty = 1;
         if (a->has_mmc5) mmc5_clock(a);
         if (a->has_5b) s5b_clock(a);
+        if (a->has_vrc6) vrc6_clock(a);
         output(a);
     }
 }
@@ -550,6 +586,19 @@ void apu_5b_write(Apu *a, uint16_t addr, uint8_t v) {
         s->env_count = 0;
         s->env_attack = (v >> 2) & 1;
         s->env_level = s->env_attack ? 0 : 31;
+    }
+}
+
+void apu_vrc6_write(Apu *a, uint16_t reg, uint8_t v) {
+    Vrc6Audio *s = &a->vrc6;
+    a->mix_dirty = 1;
+    if (reg == 0x9003) { s->freq_ctrl = v & 7; return; }
+    int ch = (reg >> 12) - 9, k = reg & 3;
+    if (ch < 0 || ch > 2 || k == 3) return;
+    s->reg[ch][k] = v;
+    if (k == 2 && !(v & 0x80)) {  /* disabled: the duty restarts, the saw clears */
+        if (ch < 2) s->step[ch] = 15;
+        else s->acc = 0, s->acc_clock = 0;
     }
 }
 

@@ -213,7 +213,13 @@ M8 (expansion audio):
   cycles; 1.5 dB per level, summed linearly, inverted, a full channel 8 dB
   over an APU square (a forum estimate). The amplifier's compression near
   full volume is a marked shortcut (Gimmick! stays at volume 11 or less).
-- [ ] VRC6 (with mapper 24/26), VRC7, FDS.
+- [x] M8d: Konami VRC6 (24, 26: A0 and A1 swapped): 16 + 8 KB PRG, eight
+  1 KB CHR, $B003 mirroring (banking mode 0 only, the one the games use:
+  a marked shortcut), the VRC IRQ shared with VRC4; sound: two pulses
+  with 16-step duty and a sawtooth, a linear sum about as loud as the
+  APU's pulses. 3,325 of 4,031 ROMs (97% of licensed); 3 games boot; 3
+  identical to the interpreter, audio included (06).
+- [ ] VRC7, FDS.
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

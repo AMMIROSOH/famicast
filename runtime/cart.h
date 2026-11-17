@@ -4,8 +4,8 @@
  * with CHR protection, 206 Namco 108, 21/22/23/25 Konami VRC2/VRC4, 5 MMC5,
  * 19 Namco 163, 9 MMC2, 10 MMC4, 18 Jaleco SS88006, 69 Sunsoft FME-7, 210
  * Namco 175/340, 16/153/157/159 Bandai FCG, 118 TxSROM, 75 Konami VRC1,
- * 32 Irem G-101, 33/48 Taito TC0190/TC0690, 80/207 Taito X1-005 (nesdev
- * wiki, see cart.c). Every mapper only sets the bank tables below; reads
+ * 32 Irem G-101, 33/48 Taito TC0190/TC0690, 80/207 Taito X1-005, 24/26
+ * Konami VRC6 (nesdev wiki, see cart.c). Every mapper only sets the bank tables below; reads
  * go through them. MMC5 and Namco 163 also map the nametables
  * (cart_nt_read), and MMC5 has its own background banks. */
 #ifndef NES_CART_H
@@ -105,6 +105,11 @@ static inline int cart_is_reg(const Cart *c, uint16_t a) {
 static inline int cart_6000_is_io(const Cart *c) {
     return c->mapper == 87 || c->mapper == 16 || c->mapper == 157 || c->mapper == 159 || c->mapper == 80 ||
            c->mapper == 207;
+}
+/* VRC6 (24, 26): the register an address hits, as $x000-$x003 (26 swaps A0 and A1). */
+static inline uint16_t cart_vrc6_reg(const Cart *c, uint16_t a) {
+    if (c->mapper == 26) a = (uint16_t)((a & ~3) | (a & 1) << 1 | (a >> 1 & 1));
+    return a & 0xF003;
 }
 /* MMC3's IRQ counter: MMC3, TxSROM (an MMC3 board wiring CHR bank bit 7 to
  * the nametables) and Taito TC0690 (48) */

@@ -249,6 +249,11 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
         sync_apu(n);
         apu_5b_write(&n->apu, a, v);
     }
+    else if ((n->cart.mapper == 24 || n->cart.mapper == 26) && cart_vrc6_reg(&n->cart, a) >= 0x9000 &&
+             cart_vrc6_reg(&n->cart, a) < 0xB003) {  /* VRC6 sound: in the APU */
+        sync_apu(n);
+        apu_vrc6_write(&n->apu, cart_vrc6_reg(&n->cart, a), v);
+    }
     else if (mapper_reg) {  /* bank switches can be raster effects: PPU caught up first */
         if (cart_cpu_write(&n->cart, a, v, n->cpu.cycles)) map_memory(n);
     }
@@ -339,10 +344,11 @@ void nes_step(Nes *n) {
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 11 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
+enum { STATE_VERSION = 12 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
                                 4: MMC2/MMC4, SS88006, FME-7; 5: Bandai FCG EEPROMs; 6: TxSROM;
                                 7: emphasis in the frame buffer; 8: TC0690 IRQ delay;
-                                9: Namco 163 sound; 10: MMC5 sound; 11: Sunsoft 5B */
+                                9: Namco 163 sound; 10: MMC5 sound; 11: Sunsoft 5B;
+                                12: VRC6 sound */
 
 typedef struct {
     char magic[4];  /* "NESS" */

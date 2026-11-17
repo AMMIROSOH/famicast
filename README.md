@@ -6,7 +6,7 @@ A hobby, open-source **static recompiler for NES games**: it translates the
 6502 code in a ROM into C, compiles it to a native executable, and runs it on a
 small runtime (PPU, APU, mappers, SDL3 window/audio/gamepad).
 
-Built for the challenge. Runs games on 35 mappers (see [Mappers](#mappers)).
+Built for the challenge. Runs games on 37 mappers (see [Mappers](#mappers)).
 A recompiled game can be run cycle by cycle against a reference interpreter
 (`--diff`); every game tested that way so far matches (see
 [docs/06](docs/06-verification-log.md)). No ROMs included: bring your own.
@@ -74,7 +74,9 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 21 | Konami VRC4a/VRC4c | Wai Wai World 2, Ganbare Goemon Gaiden 2 |
 | 22 | Konami VRC2a | TwinBee 3, Ganbare Pennant Race! |
 | 23 | Konami VRC2b/VRC4e/VRC4f | Contra (Japan), Crisis Force, Parodius Da! |
+| 24 | Konami VRC6a (with its sound) | Akumajou Densetsu |
 | 25 | Konami VRC2c/VRC4b/VRC4d | Gradius II, Teenage Mutant Ninja Turtles (Japan), Bio Miracle Bokutte Upa |
+| 26 | Konami VRC6b (with its sound) | Mouryou Senki Madara, Esper Dream 2 |
 | 32 | Irem G-101 | Image Fight (Japan), Major League, Kaiketsu Yancha Maru 2 |
 | 33 | Taito TC0190 | Akira, Don Doko Don, Insector X |
 | 48 | Taito TC0690 | Bubble Bobble 2 (Japan), The Flintstones (Japan), The Jetsons (Japan) |
@@ -94,7 +96,7 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 207 | Taito X1-005 with nametables from CHR bank bit 7 | Fudou Myouou Den |
 | 210 | Namco 175/340 | Famista '91-'94, Splatterhouse: Wanpaku Graffiti, Wagyan Land 3 |
 
-Not yet: the other expansion audio (VRC6, VRC7, ...) and the
+Not yet: the other expansion audio (VRC7, ...) and the
 long tail of rarer boards. Other mappers are refused at load ("mapper N
 not supported yet").
 
