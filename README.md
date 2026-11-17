@@ -79,7 +79,7 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 33 | Taito TC0190 | Akira, Don Doko Don, Insector X |
 | 48 | Taito TC0690 | Bubble Bobble 2 (Japan), The Flintstones (Japan), The Jetsons (Japan) |
 | 66 | GxROM | Super Mario Bros. / Duck Hunt, Dragon Power, Gumshoe |
-| 69 | Sunsoft FME-7 (no 5B audio) | Batman: Return of the Joker, Mr. Gimmick, Hebereke |
+| 69 | Sunsoft FME-7 / 5B (with its sound) | Batman: Return of the Joker, Mr. Gimmick, Hebereke |
 | 71 | Camerica / Codemasters | Micro Machines, The Fantastic Adventures of Dizzy, Bee 52 |
 | 75 | Konami VRC1 | Ganbare Goemon! Karakuri Douchuu, King Kong 2: Ikari no Megaton Punch, Tetsuwan Atom |
 | 79 | AVE NINA-03/06 | Krazy Kreatures, Dudes with Attitude, Deathbots |
@@ -94,7 +94,7 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 207 | Taito X1-005 with nametables from CHR bank bit 7 | Fudou Myouou Den |
 | 210 | Namco 175/340 | Famista '91-'94, Splatterhouse: Wanpaku Graffiti, Wagyan Land 3 |
 
-Not yet: the other expansion audio (Sunsoft 5B, VRC6, ...) and the
+Not yet: the other expansion audio (VRC6, VRC7, ...) and the
 long tail of rarer boards. Other mappers are refused at load ("mapper N
 not supported yet").
 

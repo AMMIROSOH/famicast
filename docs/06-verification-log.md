@@ -3,6 +3,32 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · M8c: Sunsoft 5B sound
+- **Unit ROMs** (`tests/test_5b_audio.py`): tone pitch Clock / (32 *
+  period) within 2%; the first swing negative; volume 13 half the
+  amplitude of 15 (two 3 dB steps); tone and noise both disabled is a
+  constant (filtered away); noise alone sounds; a select with the high
+  nibble set blocks the data write; the envelope triangle ($0E) repeats
+  every 1,024 * period cycles and not at half that (by autocorrelation:
+  counting zero crossings of the filtered log-shaped triangle read 94 Hz
+  for 87); holding shapes end high ($0D, $0B) or low ($09, $0F, $04);
+  held high equals fixed volume 15. Mutations caught (12): tick every 8
+  cycles, not inverted, 3 dB per level, volume as level 2v, disabled tone
+  silent, noise never shifting, alternate ignored, hold level not
+  flipped, continue ignored, envelope bit ignored, write disable ignored,
+  not routed. Two of them (level 2v, continue) passed the first version;
+  the equal-level check and shape $04 were added for them.
+- **Games**: the 11 mapper 69 dumps for 2,000 frames of `--play`, with
+  and without the 5B in the mix: only Gimmick! (Japan) differs. It uses
+  the three tones only (no noise, no envelope), volumes 3-11; no sample
+  clips.
+- **Recompiled, `--diff` 3,000 frames**: Gimmick! identical (99.94%
+  recompiled), `--audio-hash` equal to the interpreter's.
+- **Not checked**: the level against hardware. 8 dB is one forum poster's
+  estimate; a measured whole-soundtrack comparison puts Gimmick! about
+  3 dB over APU-only games, which includes the cartridge amplifier's gain
+  on the APU (not modelled).
+
 ## 2026-11-17 · M8b: MMC5 sound
 - **Unit ROMs** (`tests/test_mmc5_audio.py`): pulse pitch as the APU's
   (440 Hz within 2%); $5015 = 0 silences; the first swing of a note is

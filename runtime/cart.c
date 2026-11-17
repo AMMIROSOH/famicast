@@ -665,7 +665,7 @@ static void ss88006_write(Cart *c, uint16_t a, uint8_t v) {
  * ($C000/$E000, Gimmick!) is not emulated. */
 static void fme7_write(Cart *c, uint16_t a, uint8_t v) {
     if (a < 0xA000) { c->fme7_cmd = v & 0x0F; return; }
-    if (a >= 0xC000) return;
+    if (a >= 0xC000) return;  /* 5B sound: runtime/apu.c */
     uint8_t cmd = c->fme7_cmd;
     if (cmd < 8) c->chr_bank[cmd] = v;
     else if (cmd == 8) c->fme7_6000 = v;

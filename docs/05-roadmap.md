@@ -208,7 +208,12 @@ M8 (expansion audio):
   the PCM DAC in write mode with its $00 IRQ; inverted against the APU.
   PCM read mode is a marked shortcut. 4 games use it; all 4 identical to
   the interpreter, audio included (06).
-- [ ] Sunsoft 5B, VRC6 (with mapper 24/26), VRC7, FDS.
+- [x] M8c: Sunsoft 5B: three squares, noise (17-bit LFSR) and the
+  envelope (32 steps, the shapes from bits C A a H), stepped every 16 CPU
+  cycles; 1.5 dB per level, summed linearly, inverted, a full channel 8 dB
+  over an APU square (a forum estimate). The amplifier's compression near
+  full volume is a marked shortcut (Gimmick! stays at volume 11 or less).
+- [ ] VRC6 (with mapper 24/26), VRC7, FDS.
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color
