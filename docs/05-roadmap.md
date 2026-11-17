@@ -203,7 +203,12 @@ M8 (expansion audio):
   submapper. The APU runs the chip, caught up before CPU reads of its RAM.
   11 games with sound checked against a silent copy; 4 identical to the
   interpreter, audio included (06).
-- [ ] MMC5 pulse and PCM, Sunsoft 5B, VRC6 (with mapper 24/26), VRC7, FDS.
+- [x] M8b: MMC5 sound: two pulses (the APU's, without sweep or low-period
+  muting) with envelope and length clocked every 7,424 cycles (~240 Hz),
+  the PCM DAC in write mode with its $00 IRQ; inverted against the APU.
+  PCM read mode is a marked shortcut. 4 games use it; all 4 identical to
+  the interpreter, audio included (06).
+- [ ] Sunsoft 5B, VRC6 (with mapper 24/26), VRC7, FDS.
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

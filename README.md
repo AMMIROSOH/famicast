@@ -63,7 +63,7 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 2 | UxROM | Mega Man, Castlevania, Contra |
 | 3 | CNROM | Gradius, Paperboy, Solomon's Key |
 | 4 | MMC3 | Super Mario Bros. 3, Kirby's Adventure, Mega Man 3 |
-| 5 | MMC5 (no expansion audio, no split screen) | Castlevania III, Uncharted Waters, Metal Slader Glory |
+| 5 | MMC5 (with its sound; no split screen) | Castlevania III, Uncharted Waters, Metal Slader Glory |
 | 7 | AxROM | Battletoads, Marble Madness, R.C. Pro-Am |
 | 9 | MMC2 | Mike Tyson's Punch-Out!!, Punch-Out!! |
 | 10 | MMC4 | Fire Emblem (Japan), Fire Emblem Gaiden, Famicom Wars |
@@ -94,7 +94,7 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 207 | Taito X1-005 with nametables from CHR bank bit 7 | Fudou Myouou Den |
 | 210 | Namco 175/340 | Famista '91-'94, Splatterhouse: Wanpaku Graffiti, Wagyan Land 3 |
 
-Not yet: the other expansion audio (MMC5, Sunsoft 5B, VRC6, ...) and the
+Not yet: the other expansion audio (Sunsoft 5B, VRC6, ...) and the
 long tail of rarer boards. Other mappers are refused at load ("mapper N
 not supported yet").
 

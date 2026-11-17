@@ -16,6 +16,7 @@ enum { CPU_HZ = 1789773 };
 
 static void mixer_tables(void);
 static float PULSE_OUT[31], TND_OUT[203];  /* mixer tables, see mix() */
+static float MMC5_PCM_STEP;                /* one step of the MMC5 DAC, see mix() */
 /* $4017 writes take effect on even APU clocks: one cycle later when written
  * on the other parity (blargg 2005 "Clock Jitter"; parity chosen by test). */
 enum { FC_JITTER_PARITY = 1 };
@@ -41,6 +42,7 @@ void apu_reset(Apu *a, Cart *cart, int power_on) {
      * loudest N163 square, 225 levels peak to peak, over the loudest APU
      * pulse, 0.1494); the middle of each, and 15 dB when not given.
      * Submappers 1 and 2: the sound is not wired out (the chip still runs). */
+    a->has_mmc5 = cart && cart->mapper == 5;
     a->n163_gain = 0;
     if (cart && cart->n163_sound && cart->submapper != 1 && cart->submapper != 2) {
         /* 10^(dB/20) for 12, 16.5, 18.75 and 15 dB */
@@ -223,6 +225,7 @@ static void timers(Apu *a) {
 static void mixer_tables(void) {
     for (int p = 1; p < 31; p++) PULSE_OUT[p] = 95.52f / (8128.0f / (float)p + 100.0f);
     for (int t = 1; t < 203; t++) TND_OUT[t] = 163.67f / (24329.0f / (float)t + 100.0f);
+    MMC5_PCM_STEP = TND_OUT[127] / 127.0f;
 }
 
 static float mix(Apu *a) {
@@ -237,6 +240,17 @@ static float mix(Apu *a) {
     int nz = (n->len && !(n->lfsr & 1)) ? (n->env.constant ? n->env.period : n->env.decay) : 0;
     float out = PULSE_OUT[p] + TND_OUT[3 * t + 2 * nz + a->dmc.level];
     if (a->n163_gain != 0) out += a->n163_gain * cart_n163_level(a->cart);
+    /* MMC5: pulses as loud as the APU's (the same table), the DAC like the
+     * DMC with the same value (so up to twice as loud: 8 bits), all
+     * inverted against the APU (nesdev "MMC5 audio") */
+    if (a->has_mmc5) {
+        int m = 0;
+        for (int i = 0; i < 2; i++) {
+            const Pulse *q = &a->mmc5.pulse[i];
+            if (q->len && DUTY[q->duty][q->seq]) m += q->env.constant ? q->env.period : q->env.decay;
+        }
+        out -= PULSE_OUT[m] + MMC5_PCM_STEP * a->mmc5.pcm;
+    }
     return out;
 }
 
@@ -263,12 +277,35 @@ static void output(Apu *a) {
     if (a->buf_len < APU_BUF) a->buf[a->buf_len++] = a->lp_y;
 }
 
+/* MMC5 pulses: timers on APU cycles like the APU's; no sweep, and periods
+ * under 8 are not muted. */
+static void mmc5_clock(Apu *a) {
+    Mmc5Audio *m = &a->mmc5;
+    if (++m->frame >= 7424) {  /* M2 / 7424 = 241 Hz (die reading; not bench-tested) */
+        m->frame = 0;
+        for (int i = 0; i < 2; i++) {
+            Pulse *p = &m->pulse[i];
+            clock_envelope(&p->env);
+            if (p->len && !p->halt) p->len--;
+        }
+        a->mix_dirty = 1;
+    }
+    if (a->cycle & 1) {
+        for (int i = 0; i < 2; i++) {
+            Pulse *p = &m->pulse[i];
+            if (p->timer == 0) { p->timer = p->period; p->seq = (p->seq + 1) & 7; a->mix_dirty = 1; }
+            else p->timer--;
+        }
+    }
+}
+
 void apu_run(Apu *a, uint64_t target) {
     while (a->cycle < target) {
         a->cycle++;
         frame_counter(a);
         timers(a);
         if (a->cart && a->cart->n163_sound && cart_n163_clock(a->cart) && a->n163_gain != 0) a->mix_dirty = 1;
+        if (a->has_mmc5) mmc5_clock(a);
         output(a);
     }
 }
@@ -399,6 +436,56 @@ void apu_write(Apu *a, uint16_t addr, uint8_t v) {
         break;
     default: break;
     }
+}
+
+/* shortcut: PCM read mode ($5010 bit 0: the DAC takes CPU reads of
+ * $8000-$BFFF) is not emulated; every ROM read would need the slow bus path,
+ * and recompiled code fetches its instructions as constants. The one game
+ * with PCM (Shin 4 Nin Uchi Mahjong) is checked in docs/06. */
+void apu_mmc5_write(Apu *a, uint16_t addr, uint8_t v) {
+    Mmc5Audio *m = &a->mmc5;
+    a->mix_dirty = 1;
+    if (addr < 0x5008) {
+        int ch = (addr >> 2) & 1;
+        Pulse *p = &m->pulse[ch];
+        switch (addr & 3) {
+        case 0:
+            p->duty = v >> 6;
+            p->halt = p->env.loop = (v >> 5) & 1;
+            p->env.constant = (v >> 4) & 1;
+            p->env.period = v & 15;
+            break;
+        case 1: break;  /* no sweep unit */
+        case 2: p->period = (p->period & 0x700) | v; break;
+        case 3:
+            p->period = (uint16_t)((p->period & 0xFF) | (v & 7) << 8);
+            if (m->enabled >> ch & 1) p->len = LENGTHS[v >> 3];
+            p->seq = 0;
+            p->env.start = 1;
+            break;
+        }
+    } else if (addr == 0x5010) {
+        m->pcm_read_mode = v & 1;
+        m->pcm_irq_on = v >> 7;
+    } else if (addr == 0x5011 && !m->pcm_read_mode) {
+        if (v) m->pcm = v, m->pcm_irq = 0;
+        else m->pcm_irq = 1;  /* $00 leaves the DAC and trips the IRQ */
+    } else if (addr == 0x5015) {
+        m->enabled = v & 3;
+        for (int i = 0; i < 2; i++)
+            if (!(m->enabled >> i & 1)) m->pulse[i].len = 0;
+    }
+}
+
+uint8_t apu_mmc5_read(Apu *a, uint16_t addr, uint8_t open_bus) {
+    Mmc5Audio *m = &a->mmc5;
+    if (addr == 0x5015) return (uint8_t)((open_bus & 0xFC) | (m->pulse[0].len ? 1 : 0) | (m->pulse[1].len ? 2 : 0));
+    if (addr == 0x5010) {  /* bit 7: IRQ (reading acknowledges); bit 0: 0 = letterless MMC5 */
+        uint8_t r = (uint8_t)((open_bus & 0x7E) | (m->pcm_irq && m->pcm_irq_on) << 7);
+        m->pcm_irq = 0;
+        return r;
+    }
+    return open_bus;
 }
 
 void apu_dmc_fill(Apu *a, uint8_t byte) {

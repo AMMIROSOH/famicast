@@ -3,6 +3,29 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · M8b: MMC5 sound
+- **Unit ROMs** (`tests/test_mmc5_audio.py`): pulse pitch as the APU's
+  (440 Hz within 2%); $5015 = 0 silences; the first swing of a note is
+  negative where the APU's is positive (inverted); length 10 runs out
+  after 9-10 clocks of 7,424 cycles, counted by a polling loop (a first
+  version waited whole frames, which were too coarse); $5011 = $00 trips
+  the IRQ, $5010 reads and acknowledges it, and the IRQ reaches the CPU
+  only while unacknowledged; a $01 -> $FF DAC step swings several times a
+  full pulse, and a later $00 leaves the DAC alone. Mutations caught (9):
+  not inverted, length at 120 Hz, pulse timers every cycle, $5015 not
+  disabling, $00 written to the DAC (caught once the $00 check was added),
+  $5010 read keeping the IRQ, PCM IRQ not on the line, PCM at the pulse
+  scale, writes not routed.
+- **Games**: the 21 MMC5 dumps for 3,000 frames of `--play`, with and
+  without the sound in the mix: Just Breed, Metal Slader Glory, Uchuu
+  Keibitai SDF (pulses) and Shin 4 Nin Uchi Mahjong (pulses; it sets PCM
+  write mode but wrote no samples in that run) differ; the rest are
+  identical. None set PCM read mode.
+- **Recompiled, `--diff` 3,000 frames**: those 4 identical (99.95-99.98%
+  recompiled), and their `--audio-hash` equals the interpreter's.
+- **Not checked**: the PCM voice in a game, and how any of it sounds
+  against hardware recordings.
+
 ## 2026-11-17 · M8a: Namco 163 wavetable sound
 - **Unit ROMs** (`tests/test_n163_audio.py`): one channel set up through
   the RAM port, read back from `--wav`. Pitch matches the wiki's formula
