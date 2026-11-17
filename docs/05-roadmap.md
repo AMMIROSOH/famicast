@@ -195,6 +195,15 @@ M7a (runtime):
   latch, about 4 CPU cycles late), X1-005 (80: registers and 128 bytes of
   RAM at $7Exx-$7Fxx; 207: nametables from CHR bank bit 7). 3,320 of 4,031
   ROMs (96% of licensed); 23 games boot; 8 identical to the interpreter (06).
+
+M8 (expansion audio):
+- [x] M8a: Namco 163 wavetable sound: one channel every 15 CPU cycles, phase
+  and output per the wiki's model, channels averaged (as most emulators;
+  the chip multiplexes them), mixed at the board's level from the NES 2.0
+  submapper. The APU runs the chip, caught up before CPU reads of its RAM.
+  11 games with sound checked against a silent copy; 4 identical to the
+  interpreter, audio included (06).
+- [ ] MMC5 pulse and PCM, Sunsoft 5B, VRC6 (with mapper 24/26), VRC7, FDS.
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

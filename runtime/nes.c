@@ -125,6 +125,7 @@ static uint8_t read_no_tick(Nes *n, uint16_t a) {
     }
     if (a < 0x4020) return n->cpu.open_bus;  /* write-only APU registers */
     if (a < 0x6000) cart_run(&n->cart, n->cpu.cycles);  /* Namco 163 counter reads */
+    if (a >= 0x4800 && a < 0x5000 && n->cart.n163_sound) apu_run(&n->apu, n->cpu.cycles - 1);  /* N163 sound updates its RAM */
     return cart_cpu_read(&n->cart, a, n->cpu.open_bus);
 }
 
@@ -326,9 +327,10 @@ void nes_step(Nes *n) {
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 8 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
+enum { STATE_VERSION = 9 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
                                 4: MMC2/MMC4, SS88006, FME-7; 5: Bandai FCG EEPROMs; 6: TxSROM;
-                                7: emphasis in the frame buffer; 8: TC0690 IRQ delay */
+                                7: emphasis in the frame buffer; 8: TC0690 IRQ delay;
+                                9: Namco 163 sound */
 
 typedef struct {
     char magic[4];  /* "NESS" */

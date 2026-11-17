@@ -36,6 +36,17 @@ void apu_reset(Apu *a, Cart *cart, int power_on) {
         a->dmc.silence = 1;
     }
     a->cart = cart;
+    /* Namco 163: louder than the APU by a resistor on the board, so per game:
+     * NES 2.0 submapper 3: 11-13 dB, 4: 16-17 dB, 5: 18-19.5 dB (the
+     * loudest N163 square, 225 levels peak to peak, over the loudest APU
+     * pulse, 0.1494); the middle of each, and 15 dB when not given.
+     * Submappers 1 and 2: the sound is not wired out (the chip still runs). */
+    a->n163_gain = 0;
+    if (cart && cart->n163_sound && cart->submapper != 1 && cart->submapper != 2) {
+        /* 10^(dB/20) for 12, 16.5, 18.75 and 15 dB */
+        float k = cart->submapper == 3 ? 3.98107f : cart->submapper == 4 ? 6.68344f : cart->submapper == 5 ? 8.65964f : 5.62341f;
+        a->n163_gain = 0.1494f * k / 225.0f;
+    }
     a->frame_irq = a->dmc_irq = 0;
     if (!power_on) {
         /* reset: $4015 cleared, but only pulse/noise length counters are
@@ -224,7 +235,9 @@ static float mix(Apu *a) {
     int t = TRIANGLE[a->tri.seq];
     const Noise *n = &a->noise;
     int nz = (n->len && !(n->lfsr & 1)) ? (n->env.constant ? n->env.period : n->env.decay) : 0;
-    return PULSE_OUT[p] + TND_OUT[3 * t + 2 * nz + a->dmc.level];
+    float out = PULSE_OUT[p] + TND_OUT[3 * t + 2 * nz + a->dmc.level];
+    if (a->n163_gain != 0) out += a->n163_gain * cart_n163_level(a->cart);
+    return out;
 }
 
 /* Box-filter to 48 kHz, then the NES's own output filters: high-pass 90 Hz
@@ -255,6 +268,7 @@ void apu_run(Apu *a, uint64_t target) {
         a->cycle++;
         frame_counter(a);
         timers(a);
+        if (a->cart && a->cart->n163_sound && cart_n163_clock(a->cart) && a->n163_gain != 0) a->mix_dirty = 1;
         output(a);
     }
 }

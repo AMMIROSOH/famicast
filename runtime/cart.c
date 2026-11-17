@@ -363,8 +363,8 @@ int cart_mmc5_attr(const Cart *c, uint16_t v, int at_bits) {
  * IRQ at $5000/$5800, 128 bytes of RAM behind $4800 (address at $F800).
  * shortcut: with $E800 bit 6/7 clear, CHR values $E0-$FF select nametable
  * RAM as pattern data; read as CHR ROM here (the 21 games checked either set
- * both bits or never write such values, docs/06). The wavetable sound is
- * not emulated. */
+ * both bits or never write such values, docs/06). The wavetable sound: see
+ * cart_n163_clock. */
 static void n163_update(Cart *c) {
     uint32_t n8 = c->prg_size / 0x2000;
     for (int w = 0; w < 3; w++) c->prg_off[w] = (c->n163_prg[w] % n8) * 0x2000;
@@ -387,7 +387,10 @@ static void n163_write(Cart *c, uint16_t a, uint8_t v) {
     if (a < 0x8000) return;  /* PRG RAM: written by cart_cpu_write */
     if (a < 0xC000) c->n163_chr[(a - 0x8000) >> 11] = v;
     else if (a < 0xE000) c->n163_nt[(a - 0xC000) >> 11] = v;
-    else if (a < 0xF800) c->n163_prg[(a - 0xE000) >> 11] = v & 0x3F;
+    else if (a < 0xF800) {
+        c->n163_prg[(a - 0xE000) >> 11] = v & 0x3F;
+        if (a < 0xE800) c->n163_halt = (v >> 6) & 1;
+    }
     else c->n163_addr = v;
     n163_update(c);
 }
@@ -401,6 +404,42 @@ static uint8_t n163_read(Cart *c, uint16_t a, uint8_t open_bus) {
     }
     if (a < 0x5800) return (uint8_t)c->n163_counter;
     return (uint8_t)(c->n163_counter >> 8 | c->n163_irq_enable << 7);
+}
+
+/* Namco 163 sound (nesdev "Namco 163 audio"): channel registers at $40-$7F
+ * of the 128-byte RAM, channel 8 at $78: frequency (18 bits: $78, $7A, $7C
+ * bits 0-1), phase (24 bits: $79, $7B, $7D), length 256 - ($7C & $FC)
+ * samples, wave address $7E (in 4-bit samples, low nibble first), volume
+ * $7F bits 0-3; $7F bits 4-6 + 1 channels run, 8 downwards. Every 15 CPU
+ * cycles the next channel adds its frequency to its phase (modulo length <<
+ * 16) and outputs (sample - 8) * volume. The chip outputs one channel at a
+ * time; like most emulators this averages them (the wiki's suggestion; with
+ * 8 channels the real chip also whines at ~15 kHz). */
+int cart_n163_clock(Cart *c) {
+    if (++c->n163_div < 15) return 0;
+    c->n163_div = 0;
+    if (c->n163_halt) return 0;
+    int count = ((c->n163_ram[0x7F] >> 4) & 7) + 1;
+    if (c->n163_ch >= count) c->n163_ch = 0;
+    uint8_t *r = &c->n163_ram[0x78 - 8 * c->n163_ch];
+    uint32_t phase = (uint32_t)r[5] << 16 | (uint32_t)r[3] << 8 | r[1];
+    uint32_t freq = (uint32_t)(r[4] & 3) << 16 | (uint32_t)r[2] << 8 | r[0];
+    uint32_t length = 256u - (r[4] & 0xFC);
+    phase = (phase + freq) % (length << 16);
+    r[5] = (uint8_t)(phase >> 16), r[3] = (uint8_t)(phase >> 8), r[1] = (uint8_t)phase;
+    int x = (int)(((phase >> 16) + r[6]) & 0xFF);
+    int s = (c->n163_ram[x >> 1] >> ((x & 1) * 4)) & 0x0F;
+    int8_t out = (int8_t)((s - 8) * (r[7] & 0x0F)), old = c->n163_out[c->n163_ch];
+    c->n163_out[c->n163_ch] = out;
+    c->n163_ch = (uint8_t)((c->n163_ch + 1) % count);
+    return out != old;
+}
+
+float cart_n163_level(const Cart *c) {
+    if (c->n163_halt) return 0;
+    int count = ((c->n163_ram[0x7F] >> 4) & 7) + 1, sum = 0;
+    for (int i = 0; i < count; i++) sum += c->n163_out[i];
+    return (float)sum / (float)count;
 }
 
 uint8_t cart_nt_read(Cart *c, const uint8_t *ciram, uint16_t a) {
@@ -857,6 +896,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
     /* power-on RAM is not zero on hardware; Famicom Jump II (153) jams on
      * all-zero RAM with no save (nesdev), $FF boots it */
     if (c->mapper == 153) memset(c->prg_ram, 0xFF, 0x2000);
+    c->n163_sound = c->mapper == 19;
     if (is_x1005(c)) c->prg_ram_size = 128;  /* the chip's own RAM (battery-backed on some boards) */
     if (c->mapper == 5) {
         /* NES 2.0 byte 10: PRG RAM and NVRAM sizes (64 << shift); else the most a board has */
