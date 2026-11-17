@@ -124,6 +124,10 @@ static uint8_t read_no_tick(Nes *n, uint16_t a) {
         return apu_read_status(&n->apu, n->cpu.open_bus);
     }
     if (a < 0x4020) return n->cpu.open_bus;  /* write-only APU registers */
+    if (n->cart.mapper == 5 && (a == 0x5010 || a == 0x5015)) {  /* MMC5 sound: in the APU */
+        apu_run(&n->apu, n->cpu.cycles - 1);
+        return apu_mmc5_read(&n->apu, a, n->cpu.open_bus);
+    }
     if (a < 0x6000) cart_run(&n->cart, n->cpu.cycles);  /* Namco 163 counter reads */
     if (a >= 0x4800 && a < 0x5000 && n->cart.n163_sound) apu_run(&n->apu, n->cpu.cycles - 1);  /* N163 sound updates its RAM */
     return cart_cpu_read(&n->cart, a, n->cpu.open_bus);
@@ -237,6 +241,10 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
     n->cpu.bus_pending += DOTS_BEFORE_ACCESS;
     catch_up(n);
     if (a == 0x4014) n->oam_dma_page = v, n->oam_dma_pending = 1;  /* runs at the next read (run_dma) */
+    else if (n->cart.mapper == 5 && a >= 0x5000 && a <= 0x5015) {  /* MMC5 sound: in the APU */
+        sync_apu(n);
+        apu_mmc5_write(&n->apu, a, v);
+    }
     else if (mapper_reg) {  /* bank switches can be raster effects: PPU caught up first */
         if (cart_cpu_write(&n->cart, a, v, n->cpu.cycles)) map_memory(n);
     }
@@ -327,10 +335,10 @@ void nes_step(Nes *n) {
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 9 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
+enum { STATE_VERSION = 10 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
                                 4: MMC2/MMC4, SS88006, FME-7; 5: Bandai FCG EEPROMs; 6: TxSROM;
                                 7: emphasis in the frame buffer; 8: TC0690 IRQ delay;
-                                9: Namco 163 sound */
+                                9: Namco 163 sound; 10: MMC5 sound */
 
 typedef struct {
     char magic[4];  /* "NESS" */

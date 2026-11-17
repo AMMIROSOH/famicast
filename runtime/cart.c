@@ -299,7 +299,7 @@ static int mmc5_write(Cart *c, uint16_t a, uint8_t v) {
     case 0x5204: c->mmc5_irq_enable = v >> 7; c->irq_line = c->mmc5_irq_pending && c->mmc5_irq_enable; break;
     case 0x5205: case 0x5206: c->mmc5_mul[a - 0x5205] = v; break;
     default:
-        if (a < 0x5120 || a > 0x512B) return 0;  /* audio, RAM protect, split: ignored */
+        if (a < 0x5120 || a > 0x512B) return 0;  /* RAM protect, split: ignored (sound: runtime/apu.c) */
         c->mmc5_chr[a - 0x5120] = (uint16_t)(v | c->mmc5_chr_upper << 8);
         c->mmc5_last_b = a >= 0x5128;
         break;

@@ -39,6 +39,15 @@ typedef struct {
     uint8_t dma_request;  /* buffer empty with bytes left: bus must fetch */
 } Dmc;
 
+/* MMC5 sound (nesdev "MMC5 audio"): two pulses without sweep, envelope and
+ * length clocked together every 7,424 CPU cycles (~240 Hz), an 8-bit PCM DAC. */
+typedef struct {
+    Pulse pulse[2];
+    uint8_t enabled;                  /* $5015 */
+    uint8_t pcm, pcm_read_mode, pcm_irq_on, pcm_irq;  /* $5011; $5010 bits 0, 7; IRQ tripped by $00 */
+    uint16_t frame;                   /* CPU cycles since the last envelope/length clock */
+} Mmc5Audio;
+
 enum { APU_SAMPLE_RATE = 48000, APU_BUF = 8192 };
 
 typedef struct Apu {
@@ -60,6 +69,8 @@ typedef struct Apu {
     float acc;
     int acc_n;
     float n163_gain;          /* Namco 163 sound: its level -> mixer units (0: none) */
+    uint8_t has_mmc5;
+    Mmc5Audio mmc5;
     float mix_last;           /* mixer output, recomputed only when mix_dirty: */
     uint8_t mix_dirty;        /* set wherever channel state can change */
     int64_t frac;
@@ -74,7 +85,12 @@ int64_t apu_cycles_to_event(const Apu *a);           /* until IRQ or DMC fetch m
 uint8_t apu_read_status(Apu *a, uint8_t open_bus);   /* $4015 */
 void apu_write(Apu *a, uint16_t addr, uint8_t v);    /* $4000-$4013, $4015, $4017 */
 void apu_dmc_fill(Apu *a, uint8_t byte);             /* DMA delivered a sample byte */
-static inline int apu_irq(const Apu *a) { return a->frame_irq || a->dmc_irq; }
+static inline int apu_irq(const Apu *a) {
+    return a->frame_irq || a->dmc_irq || (a->mmc5.pcm_irq && a->mmc5.pcm_irq_on);
+}
+/* MMC5 sound registers: $5000-$5007, $5010, $5011, $5015 (reads: $5010, $5015) */
+void apu_mmc5_write(Apu *a, uint16_t addr, uint8_t v);
+uint8_t apu_mmc5_read(Apu *a, uint16_t addr, uint8_t open_bus);
 int apu_take_samples(Apu *a, float *out, int max);   /* drain the 48 kHz output */
 
 #endif
