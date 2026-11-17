@@ -6,7 +6,7 @@
  * "MMC4" (10), "INES Mapper 018" (Jaleco SS88006), "Sunsoft FME-7" (69),
  * "INES Mapper 210" (Namco 175/340), "Bandai FCG board", "INES Mapper 016",
  * "INES Mapper 153", "INES Mapper 157", "INES Mapper 159", "INES Mapper 118"
- * (TxSROM), "VRC1" (75), "INES Mapper 032" (Irem G-101), "INES Mapper 033"
+ * (TxSROM), "VRC1" (75), "VRC6" (24, 26), "INES Mapper 032" (Irem G-101), "INES Mapper 033"
  * (Taito TC0190), "INES Mapper 048" (TC0690), "Taito X1-005" (80), "INES
  * Mapper 207" and "NES 2.0 submappers" (032: 1); the EEPROMs from
  * the 24C02/X24C01 datasheets' I2C protocol. */
@@ -90,7 +90,23 @@ static int chr_enabled_185(const Cart *c) {
  * register lines A0/A1 to different CPU address lines. The NES 2.0 submapper
  * names the board; without it both wirings of the mapper are decoded at once
  * (they do not overlap). */
-static int is_vrc(const Cart *c) { return c->mapper == 21 || c->mapper == 22 || c->mapper == 23 || c->mapper == 25; }
+static int is_vrc(const Cart *c) {  /* the VRC IRQ: VRC4 (and VRC2, which has none: vrc2), VRC6 */
+    return c->mapper == 21 || c->mapper == 22 || c->mapper == 23 || c->mapper == 25 || c->mapper == 24 ||
+           c->mapper == 26;
+}
+
+/* VRC IRQ control ($F001 style: M, E, A; acknowledges, reloads when E) and
+ * acknowledge ($F002 style: copies A to E). */
+static void vrc_irq_control(Cart *c, uint8_t v) {
+    c->vrc_irq_ctrl = v & 7;
+    c->irq_line = 0;
+    if (v & 2) { c->irq_counter = c->irq_latch; c->vrc_prescaler = 341; }
+}
+
+static void vrc_irq_ack(Cart *c) {
+    c->irq_line = 0;
+    c->vrc_irq_ctrl = (uint8_t)((c->vrc_irq_ctrl & ~2) | (c->vrc_irq_ctrl & 1) << 1);
+}
 
 static int vrc_lines(const Cart *c, uint16_t a) {
     int s = c->submapper, a0, a1;
@@ -144,17 +160,50 @@ static void vrc_write(Cart *c, uint16_t a, uint8_t v) {
         if (c->vrc2) break;
         if (line == 0) c->irq_latch = (uint8_t)((c->irq_latch & 0xF0) | (v & 0x0F));
         else if (line == 1) c->irq_latch = (uint8_t)((c->irq_latch & 0x0F) | v << 4);
-        else if (line == 2) {
-            c->vrc_irq_ctrl = v & 7;
-            c->irq_line = 0;
-            if (v & 2) { c->irq_counter = c->irq_latch; c->vrc_prescaler = 341; }
-        } else {
-            c->irq_line = 0;
-            c->vrc_irq_ctrl = (uint8_t)((c->vrc_irq_ctrl & ~2) | (c->vrc_irq_ctrl & 1) << 1);
-        }
+        else if (line == 2) vrc_irq_control(c, v);
+        else vrc_irq_ack(c);
         break;
     }
     vrc_update(c);
+}
+
+/* ---- Konami VRC6 (24; 26 swaps A0 and A1): $8000 16 KB PRG at $8000,
+ * $C000 8 KB at $C000, $E000 the last bank; $D000-$D003 and $E000-$E003
+ * 1 KB CHR R0-R7; $B003 bits 2-3 mirroring (vertical, horizontal, one
+ * screen A, B); $F000 IRQ latch, $F001 control, $F002 acknowledge (the
+ * VRC IRQ). Sound ($9000-$B002): runtime/apu.c. shortcut: only $B003's
+ * banking mode 0 with CIRAM nametables, the one the three games use (they
+ * write $20-$2C and $A0-$AC); modes 1-3 and nametables from CHR ROM are
+ * not emulated, nor bit 7 (PRG RAM enable): upgrade for homebrew. */
+static void vrc6_update(Cart *c) {
+    uint32_t n8 = c->prg_size / 0x2000;
+    c->prg_off[0] = ((c->prg_bank[0] * 2u) % n8) * 0x2000;
+    c->prg_off[1] = ((c->prg_bank[0] * 2u + 1) % n8) * 0x2000;
+    c->prg_off[2] = (c->prg_bank[1] % n8) * 0x2000;
+    c->prg_off[3] = (n8 - 1) * 0x2000;
+    for (int i = 0; i < 8; i++) set_chr(c, i, 1, c->chr_bank[i]);
+}
+
+static void vrc6_write(Cart *c, uint16_t a, uint8_t v) {
+    uint16_t r = cart_vrc6_reg(c, a);
+    switch (r & 0xF000) {
+    case 0x8000: c->prg_bank[0] = v & 0x0F; break;
+    case 0xC000: c->prg_bank[1] = v & 0x1F; break;
+    case 0xD000: c->chr_bank[r & 3] = v; break;
+    case 0xE000: c->chr_bank[4 + (r & 3)] = v; break;
+    case 0xB000:
+        if (r == 0xB003 && !c->four_screen) {
+            static const int MIRROR[4] = {MIRROR_VERTICAL, MIRROR_HORIZONTAL, MIRROR_SINGLE_LOW, MIRROR_SINGLE_HIGH};
+            c->mirroring = MIRROR[(v >> 2) & 3];
+        }
+        break;
+    case 0xF000:
+        if (r == 0xF000) c->irq_latch = v;
+        else if (r == 0xF001) vrc_irq_control(c, v);
+        else if (r == 0xF002) vrc_irq_ack(c);
+        break;
+    }
+    vrc6_update(c);
 }
 
 /* SS88006 and FME-7: a 16-bit counter counts down every CPU cycle while
@@ -231,8 +280,9 @@ int64_t cart_cycles_to_irq(const Cart *c, uint64_t cycle) {
 /* ---- MMC5 (5) ----
  * PRG: $5100 mode 0-3 = one 32 KB, two 16 KB, 16+8+8 KB or four 8 KB banks
  * from $5114-$5117 (8 KB units; bit 7 clear on $5114-$5116 = PRG RAM there);
- * $5113 banks the PRG RAM at $6000. Audio, the vertical split ($5200-$5202)
- * and PRG RAM write protection ($5102/$5103) are not emulated. */
+ * $5113 banks the PRG RAM at $6000. The vertical split ($5200-$5202) and
+ * PRG RAM write protection ($5102/$5103) are not emulated (sound:
+ * runtime/apu.c). */
 
 /* PRG RAM bank -> offset: bit 2 selects the chip, bits 0-1 the 8 KB bank in
  * it. 16 KB boards are two 8 KB chips (banks 0 and 4 differ, 0 and 1 do not);
@@ -819,6 +869,7 @@ static void update_banks(Cart *c) {
     case 75: vrc1_update(c); break;
     case 32: g101_update(c); break;
     case 33: case 48: case 80: case 207: taito_update(c); break;
+    case 24: case 26: vrc6_update(c); break;
     case 7:
         set_prg32(c, c->latch & 7);
         set_chr(c, 0, 8, 0);
@@ -871,8 +922,8 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         snprintf(err, errlen, "file shorter than its header says");
         return -1;
     }
-    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 25, 32, 33, 48, 66, 69,
-                                    71, 75, 79, 80, 87, 118, 153, 157, 159, 185, 206, 207, 210};
+    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 24, 25, 26, 32, 33, 48,
+                                    66, 69, 71, 75, 79, 80, 87, 118, 153, 157, 159, 185, 206, 207, 210};
     int ok = 0;
     for (size_t i = 0; i < sizeof SUPPORTED / sizeof *SUPPORTED; i++) ok |= c->mapper == SUPPORTED[i];
     if (!ok) {
@@ -1018,6 +1069,7 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     case 75: vrc1_write(c, a, v); return 1;
     case 32: g101_write(c, a, v); return 1;
     case 33: case 48: taito_write(c, a, v); return 1;
+    case 24: case 26: vrc6_write(c, a, v); return 1;
     case 80: case 207: return 0;  /* registers at $7EFx */
     case 69: fme7_write(c, a, v); return 1;  /* command 8 can map ROM or RAM at $6000 */
     case 210: n175_write(c, a, v); return 1;

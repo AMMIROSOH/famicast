@@ -161,6 +161,7 @@ int assumed_layout(const Rom *r, int layout[4]) {
     case 5: case 19: case 210:   /* MMC5 at power-on ($5117 = $FF), Namco 163/175/340: $E000 = last bank */
     case 18: case 69: case 75:   /* SS88006, FME-7, VRC1 */
     case 80: case 207:           /* Taito X1-005 */
+    case 24: case 26:            /* VRC6: $8000 16 KB and $C000 8 KB switchable */
         layout[3] = n8 - 1;
         return 0;
     }

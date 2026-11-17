@@ -3,6 +3,34 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · M8d: Konami VRC6 (24, 26) and its sound
+- **Unit ROMs** (`tests/test_mappers.py`): on 24 and 26, a 16 KB bank at
+  $8000 (8 KB banks 6 and 7), $C000, the last bank at $E000, CHR R1 and
+  R6, $B003 mirroring against the header's; the VRC IRQ in cycle mode
+  (116 a frame with latch 0), control and acknowledge swapped on 26.
+  (`tests/test_vrc6_audio.py`): pulse pitch Clock / (16 * (t + 1)) at
+  t = 31 (within 1%: the + 1 is 3% there) and 253, on 24 and 26; the AC
+  level rising with duty (D = 0 about half of D = 7: 0.56 after the NES
+  filters, 0.48 ideally; an exact-ratio check first failed on that); the
+  mode bit as a constant; volume linear; level 15 at half duty as loud as
+  an APU pulse at 15 (within 5%); saw pitch Clock / (14 * (t + 1)) at
+  rate 42; $9003 shift and halt. Mutations caught (14): 26 not swapped,
+  16 KB bank as 8 KB, R4-R7 written to R0-R3, mirroring from bits 0-1, no
+  IRQ, duty D of 16, mode ignored, timer period t, saw adding every clock,
+  saw clearing at 16, shift ignored, halt ignored, level doubled, not
+  routed. Two (period t, saw every clock) passed the first version: t =
+  31 and rate 42 were added for them.
+- **Boot smoke**: Akumajou Densetsu (cartridge and Virtual Console dumps)
+  reaches stage 1 with its status bar; Esper Dream 2 plays; Madara runs
+  its intro.
+- **Sound**: with and without the VRC6 in the mix, 3,000 frames of
+  `--play`: all 3 games differ (Madara and Esper Dream 2 from about 13 s);
+  peaks below half of full scale, no clipping.
+- **Recompiled, `--diff` 3,000 frames**: all 3 identical (99.96%
+  recompiled), `--audio-hash` equal to the interpreter's.
+- **Not checked**: the polarity of the VRC6 output (not documented; not
+  inverted here) and the level against hardware recordings.
+
 ## 2026-11-17 · M8c: Sunsoft 5B sound
 - **Unit ROMs** (`tests/test_5b_audio.py`): tone pitch Clock / (32 *
   period) within 2%; the first swing negative; volume 13 half the

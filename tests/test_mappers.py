@@ -172,6 +172,44 @@ class TestMappers(unittest.TestCase):
         rom = ines(25, prg, submapper=1)
         self.assertAlmostEqual(peek(rom, 0) + 256 * peek(rom, 1), 284, delta=1)
 
+    # ---- Konami VRC6 (24; 26 swaps A0 and A1) ----
+    @staticmethod
+    def vrc6_addr(mapper, a):  # the address to write for register `a` (as on mapper 24)
+        return (a & ~3) | (a & 1) << 1 | (a >> 1 & 1) if mapper == 26 else a
+
+    def test_24_26_vrc6_banks(self):
+        """$8000 = 3: 16 KB bank 3 (8 KB banks 6 and 7) at $8000; $C000 = 5;
+        $E000 the last (15). R1 ($D001) = 9 at PPU $0400, R6 ($E002) = 17 at
+        $1800. $B003 = $24: horizontal ($2400 shows a $2000 write; the
+        header says vertical). On 26 the R1 and R6 writes go to $D002 and
+        $E001."""
+        ppu_write = lda_sta(0x20, 0x2006) + lda_sta(0x00, 0x2006) + lda_sta(0x5A, 0x2007)
+        for mapper in (24, 26):
+            with self.subTest(mapper=mapper):
+                w = lambda v, a: lda_sta(v, self.vrc6_addr(mapper, a))
+                code = (WAIT_VBLANK + w(0x03, 0x8000) + w(0x05, 0xC000) + w(0x09, 0xD001) + w(0x11, 0xE002) +
+                        w(0x24, 0xB003) + lda_abs(0x8100) + bytes([0x85, 0x01]) + lda_abs(0xA100) +
+                        bytes([0x85, 0x02]) + lda_abs(0xC100) + bytes([0x85, 0x03]) + lda_abs(0xE100) +
+                        bytes([0x85, 0x04]) + ppu_read(0x0410) + bytes([0x85, 0x05]) + ppu_read(0x1810) +
+                        bytes([0x85, 0x06]) + ppu_write + ppu_read(0x2400) + END)
+                rom = bytearray(self.banked(mapper, code))
+                rom[6] |= 1  # header: vertical
+                self.assertEqual([peek(bytes(rom), a) for a in range(7)], [0x5A, 0x66, 0x67, 0x65, 0x6F, 0x89, 0x91])
+
+    def test_24_26_vrc6_irq(self):
+        """The VRC IRQ with one 8-bit latch ($F000), control $F001 and
+        acknowledge $F002 (26: $F002 and $F001). Cycle mode, latch 0: an IRQ
+        every 256 cycles, 116 from one vblank to the next."""
+        for mapper in (24, 26):
+            with self.subTest(mapper=mapper):
+                ack, ctrl = self.vrc6_addr(mapper, 0xF002), self.vrc6_addr(mapper, 0xF001)
+                handler = bytes([0xE6, 0x00, 0x8D, ack & 0xFF, ack >> 8, 0x40])  # INC $00, STA ack, RTI
+                bpl_wait = bytes([0x2C, 0x02, 0x20, 0x10, 0xFB])
+                code = (bytes([0x78]) + lda_sta(0x40, 0x4017) + WAIT_VBLANK + lda_sta(0x00, 0xF000) + bpl_wait +
+                        bytes([0xA9, 0x00, 0x85, 0x00]) + lda_sta(0x07, ctrl) + bytes([0x58]) +
+                        bpl_wait + bytes([0x78, 0xA5, 0x00]) + END)
+                self.assertEqual(peek(self.banked(mapper, code, handler)), 116)
+
     # ---- MMC5 (5): power-on mode 3 with the last bank at $E000 ----
     def test_5_mmc5_two_ram_chips(self):  # 8 KB RAM + 8 KB NVRAM: $5113 bit 2 picks the chip
         code = (lda_sta(0x00, 0x5113) + lda_sta(0x11, 0x6000) + lda_sta(0x04, 0x5113) + lda_sta(0x44, 0x6000) +
