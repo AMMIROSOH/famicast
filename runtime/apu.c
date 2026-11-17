@@ -1,5 +1,6 @@
 #include "apu.h"
 
+#include <math.h>
 #include <string.h>
 
 static const uint8_t LENGTHS[32] = {10, 254, 20, 2,  40, 4,  80, 6,  160, 8,  60, 10, 14, 12, 26, 14,
@@ -18,6 +19,7 @@ static void mixer_tables(void);
 static float PULSE_OUT[31], TND_OUT[203];  /* mixer tables, see mix() */
 static float MMC5_PCM_STEP;                /* one step of the MMC5 DAC, see mix() */
 static float S5B_LEVEL[32];                /* Sunsoft 5B: 5-bit level -> amplitude, see mix() */
+static uint16_t LOGSIN[256], EXP[256];     /* VRC7: quarter sine as -log2 * 256; 2^x fraction * 1024 */
 /* $4017 writes take effect on even APU clocks: one cycle later when written
  * on the other parity (blargg 2005 "Clock Jitter"; parity chosen by test). */
 enum { FC_JITTER_PARITY = 1 };
@@ -46,6 +48,9 @@ void apu_reset(Apu *a, Cart *cart, int power_on) {
     a->has_mmc5 = cart && cart->mapper == 5;
     a->has_5b = cart && cart->mapper == 69;
     a->has_vrc6 = cart && (cart->mapper == 24 || cart->mapper == 26);
+    a->has_vrc7 = cart && cart->mapper == 85 && cart->submapper != 1;
+    if (power_on)
+        for (int i = 0; i < 6; i++) a->vrc7.op[i][0].env = a->vrc7.op[i][1].env = 127;
     if (power_on) a->vrc6.step[0] = a->vrc6.step[1] = 15;
     if (power_on) a->s5b.lfsr = 1;
     a->n163_gain = 0;
@@ -235,6 +240,10 @@ static void mixer_tables(void) {
      * about 8 dB over a full APU square (0.1494) */
     float v = 0.1494f * 2.51189f;
     for (int i = 31; i >= 2; i--, v *= 0.841395f) S5B_LEVEL[i] = v;
+    for (int i = 0; i < 256; i++) {  /* the OPL/OPLL tables (integers: the same on every platform) */
+        LOGSIN[i] = (uint16_t)lround(-log2(sin((i + 0.5) * 3.14159265358979 / 512)) * 256);
+        EXP[i] = (uint16_t)lround((exp2(i / 256.0) - 1) * 1024);
+    }
 }
 
 static float mix(Apu *a) {
@@ -289,6 +298,11 @@ static float mix(Apu *a) {
         if (v->reg[2][2] & 0x80) level += v->acc >> 3;
         out += PULSE_OUT[15] / 15.0f * (float)level;
     }
+    /* VRC7: one channel at full level about 11 dB over an APU square at 15
+     * (nesdev forum "VRC7 and 5B amplifier investigation", an estimate);
+     * a carrier peaks at +-4084. shortcut: the amplifier's nonlinearity is
+     * not modelled */
+    if (a->has_vrc7) out += 0.1494f * 3.548f / 8168.0f * (float)a->vrc7.out;
     return out;
 }
 
@@ -394,6 +408,117 @@ static void vrc6_clock(Apu *a) {
     }
 }
 
+/* ---- VRC7 (nesdev "VRC7 audio" for the registers, patches and
+ * frequency; the operator internals follow the YM2413/OPL structure as
+ * emu2413 models it: the wiki does not give them) ---- */
+static const uint8_t VRC7_PATCHES[15][8] = {  /* instruments 1-15, bytes $00-$07 (wiki dump) */
+    {0x03, 0x21, 0x05, 0x06, 0xE8, 0x81, 0x42, 0x27}, {0x13, 0x41, 0x14, 0x0D, 0xD8, 0xF6, 0x23, 0x12},
+    {0x11, 0x11, 0x08, 0x08, 0xFA, 0xB2, 0x20, 0x12}, {0x31, 0x61, 0x0C, 0x07, 0xA8, 0x64, 0x61, 0x27},
+    {0x32, 0x21, 0x1E, 0x06, 0xE1, 0x76, 0x01, 0x28}, {0x02, 0x01, 0x06, 0x00, 0xA3, 0xE2, 0xF4, 0xF4},
+    {0x21, 0x61, 0x1D, 0x07, 0x82, 0x81, 0x11, 0x07}, {0x23, 0x21, 0x22, 0x17, 0xA2, 0x72, 0x01, 0x17},
+    {0x35, 0x11, 0x25, 0x00, 0x40, 0x73, 0x72, 0x01}, {0xB5, 0x01, 0x0F, 0x0F, 0xA8, 0xA5, 0x51, 0x02},
+    {0x17, 0xC1, 0x24, 0x07, 0xF8, 0xF8, 0x22, 0x12}, {0x71, 0x23, 0x11, 0x06, 0x65, 0x74, 0x18, 0x16},
+    {0x01, 0x02, 0xD3, 0x05, 0xC9, 0x95, 0x03, 0x02}, {0x61, 0x63, 0x0C, 0x00, 0x94, 0xC0, 0x33, 0xF6},
+    {0x21, 0x72, 0x0D, 0x00, 0xC1, 0xD5, 0x56, 0x06}};
+static const uint8_t VRC7_MUL2[16] = {1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 20, 24, 24, 30, 30};  /* 2 x multiplier */
+/* key level scaling at octave 7, by F-number bits 8-5, in 0.375 dB (OPL table: 0-42 dB) */
+static const uint8_t VRC7_KSL[16] = {0, 48, 64, 74, 80, 86, 90, 94, 96, 100, 102, 104, 106, 108, 110, 112};
+enum { EG_ATTACK, EG_DECAY, EG_SUSTAIN, EG_RELEASE };
+
+/* One operator's output for wave position idx (10 bits, 1024 = 2 pi) at
+ * attenuation att (0.375 dB units): sine via the log-sin and exp tables
+ * (+-4084); half: negative half-wave silent. */
+static int vrc7_wave(int idx, int att, int half) {
+    idx &= 1023;
+    int neg = idx & 512;
+    if (neg && half) return 0;
+    int q = idx & 255;
+    if (idx & 256) q = 255 - q;
+    int l = LOGSIN[q] + (att << 4);
+    if (l >= 13 * 256) return 0;
+    int v = ((EXP[(l & 255) ^ 255] | 0x400) << 1) >> (l >> 8);
+    return neg ? -v : v;
+}
+
+/* Envelope: rate R (1-15, 0 halts) plus the key scale (block and F-number
+ * bit 8; >> 2 without KSR) makes r = 4R + ks; the counter adds (4 + r % 4)
+ * << r / 4 each sample and steps once per 2^15. Attack steps env down by
+ * env / 8 + 1 (instant from r = 60), the rest step it up. After decay to
+ * the sustain level: hold (EG type 1) or keep going at the release rate. */
+static void vrc7_envelope(Vrc7Op *o, const uint8_t *p, int op, int ks, int sus) {
+    int egtype = p[op] >> 5 & 1, rate;
+    switch (o->state) {
+    case EG_ATTACK: rate = p[4 + op] >> 4; break;
+    case EG_DECAY: rate = p[4 + op] & 15; break;
+    case EG_SUSTAIN: rate = egtype ? 0 : p[6 + op] & 15; break;
+    default: rate = sus ? 5 : egtype ? p[6 + op] & 15 : 7; break;  /* key off: $2X bit 5 = 5; as emu2413 */
+    }
+    if (!rate) return;
+    int r = 4 * rate + ((p[op] & 0x10) ? ks : ks >> 2);
+    if (r > 63) r = 63;
+    o->eg_acc += (uint32_t)(4 + (r & 3)) << (r >> 2);
+    int steps = (int)(o->eg_acc >> 15);
+    o->eg_acc &= 0x7FFF;
+    if (o->state == EG_ATTACK) {
+        if (r >= 60) o->env = 0;
+        while (steps-- > 0 && o->env) o->env = (uint8_t)(o->env - (o->env >> 3) - 1);
+        if (o->env == 0) o->state = EG_DECAY;
+        return;
+    }
+    int env = o->env + steps;
+    o->env = (uint8_t)(env > 127 ? 127 : env);
+    if (o->state == EG_DECAY && o->env >= (p[6 + op] >> 4) * 8) o->state = EG_SUSTAIN;
+}
+
+static void vrc7_sample(Apu *a) {
+    Vrc7Audio *s = &a->vrc7;
+    s->am_pos = (s->am_pos + 1) % 13440;  /* tremolo: 3.7 Hz triangle, 0-13 (4.8 dB) */
+    s->pm_pos = (s->pm_pos + 1) % 7776;   /* vibrato: 6.4 Hz triangle, -8..8 / 1024 (about 13 cents) */
+    int am = (int)(s->am_pos < 6720 ? s->am_pos : 13440 - s->am_pos) * 13 / 6720;
+    int t = (int)(s->pm_pos * 32 / 7776), pm = t < 8 ? t : t < 24 ? 16 - t : t - 32;
+    int32_t sum = 0;
+    for (int ch = 0; ch < 6; ch++) {
+        int inst = s->reg[0x30 + ch] >> 4;
+        const uint8_t *p = inst ? VRC7_PATCHES[inst - 1] : s->reg;
+        int fnum = s->reg[0x10 + ch] | (s->reg[0x20 + ch] & 1) << 8, block = (s->reg[0x20 + ch] >> 1) & 7;
+        int ks = (block << 1) | (fnum >> 8), sus = (s->reg[0x20 + ch] >> 5) & 1;
+        int ksl = VRC7_KSL[fnum >> 5] - (7 - block) * 16;
+        if (ksl < 0) ksl = 0;
+        int mod = 0;
+        for (int op = 0; op < 2; op++) {
+            Vrc7Op *o = &s->op[ch][op];
+            vrc7_envelope(o, p, op, ks, sus);
+            int k = p[2 + op] >> 6;
+            int att = o->env + (k ? ksl >> (3 - k) : 0) + ((p[op] & 0x80) ? am : 0) +
+                      (op ? (s->reg[0x30 + ch] & 15) * 8 : (p[2] & 63) * 2);
+            if (att > 127) att = 127;
+            int idx = (int)(o->phase >> 9);
+            if (op == 0) {  /* feedback: the last two outputs, 4 pi at FB 7 */
+                int fb = p[3] & 7;
+                if (fb) idx += (o->out[0] + o->out[1]) >> (9 - fb);
+            } else {
+                idx += mod;  /* the modulator's +-4084 is +-8 pi */
+            }
+            int v = vrc7_wave(idx, att, op ? (p[3] >> 4) & 1 : (p[3] >> 3) & 1);
+            o->out[1] = o->out[0];
+            o->out[0] = (int16_t)v;
+            if (op == 0) mod = v;
+            else sum += v;
+            uint32_t inc = ((uint32_t)(fnum * VRC7_MUL2[p[op] & 15]) << block) >> 1;
+            if (p[op] & 0x40) inc = (uint32_t)((int32_t)inc + ((int32_t)inc * pm >> 10));
+            o->phase = (o->phase + inc) & 0x7FFFF;
+        }
+    }
+    if (sum != s->out) s->out = sum, a->mix_dirty = 1;
+}
+
+static void vrc7_clock(Apu *a) {
+    Vrc7Audio *s = &a->vrc7;
+    if (s->tick) { s->tick--; return; }
+    s->tick = 35;
+    if (!s->silent) vrc7_sample(a);
+}
+
 void apu_run(Apu *a, uint64_t target) {
     while (a->cycle < target) {
         a->cycle++;
@@ -403,6 +528,7 @@ void apu_run(Apu *a, uint64_t target) {
         if (a->has_mmc5) mmc5_clock(a);
         if (a->has_5b) s5b_clock(a);
         if (a->has_vrc6) vrc6_clock(a);
+        if (a->has_vrc7) vrc7_clock(a);
         output(a);
     }
 }
@@ -600,6 +726,37 @@ void apu_vrc6_write(Apu *a, uint16_t reg, uint8_t v) {
         if (ch < 2) s->step[ch] = 15;
         else s->acc = 0, s->acc_clock = 0;
     }
+}
+
+void apu_vrc7_write(Apu *a, int port, uint8_t v) {
+    Vrc7Audio *s = &a->vrc7;
+    if (s->silent) return;
+    if (port == 0) { s->addr = v; return; }
+    uint8_t r = s->addr;
+    if (!(r < 0x08 || (r >= 0x10 && r < 0x16) || (r >= 0x20 && r < 0x26) || (r >= 0x30 && r < 0x36))) return;
+    if (r >= 0x20 && r < 0x26 && ((s->reg[r] ^ v) & 0x10)) {  /* key on: restart; key off: release */
+        Vrc7Op *o = s->op[r - 0x20];
+        int inst = s->reg[0x30 + r - 0x20] >> 4;
+        const uint8_t *p = inst ? VRC7_PATCHES[inst - 1] : s->reg;
+        for (int op = 0; op < 2; op++) {
+            if (v & 0x10) o[op].state = EG_ATTACK, o[op].phase = 0, o[op].eg_acc = 0, o[op].out[0] = o[op].out[1] = 0;
+            else if (op || !(p[0] & 0x20)) o[op].state = EG_RELEASE;  /* a sustained modulator keeps sustaining */
+        }
+    }
+    s->reg[r] = v;
+}
+
+void apu_vrc7_silence(Apu *a, int on) {
+    Vrc7Audio *s = &a->vrc7;
+    if (on && !s->silent) {  /* registers cleared, tremolo reset (vibrato kept) */
+        memset(s->reg, 0, sizeof s->reg);
+        memset(s->op, 0, sizeof s->op);
+        for (int i = 0; i < 6; i++) s->op[i][0].env = s->op[i][1].env = 127, s->op[i][0].state = s->op[i][1].state = EG_RELEASE;
+        s->am_pos = 0;
+        s->out = 0;
+        a->mix_dirty = 1;
+    }
+    s->silent = (uint8_t)on;
 }
 
 uint8_t apu_mmc5_read(Apu *a, uint16_t addr, uint8_t open_bus) {
