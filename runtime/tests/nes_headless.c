@@ -34,6 +34,7 @@
  * --time    print the emulation time and speed relative to a real NES.
  * --wav     write the audio output (48 kHz mono, 16-bit) to a WAV file.
  * --audio-hash  print an FNV-1a hash of the 16-bit audio (regression tests).
+ * --region  ntsc, pal or dendy instead of what the header says.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -256,6 +257,7 @@ int main(int argc, char **argv) {
     }
     long frames = -1, peek = -1, play_seed = -1;
     int blargg = 0, hash = 0, npress = 0, interp = 0, diff = 0, misses = 0, timing = 0, audio_hash = 0, coverage = 0, text = 0;
+    int region = -1;  /* --region: REGION_*, or -1 = the header's */
     const char *wav = NULL;
     long press_frame[64];
     unsigned press_mask[64];
@@ -276,6 +278,11 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--time")) timing = 1;
         else if (!strcmp(argv[i], "--wav") && i + 1 < argc) wav = argv[++i];
         else if (!strcmp(argv[i], "--audio-hash")) audio_hash = 1;
+        else if (!strcmp(argv[i], "--region") && i + 1 < argc) {
+            const char *r = argv[++i];
+            region = !strcmp(r, "ntsc") ? REGION_NTSC : !strcmp(r, "pal") ? REGION_PAL : !strcmp(r, "dendy") ? REGION_DENDY : -2;
+            if (region == -2) { fprintf(stderr, "--region: ntsc, pal or dendy\n"); return 2; }
+        }
         else if (!strcmp(argv[i], "--record") && i + 1 < argc) record = argv[++i];
         else if (!strcmp(argv[i], "--replay") && i + 1 < argc) replay = argv[++i];
         else if (!strcmp(argv[i], "--play") && i + 1 < argc) play_seed = atol(argv[++i]);
@@ -297,6 +304,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s: %s\n", rom_path, err);
         return 2;
     }
+    if (region >= 0) nes_set_region(&nes, region);
     if (interp) nes.recomp = NULL;
     else if (recomp_program && !nes.recomp)
         printf("WARNING: recompiled code is for %s; this ROM's PRG differs, interpreting\n",
@@ -306,6 +314,7 @@ int main(int argc, char **argv) {
     if (diff) {
         if (!nes.recomp) { fprintf(stderr, "--diff needs matching recompiled code\n"); return 2; }
         nes_load(&ref, rom, size, err, sizeof err);
+        if (region >= 0) nes_set_region(&ref, region);
         ref.recomp = NULL;
     }
     if (load_state && (nes_state_load(&nes, load_state, err, sizeof err) != 0 ||
@@ -381,7 +390,7 @@ int main(int argc, char **argv) {
     double t1 = timer_seconds();
     if (timing) {
         double sec = t1 - t0;
-        printf("TIME %.2f s for %ld frames (%.1fx real time)\n", sec, frames_run, frames_run / 60.0988 / sec);
+        printf("TIME %.2f s for %ld frames (%.1fx real time)\n", sec, frames_run, frames_run / nes_frame_rate(&nes) / sec);
     }
     if (diff) printf("DIFF OK: %ld frames, recompiled and interpreter identical\n", frames);
     if (text) print_screen_text(&nes);

@@ -3,7 +3,13 @@
  * access and 1 after. The 2/1 split was measured: of 0-3 dots before, only 2
  * passes blargg ppu_vbl_nmi 05-nmi_timing (docs/06).
  *
- * The PPU is caught up lazily (M5b): dots are only counted (cpu.bus_pending) until
+ * The clock counts master clocks ("Cycle reference chart"): a CPU cycle is
+ * 12 (NTSC), 16 (PAL) or 15 (Dendy), a PPU dot 4, 5 or 5, so PAL runs 3.2
+ * dots a cycle; the fraction of a dot not yet run is kept in clk_rem. The
+ * access stays 2 dots into the cycle on every region (shortcut: the PAL
+ * CPU/PPU phase is not measured; tests on a PAL console would settle it).
+ *
+ * The PPU is caught up lazily (M5b): clocks are only counted (cpu.bus_pending) until
  * the CPU touches the PPU ($2000-$3FFF, OAM DMA) or the next point where the
  * PPU acts on the CPU by itself is reached (vblank start: NMI, frame end).
  * Between those points nothing can observe the PPU, so running its dots later
@@ -21,27 +27,30 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { DOTS_BEFORE_ACCESS = 2, LINE = 341, VBLANK_POS = 241 * LINE + 1, FRAME_SHORT = 262 * LINE - 1,
-       PRE_CLEAR = 261 * LINE + 2 };  /* just past (261, 1), where vblank ends */
+enum { LINE = 341 };
 
-/* How many dots may pile up before the bus must catch up: until vblank
- * start (241, 1) has been processed (assuming the odd-frame skipped dot, so
- * at most one dot early), or until the APU's next event, whichever is first. */
+/* How many clocks may pile up before the bus must catch up: until vblank
+ * start (vbl_line, 1) has been processed (assuming the odd-frame skipped dot,
+ * so at most one dot early), or until the APU's next event, whichever is
+ * first. Dots from the PPU's position become clocks as d * clk_dot - clk_rem. */
 static void plan_next_event(Nes *n) {
+    const int pre = n->ppu.pre_line, lines = pre + 1, pre_clear = pre * LINE + 2;  /* just past (pre, 1) */
+    const int dot = n->clk_dot, rem = n->clk_rem;
     int pos = n->ppu.scanline * LINE + n->ppu.dot;
-    int64_t d = VBLANK_POS - pos + 1;
-    if (d <= 0) d += FRAME_SHORT;
+    int64_t d = n->ppu.vbl_line * LINE + 1 - pos + 1;
+    if (d <= 0) d += lines * LINE - 1;
     /* NMI line high: also stop once the pre-render line has cleared it at
-     * (261, 1), or a batch through to the next vblank would see high -> high
+     * (pre, 1), or a batch through to the next vblank would see high -> high
      * and miss the edge (a game waiting in a RAM loop after enabling NMI
      * inside vblank) */
-    if (n->ppu.nmi_out && pos < PRE_CLEAR && PRE_CLEAR - pos < d) d = PRE_CLEAR - pos;
-    int64_t apu = n->cpu.bus_pending + 3 * apu_cycles_to_event(&n->apu);
+    if (n->ppu.nmi_out && pos < pre_clear && pre_clear - pos < d) d = pre_clear - pos;
+    d = d * dot - rem;
+    int64_t apu = n->cpu.bus_pending + (int64_t)n->clk_cpu * apu_cycles_to_event(&n->apu);
     if (apu < d) d = apu;
     int64_t vrc = cart_cycles_to_irq(&n->cart, n->cpu.cycles);
-    if (vrc >= 0 && n->cpu.bus_pending + 3 * vrc < d) d = n->cpu.bus_pending + 3 * vrc;
+    if (vrc >= 0 && n->cpu.bus_pending + n->clk_cpu * vrc < d) d = n->cpu.bus_pending + n->clk_cpu * vrc;
     if (n->cart.mapper == 5 && n->cart.mmc5_irq_enable && (n->ppu.mask & 0x18)) {
-        int64_t m = LINE - n->ppu.dot + 1;  /* through dot 0 of the next line (cart_mmc5_scanline) */
+        int64_t m = (LINE - n->ppu.dot + 1) * dot - rem;  /* through dot 0 of the next line (cart_mmc5_scanline) */
         if (m < d) d = m;
     }
     /* MMC3: the counter is clocked on A12 rises during rendering (around dot
@@ -50,16 +59,16 @@ static void plan_next_event(Nes *n) {
      * and 255 of every rendering line; once the next clock can fire, catch
      * up every cycle until the line ends, so a batch never runs past it. */
     if (cart_is_mmc3(&n->cart) && n->cart.irq_enabled && (n->ppu.mask & 0x18)) {
-        int line = n->ppu.scanline, dot = n->ppu.dot;
-        int rendering_line = line < 240 || line == 261;
+        int line = n->ppu.scanline;
+        int rendering_line = line < 240 || line == pre;
         int64_t m;
         if (rendering_line && cart_irq_armed(&n->cart)) m = 3;
-        else if (rendering_line && dot < 255) m = 255 - dot;
+        else if (rendering_line && n->ppu.dot < 255) m = 255 - n->ppu.dot;
         else {  /* dot 0 of the next rendering line */
-            int next = line < 239 ? line + 1 : (line == 261 ? 0 : 261);
-            m = ((next - line + 262) % 262) * LINE - dot;
+            int next = line < 239 ? line + 1 : (line == pre ? 0 : pre);
+            m = ((next - line + lines) % lines) * LINE - n->ppu.dot;
         }
-        m += n->cpu.bus_pending;
+        m = m * dot + n->cpu.bus_pending;
         if (m < d) d = m;
     }
     if (n->oam_dma_pending) d = n->cpu.bus_pending;  /* next access: slow path, which runs the DMA */
@@ -86,7 +95,9 @@ static void sync_apu(Nes *n) {
  * than the current cycle, nor past vblank end while the line is high, so one
  * edge check per batch sees every rise. */
 static void catch_up(Nes *n) {
-    ppu_run(&n->ppu, n->cpu.bus_pending);
+    int32_t clocks = n->cpu.bus_pending + n->clk_rem;
+    ppu_run(&n->ppu, clocks / n->clk_dot);
+    n->clk_rem = clocks % n->clk_dot;
     n->cpu.yield |= n->ppu.frame_done;  /* the frame loop needs control back */
     if (n->ppu.nmi_out && !n->nmi_prev) n->cpu.nmi = 1;  /* NMI is edge-triggered */
     n->nmi_prev = n->ppu.nmi_out;
@@ -96,7 +107,7 @@ static void catch_up(Nes *n) {
     plan_next_event(n);
 }
 
-static inline void add_dots(Nes *n, int k) {
+static inline void add_clocks(Nes *n, int k) {
     n->cpu.bus_pending += k;
     if (n->cpu.bus_pending >= n->cpu.bus_budget) catch_up(n);
 }
@@ -140,19 +151,19 @@ static void map_memory(Nes *n);
  * every side effect a CPU read has. The CPU and the DMA unit both use it. */
 static uint8_t read_cycle(Nes *n, uint16_t a) {
     if (!is_ppu(a) && !cart_read_syncs(&n->cart, a)) {
-        add_dots(n, 3);
+        add_clocks(n, n->clk_cpu);
         n->cpu.open_bus = read_no_tick(n, a);
         sync_apu(n);
         plan_next_event(n);
         return n->cpu.open_bus;
     }
-    n->cpu.bus_pending += DOTS_BEFORE_ACCESS;
+    n->cpu.bus_pending += 2 * n->clk_dot;  /* 2 dots before the access */
     catch_up(n);
     n->cpu.open_bus = read_no_tick(n, a);
     after_ppu_access(n);
     /* the rest of this cycle runs now: a $2000 write or $2002 read can change
      * the NMI line, and the edge must be seen on the following dot */
-    n->cpu.bus_pending += 3 - DOTS_BEFORE_ACCESS;
+    n->cpu.bus_pending += n->clk_cpu - 2 * n->clk_dot;
     catch_up(n);
     sync_apu(n);
     plan_next_event(n);
@@ -195,14 +206,14 @@ static void run_dma(Nes *n, uint16_t a) {
             value = read_cycle(n, (uint16_t)(n->oam_dma_page << 8 | count / 2));
             count++;
         } else if (!get && oam && (count & 1)) {
-            n->cpu.bus_pending += 3;
+            n->cpu.bus_pending += n->clk_cpu;
             catch_up(n);  /* OAM is read by sprite evaluation: write at the exact dot */
             ppu_oam_dma_write(&n->ppu, value);
             sync_apu(n);
             plan_next_event(n);
             if (++count == 512) oam = 0;
         } else if (quiet) {  /* alignment / dummy cycle, controller not clocked again */
-            add_dots(n, 3);
+            add_clocks(n, n->clk_cpu);
             sync_apu(n);
             plan_next_event(n);
         } else {
@@ -223,7 +234,7 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
     n->cpu.open_bus = v;
     int mapper_reg = cart_is_reg(&n->cart, a);
     if (!is_ppu(a) && a != 0x4014 && !mapper_reg) {
-        add_dots(n, 3);
+        add_clocks(n, n->clk_cpu);
         if (a < 0x2000) n->ram[a & 0x7FF] = v;
         else if (a == 0x4016) {
             n->strobe = v & 1;
@@ -238,7 +249,7 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
         plan_next_event(n);
         return;
     }
-    n->cpu.bus_pending += DOTS_BEFORE_ACCESS;
+    n->cpu.bus_pending += 2 * n->clk_dot;  /* 2 dots before the access */
     catch_up(n);
     if (a == 0x4014) n->oam_dma_page = v, n->oam_dma_pending = 1;  /* runs at the next read (run_dma) */
     else if (n->cart.mapper == 5 && a >= 0x5000 && a <= 0x5015) {  /* MMC5 sound: in the APU */
@@ -270,7 +281,7 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
     after_ppu_access(n);
     /* the rest of this cycle runs now: a $2000 write or $2002 read can change
      * the NMI line, and the edge must be seen on the following dot */
-    n->cpu.bus_pending += 3 - DOTS_BEFORE_ACCESS;
+    n->cpu.bus_pending += n->clk_cpu - 2 * n->clk_dot;
     catch_up(n);
     sync_apu(n);
     plan_next_event(n);
@@ -293,21 +304,42 @@ static void map_memory(Nes *n) {
         const uint8_t *mem = (n->cart.prg_ram_window >> w & 1) ? n->cart.prg_ram : n->cart.prg;
         c->read_map[i] = (uint8_t *)mem + n->cart.prg_off[w] + ((i & 3) * 0x800);
     }
-    c->bus_step = 3;
+    c->bus_step = n->clk_cpu;
 }
 
-int nes_load(Nes *n, const uint8_t *rom, size_t size, char *err, size_t errlen) {
-    memset(n, 0, sizeof *n);
-    if (cart_load(&n->cart, rom, size, err, errlen) != 0) return -1;
+static void power_on(Nes *n) {
     ppu_reset(&n->ppu, &n->cart);
+    n->clk_cpu = n->cart.region == REGION_PAL ? 16 : n->cart.region == REGION_DENDY ? 15 : 12;
+    n->clk_dot = n->cart.region == REGION_NTSC ? 4 : 5;
     n->cpu.bus = n;
     apu_reset(&n->apu, &n->cart, 1);
     cpu_reset(&n->cpu);
     plan_next_event(n);
     map_memory(n);
+}
+
+int nes_load(Nes *n, const uint8_t *rom, size_t size, char *err, size_t errlen) {
+    memset(n, 0, sizeof *n);
+    if (cart_load(&n->cart, rom, size, err, errlen) != 0) return -1;
+    power_on(n);
     if (recomp_program && recomp_program->prg_hash == recomp_prg_hash(n->cart.prg, n->cart.prg_size))
         n->recomp = recomp_program->lookup;
     return 0;
+}
+
+/* Power on again as another console: the cartridge as loaded (only its
+ * reset vector has been read), everything else from zero. */
+void nes_set_region(Nes *n, int region) {
+    static Cart cart;  /* 64 KB of PRG RAM: not on the stack */
+    cart = n->cart;
+    cart.region = region;
+    RecompFn (*recomp)(uint16_t, uint32_t) = n->recomp;
+    uint32_t *misses = n->misses;
+    memset(n, 0, sizeof *n);
+    n->cart = cart;
+    n->recomp = recomp;
+    n->misses = misses;
+    power_on(n);
 }
 
 
@@ -353,11 +385,12 @@ void nes_step(Nes *n) {
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 13 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
+enum { STATE_VERSION = 14 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
                                 4: MMC2/MMC4, SS88006, FME-7; 5: Bandai FCG EEPROMs; 6: TxSROM;
                                 7: emphasis in the frame buffer; 8: TC0690 IRQ delay;
                                 9: Namco 163 sound; 10: MMC5 sound; 11: Sunsoft 5B;
-                                12: VRC6 sound; 13: VRC7 */
+                                12: VRC6 sound; 13: VRC7;
+                                14: regions (master clocks) */
 
 typedef struct {
     char magic[4];  /* "NESS" */
@@ -410,6 +443,8 @@ int nes_state_load(Nes *n, const char *path, char *err, size_t errlen) {
     free(chr);
     return ok ? 0 : -1;
 }
+
+double nes_frame_rate(const Nes *n) { return n->cart.region == REGION_NTSC ? 60.0988 : 50.0070; }
 
 void nes_run_frame(Nes *n) {
     n->ppu.frame_done = n->cpu.yield = 0;

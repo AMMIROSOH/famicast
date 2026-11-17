@@ -33,7 +33,9 @@ game per mapper is verified identical to the interpreter. The recompiler is plai
 inside the CMake build; it can trace a game first to find code by itself
 (M8a). Save states, a coverage report, frame-hash regression tests and
 display settings (fullscreen, scaling, TV frame) came with M8b. Recompiled
-example games run at about 33-38x real time. See
+example games run at about 33-38x real time. PAL and Dendy games run at
+their own timing (50 Hz, the PAL APU tables), chosen from the ROM header
+(M10). See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
@@ -179,7 +181,7 @@ hot-plug; D-pad or left stick, East = A, South = B, Back = Select, Start.
 | F10 | TV frame on/off |
 | F11 or Alt+Enter | fullscreen on/off |
 
-Display settings live in `<program>.ini` next to the program
+Settings live in `<program>.ini` next to the program
 (`build/game_one.ini`, `build/nes.ini`), written with defaults and
 comments on first run:
 ```
@@ -187,7 +189,8 @@ fullscreen = 0      # 1 = fullscreen at desktop resolution
 scale = fit         # fit (keep aspect), integer (sharp pixels), stretch
 tv_frame = 0        # 1 = picture inside a TV-like frame
 overscan = 1        # 1 = hide the top/bottom 8 lines, as a TV did
-aspect = tv         # tv = 8:7 pixels as on an NTSC TV, square = square pixels
+aspect = tv         # tv = pixels as on a TV (8:7 NTSC, 1.39:1 PAL), square = square pixels
+region = auto       # auto (from the ROM header), ntsc, pal, dendy
 window_scale = 3    # starting window size
 ```
 Save states work across builds of the same version: a state saved by the
@@ -227,7 +230,7 @@ cartridges. `roms/` is git-ignored.
 | [01-prior-art.md](docs/01-prior-art.md) | Other recompilers/emulators and what we take from them |
 | [02-architecture.md](docs/02-architecture.md) | Components, data flow, design decisions |
 | [03-6502-traps.md](docs/03-6502-traps.md) | 6502/2A03 details that are easy to get wrong |
-| [04-timing-constants.md](docs/04-timing-constants.md) | NTSC clock and frame timing |
+| [04-timing-constants.md](docs/04-timing-constants.md) | NTSC, PAL and Dendy clock and frame timing |
 | [05-roadmap.md](docs/05-roadmap.md) | Milestones and exit criteria |
 | [06-verification-log.md](docs/06-verification-log.md) | What was checked, how, and the result |
 | [07-sources.md](docs/07-sources.md) | Every external source we used, with license notes |

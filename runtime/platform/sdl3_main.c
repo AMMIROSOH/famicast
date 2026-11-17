@@ -31,7 +31,6 @@
 #endif
 
 enum { NES_W = 256, NES_H = 240, STICK_DEADZONE = 16000 };
-static const double FRAME_NS = 1e9 / 60.0988;  /* NTSC frame rate, docs/04 */
 
 static SDL_Gamepad *gamepads[2];
 
@@ -105,7 +104,7 @@ static SDL_Texture *make_tv_frame(SDL_Renderer *ren, int width, int lines) {
 }
 
 /* Draw the picture's visible lines (240, or 224 with the overscan hidden:
- * centred), `width` units wide (256 square pixels, or 293 for 8:7), and the
+ * centred), `width` units wide (256 square pixels, 293 for 8:7, 355 for PAL), and the
  * frame over it, scaled into the output. Integer scaling applies to the
  * lines; with 8:7 pixels the width follows (the pixel-art scale mode keeps
  * the uneven columns sharp). */
@@ -159,7 +158,7 @@ int main(int argc, char **argv) {
     SDL_free(rom);
     /* battery-backed PRG RAM (saves): ROM path + ".sav", 8 KB; for the
      * embedded ROM, its file name + ".sav" next to the program */
-    char sav_path[1024], state_path[1024], ini_path[1024], title[256];
+    char sav_path[1024], state_path[1024], ini_path[1024], title[512];
     const char *name = embedded ? recomp_program->rom_name : rom_path;
     if (embedded) SDL_snprintf(sav_path, sizeof sav_path, "%s%s", SDL_GetBasePath(), recomp_program->rom_name);
     else SDL_snprintf(sav_path, sizeof sav_path, "%s", rom_path);
@@ -170,6 +169,7 @@ int main(int argc, char **argv) {
     SDL_snprintf(ini_path, sizeof ini_path, "%s%s.ini", SDL_GetBasePath(), NES_APP_NAME);
     Settings cfg;
     settings_load(&cfg, ini_path);
+    if (cfg.region >= 0 && cfg.region != nes.cart.region) nes_set_region(&nes, cfg.region);
     char misses_path[1024];
     SDL_snprintf(misses_path, sizeof misses_path, "%s%s.misses", SDL_GetBasePath(), NES_APP_NAME);
     if (nes.recomp && cfg.record_misses) nes.misses = SDL_calloc(nes_miss_slots(&nes), sizeof *nes.misses);
@@ -199,21 +199,29 @@ int main(int argc, char **argv) {
     SDL_Renderer *ren;
     /* starting size: window_scale x the content, smaller if the screen is */
     const int lines = cfg.overscan ? NES_H - 16 : NES_H;  /* visible lines */
-    const int width = cfg.aspect_tv ? (NES_W * 8 + 3) / 7 : NES_W;  /* 8:7: 292.6, rounded */
+    /* tv: 8:7 (292.6, rounded); PAL and Dendy pixels 1.3862:1 (354.9), as a PAL TV
+     * showed them (nesdev "Overscan", from memory) */
+    const int width = !cfg.aspect_tv ? NES_W : nes.cart.region == REGION_NTSC ? (NES_W * 8 + 3) / 7 : 355;
     int k = cfg.window_scale, cw = cfg.tv_frame ? tv_w(width) : width, ch = cfg.tv_frame ? tv_h(lines) : lines;
     SDL_Rect usable;
     if (SDL_GetDisplayUsableBounds(SDL_GetPrimaryDisplay(), &usable))
         while (k > 1 && (cw * k > usable.w || ch * k > usable.h - 40)) k--;
-    SDL_snprintf(title, sizeof title, "%s", name);
+    /* the title: the game and the console it runs as, e.g. "Game (PAL)" */
+    char heading[300];
+    SDL_snprintf(heading, sizeof heading, "%s (%s)", name,
+                 nes.cart.region == REGION_PAL ? "PAL" : nes.cart.region == REGION_DENDY ? "Dendy" : "NTSC");
+    SDL_snprintf(title, sizeof title, "%s", heading);
     if (!SDL_CreateWindowAndRenderer(title, cw * k, ch * k, SDL_WINDOW_RESIZABLE, &win, &ren)) {
         SDL_Log("window: %s", SDL_GetError());
         return 1;
     }
-    /* vsync, so scrolling does not tear; the 60.1 Hz pacing below still sets the
-     * speed. Not on displays under 59 Hz: waiting for them would slow the game.
+    /* vsync, so scrolling does not tear; the pacing below (60.1 Hz, PAL 50 Hz)
+     * still sets the speed. Not on displays slower than the game: waiting for
+     * them would slow it down.
      * shortcut: checked once at start, not when the window moves to another display */
     const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(win));
-    if (!mode || mode->refresh_rate == 0 || mode->refresh_rate >= 59) SDL_SetRenderVSync(ren, 1);
+    const double fps = nes_frame_rate(&nes), frame_ns = 1e9 / fps;
+    if (!mode || mode->refresh_rate == 0 || mode->refresh_rate >= fps - 1) SDL_SetRenderVSync(ren, 1);
     if (cfg.fullscreen) SDL_SetWindowFullscreen(win, true);
     SDL_Texture *frame_tex = cfg.tv_frame ? make_tv_frame(ren, width, lines) : NULL;
     uint64_t message_until = 0;  /* a short message in the title bar */
@@ -224,7 +232,7 @@ int main(int argc, char **argv) {
     uint32_t palette[512];
     nes_palette_rgb(palette);
     static uint32_t fb[NES_W * NES_H];
-    /* Audio: mono float at the APU's 48 kHz. Video sets the pace (60.1 Hz);
+    /* Audio: mono float at the APU's 48 kHz. Video sets the pace (60.1 or 50 Hz);
      * the playback rate is nudged (+-0.5%) to keep about 3 frames queued, so
      * the two clocks never drift apart (no crackle, no growing latency). */
     const SDL_AudioSpec spec = {SDL_AUDIO_F32, 1, APU_SAMPLE_RATE};
@@ -255,7 +263,7 @@ int main(int argc, char **argv) {
                     else SDL_snprintf(text, sizeof text, "no state loaded (%s)", err), msg = text;
                 }
                 if (msg) {
-                    SDL_snprintf(title, sizeof title, "%s - %s", name, msg);
+                    SDL_snprintf(title, sizeof title, "%s - %s", heading, msg);
                     SDL_SetWindowTitle(win, title);
                     message_until = SDL_GetTicks() + 2000;
                 }
@@ -280,7 +288,7 @@ int main(int argc, char **argv) {
         int ns = apu_take_samples(&nes.apu, samples, APU_BUF);
         if (audio) {
             SDL_PutAudioStreamData(audio, samples, ns * (int)sizeof(float));
-            const float target = 3.0f * APU_SAMPLE_RATE / 60.0988f;
+            const float target = 3.0f * APU_SAMPLE_RATE / (float)fps;
             float queued = (float)SDL_GetAudioStreamQueued(audio) / sizeof(float);
             float ratio = 1.0f + 0.005f * (queued - target) / target;
             SDL_SetAudioStreamFrequencyRatio(audio, ratio < 0.995f ? 0.995f : ratio > 1.005f ? 1.005f : ratio);
@@ -293,11 +301,11 @@ int main(int argc, char **argv) {
         SDL_UpdateTexture(tex, NULL, fb, NES_W * sizeof fb[0]);
         present(ren, tex, frame_tex, cfg.scale, width, lines);
         if (message_until && SDL_GetTicks() > message_until) {
-            SDL_SetWindowTitle(win, name);
+            SDL_SetWindowTitle(win, heading);
             message_until = 0;
         }
 
-        next += (uint64_t)FRAME_NS;  /* pace to 60.1 Hz regardless of monitor rate */
+        next += (uint64_t)frame_ns;  /* pace to the game's rate regardless of monitor rate */
         uint64_t now = SDL_GetTicksNS();
         if (next > now) SDL_DelayPrecise(next - now);
         else next = now;  /* fell behind: don't try to catch up */
