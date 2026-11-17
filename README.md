@@ -70,7 +70,7 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 11 | Color Dreams | Crystal Mines, Bible Adventures, Chiller |
 | 16 | Bandai FCG-1/2, LZ93D50 (24C02 EEPROM saves) | Dragon Ball Z II, SD Gundam Gaiden 2, Rokudenashi Blues |
 | 18 | Jaleco SS88006 (no speech chip) | Pizza Pop!, Ninja Jajamaru: Ginga Daisakusen, Saiyuuki World 2 |
-| 19 | Namco 163 (no wavetable audio) | Rolling Thunder (Japan), Megami Tensei II, King of Kings |
+| 19 | Namco 163 (with its wavetable sound) | Rolling Thunder (Japan), Megami Tensei II, King of Kings |
 | 21 | Konami VRC4a/VRC4c | Wai Wai World 2, Ganbare Goemon Gaiden 2 |
 | 22 | Konami VRC2a | TwinBee 3, Ganbare Pennant Race! |
 | 23 | Konami VRC2b/VRC4e/VRC4f | Contra (Japan), Crisis Force, Parodius Da! |
@@ -94,9 +94,9 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 207 | Taito X1-005 with nametables from CHR bank bit 7 | Fudou Myouou Den |
 | 210 | Namco 175/340 | Famista '91-'94, Splatterhouse: Wanpaku Graffiti, Wagyan Land 3 |
 
-Not yet: expansion audio (MMC5, Namco 163, Sunsoft 5B,
-VRC6, ...) and the long tail of rarer boards. Other mappers are
-refused at load ("mapper N not supported yet").
+Not yet: the other expansion audio (MMC5, Sunsoft 5B, VRC6, ...) and the
+long tail of rarer boards. Other mappers are refused at load ("mapper N
+not supported yet").
 
 ## Downloads
 [Releases](https://github.com/Viper-Bit/famicast/releases) have builds for

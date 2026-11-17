@@ -3,6 +3,27 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-17 · M8a: Namco 163 wavetable sound
+- **Unit ROMs** (`tests/test_n163_audio.py`): one channel set up through
+  the RAM port, read back from `--wav`. Pitch matches the wiki's formula
+  within 2% (440 Hz with one channel, 220 Hz with two); `$E000` bit 6
+  silences it; an asymmetric 8-sample wave steps up twice a period, as
+  only low-nibble-first gives. Mutations caught (7): nibbles high first,
+  channel count ignored, halt ignored, 16 cycles per update, length
+  ignored, phase not stored, not mixed. Volume is not tested (always 15).
+- **Games**: each of the 11 licensed dumps with the sound (NES 2.0
+  submapper 3, 4 or 5) against a copy forced to submapper 2 (not wired
+  out): all differ, so all play through the chip. Peaks stay below a
+  third of full scale. Youkai Douchuuki only uses it for effects (from
+  about 32 s into scripted play); a first check that sampled one second
+  in five missed them.
+- **Recompiled, `--diff` 3,000 frames**: King of Kings, Megami Tensei II,
+  Pac-Man Championship Edition, Rolling Thunder identical (99.91-99.98%
+  recompiled); their `--audio-hash` after 2,000 frames of `--play` equals
+  the interpreter's.
+- **Not checked**: how it sounds against hardware recordings. The mix
+  level is the middle of each submapper's dB range from the wiki.
+
 ## 2026-11-17 · M7k: Taito TC0190 (33), TC0690 (48), X1-005 (80, 207)
 - **Unit ROMs** (`tests/test_mappers.py`): 33 and 48 PRG banks at
   $8000/$A000 (second-to-last at $C000), a 2 KB CHR bank numbered in 2 KB

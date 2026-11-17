@@ -66,6 +66,11 @@ typedef struct Cart {
     uint8_t n163_ram[128], n163_addr; /* sound/data RAM behind $4800, address at $F800 */
     uint16_t n163_counter;           /* 15-bit IRQ counter, counts CPU cycles up to $7FFF */
     uint8_t n163_irq_enable;
+    /* its wavetable sound: one channel updated every 15 CPU cycles (cart_n163_clock) */
+    uint8_t n163_sound;              /* mapper 19: the sound runs (heard unless submapper 1, 2) */
+    uint8_t n163_halt;               /* $E000 bit 6: sound halted, output 0 */
+    uint8_t n163_div, n163_ch;       /* cycles since the last update; next channel (0 = channel 8) */
+    int8_t n163_out[8];              /* each channel's last output, (sample - 8) * volume */
     /* MMC2/MMC4 (9, 10), SS88006 (18), FME-7 (69), VRC1 (75), G-101 (32) */
     uint8_t prg_bank[3];             /* 8 KB banks at $8000/$A000/$C000 (MMC2/MMC4: [0] only) */
     uint8_t chr_bank[8];             /* 1 KB banks (MMC2/MMC4: four 4 KB, $B000-$E000; VRC1: two 4 KB) */
@@ -148,6 +153,10 @@ int cart_irq_armed(const Cart *c);
  * bus calls it before reading irq_line); cart_cycles_to_irq says how many
  * cycles after `cycle` it fires next, -1 if it is off. */
 void cart_run(Cart *c, uint64_t cycle);
+/* Namco 163 sound, run by the APU every CPU cycle: returns 1 when the output
+ * changed; cart_n163_level is the output, the channels averaged. */
+int cart_n163_clock(Cart *c);
+float cart_n163_level(const Cart *c);
 int64_t cart_cycles_to_irq(const Cart *c, uint64_t cycle);
 
 #endif

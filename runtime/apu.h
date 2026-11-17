@@ -59,6 +59,7 @@ typedef struct Apu {
     /* audio out: box-filter resampling to 48 kHz, then the NES output filters */
     float acc;
     int acc_n;
+    float n163_gain;          /* Namco 163 sound: its level -> mixer units (0: none) */
     float mix_last;           /* mixer output, recomputed only when mix_dirty: */
     uint8_t mix_dirty;        /* set wherever channel state can change */
     int64_t frac;
