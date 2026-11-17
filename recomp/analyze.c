@@ -141,7 +141,7 @@ int assumed_layout(const Rom *r, int layout[4]) {
         return 0;
     case 1: case 2: case 71:     /* MMC1 (mode 3), UxROM, Camerica: last 16 KB fixed */
     case 4: case 118: case 206:  /* MMC3, TxSROM, Namco 108: $E000 fixed, $C000 in mode 0 */
-    case 32:                     /* Irem G-101: the same */
+    case 32: case 33: case 48:   /* Irem G-101, Taito TC0190/TC0690: the same */
     case 21: case 22: case 23: case 25:  /* VRC2/VRC4: the same, swap mode off */
         layout[2] = n8 - 2;
         layout[3] = n8 - 1;
@@ -160,6 +160,7 @@ int assumed_layout(const Rom *r, int layout[4]) {
         return 0;
     case 5: case 19: case 210:   /* MMC5 at power-on ($5117 = $FF), Namco 163/175/340: $E000 = last bank */
     case 18: case 69: case 75:   /* SS88006, FME-7, VRC1 */
+    case 80: case 207:           /* Taito X1-005 */
         layout[3] = n8 - 1;
         return 0;
     }
@@ -182,6 +183,7 @@ int prg_bank_reg(const Rom *r) {
     case 79: return 0x4100;
     case 5: return 0x5100;
     case 16: return 0x6000;  /* FCG-1/2 registers at $6000-$7FFF */
+    case 80: case 207: return 0x6000;  /* X1-005 registers at $7EF0-$7EFF */
     default: return 0x8000;
     }
 }

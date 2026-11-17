@@ -498,6 +498,95 @@ class TestMappers(unittest.TestCase):
         self.assertEqual(peek(roms[1], 1), 0x5A)
         self.assertEqual(peek(roms[1], 0), 0x00)
 
+    # ---- Taito TC0190 (33), TC0690 (48), X1-005 (80, 207) ----
+    @staticmethod
+    def banked(mapper, code, irq=b""):  # 128 KB PRG with bank markers, 32 KB CHR; code at $E200
+        prg, chr_ = bytearray(0x20000), bytearray(0x8000)
+        for b in range(16):
+            prg[b * 0x2000 + 0x100] = 0x60 + b
+        for b in range(32):
+            chr_[b * 0x400 + 0x10] = 0x80 + b
+        put(prg, 0x1E200, code)
+        put(prg, 0x1E400, irq)
+        vectors(prg, 0x20000, 0xE200, irq=0xE400 if irq else 0xFFF9)
+        return ines(mapper, prg, chr_)
+
+    def test_33_48_taito_banks(self):
+        """$8000 = 3, $8001 = 5: banks 3 and 5 at $8000/$A000, $C000 the
+        second-to-last (14). $8002 = 3 is a 2 KB bank number (1 KB banks 6
+        and 7 at PPU $0000), $A001 = 9 the 1 KB bank at $1400. Mirroring
+        (33: $8000 bit 6, 48: $E000 bit 6) horizontal: $2400 shows a $2000
+        write (the header says vertical)."""
+        ppu_write = lda_sta(0x20, 0x2006) + lda_sta(0x00, 0x2006) + lda_sta(0x5A, 0x2007)
+        for mapper, mirror in ((33, lda_sta(0x43, 0x8000)), (48, lda_sta(0x03, 0x8000) + lda_sta(0x40, 0xE000))):
+            with self.subTest(mapper=mapper):
+                code = (WAIT_VBLANK + mirror + lda_sta(0x05, 0x8001) + lda_sta(0x03, 0x8002) + lda_sta(0x09, 0xA001) +
+                        lda_abs(0x8100) + bytes([0x85, 0x01]) + lda_abs(0xA100) + bytes([0x85, 0x02]) +
+                        lda_abs(0xC100) + bytes([0x85, 0x03]) + ppu_read(0x0410) + bytes([0x85, 0x04]) +
+                        ppu_read(0x1410) + bytes([0x85, 0x05]) + ppu_write + ppu_read(0x2400) + END)
+                rom = bytearray(self.banked(mapper, code))
+                rom[6] |= 1  # header: vertical
+                rom = bytes(rom)
+                self.assertEqual([peek(rom, a) for a in range(6)], [0x5A, 0x63, 0x65, 0x6E, 0x87, 0x89])
+
+    def test_48_irq_inverted_and_late(self):
+        """TC0690's IRQ is MMC3's with the latch written inverted ($C000 =
+        ~20) and about 4 CPU cycles later. The same code on MMC3 (latch 20)
+        and on 48 counts 8-cycle loop turns until the IRQ; started at
+        different cycle phases, 48 is never earlier, never more than a turn
+        later, and a turn later where the 4 cycles cross a turn's end."""
+        def run(mapper, pad):
+            irq_regs = ((0xC000, 20), (0xC001, 0), (0xE001, 0)) if mapper == 4 else \
+                       ((0xC000, 20 ^ 0xFF), (0xC001, 0), (0xC002, 0))
+            ack = 0xE000 if mapper == 4 else 0xC003
+            code = (bytes([0x78]) + lda_sta(0x40, 0x4017) + WAIT_VBLANK + lda_sta(0x08, 0x2000) +
+                    lda_sta(0x18, 0x2001) + bytes([0x2C, 0x02, 0x20, 0x10, 0xFB]) +  # sprites at $1000: A12 rises
+                    b"".join(lda_sta(v, a) for a, v in irq_regs) + pad + bytes([0x58]))
+            code += ram_loop(0xE200 + len(code))
+            irq = bytes([0xA5, 0x10, 0x85, 0x00, 0xA5, 0x11, 0x85, 0x01]) + lda_sta(0, ack) + bytes([0x40])
+            rom = self.banked(mapper, code, irq)
+            return peek(rom, 0) + 256 * peek(rom, 1)
+        nop, zp = bytes([0xEA]), bytes([0xA5, 0x20])  # 2 and 3 cycles
+        late = []
+        for pad in (b"", nop, zp, nop * 2, nop + zp, nop * 3, nop * 2 + zp):  # 0, 2-7 cycles
+            mmc3, tc0690 = run(4, pad), run(48, pad)
+            self.assertGreater(mmc3, 100)  # around line 20
+            self.assertIn(tc0690 - mmc3, (0, 1), pad)
+            late.append(tc0690 - mmc3)
+        self.assertGreaterEqual(sum(late), 2, late)
+
+    def test_80_x1005(self):
+        """$7EFA/$7EFC/$7EFE: 8 KB banks at $8000/$A000/$C000 ($7E7C: the
+        A7 mirror); $7EF0 = 7: 2 KB with bit 0 ignored (banks 6 and 7);
+        $7EF3 = 9 at $1400; $7EF6 = 1: vertical ($2800 shows a $2000 write;
+        the header says horizontal). RAM at $7F00 only while $7EF8 = $A3: a
+        write before is dropped, $7F85 reads $7F05, and disabled it reads
+        open bus ($7F)."""
+        ppu_write = lda_sta(0x20, 0x2006) + lda_sta(0x00, 0x2006) + lda_sta(0x5A, 0x2007)
+        code = (WAIT_VBLANK + lda_sta(0x03, 0x7EFA) + lda_sta(0x04, 0x7E7C) + lda_sta(0x05, 0x7EFE) +
+                lda_sta(0x07, 0x7EF0) + lda_sta(0x09, 0x7EF3) + lda_sta(0x01, 0x7EF6) +
+                lda_abs(0x8100) + bytes([0x85, 0x01]) + lda_abs(0xA100) + bytes([0x85, 0x02]) +
+                lda_abs(0xC100) + bytes([0x85, 0x03]) + ppu_read(0x0010) + bytes([0x85, 0x04]) +
+                ppu_read(0x0410) + bytes([0x85, 0x05]) + ppu_read(0x1410) + bytes([0x85, 0x06]) +
+                lda_sta(0x11, 0x7F00) + lda_sta(0xA3, 0x7EF9) + lda_abs(0x7F80) + bytes([0x85, 0x07]) +
+                lda_sta(0x4B, 0x7F05) + lda_abs(0x7F85) + bytes([0x85, 0x08]) +
+                lda_sta(0x00, 0x7EF8) + lda_abs(0x7F05) + bytes([0x85, 0x09]) +
+                ppu_write + ppu_read(0x2800) + END)
+        rom = self.banked(80, code)
+        self.assertEqual([peek(rom, a) for a in range(10)],
+                         [0x5A, 0x63, 0x64, 0x65, 0x86, 0x87, 0x89, 0x00, 0x4B, 0x7F])
+
+    def test_207_x1005_nametables(self):
+        """207: $7EF0/$7EF1 bit 7 pick the CIRAM page of $2000/$2400 and
+        $2800/$2C00. 0 and 1: $2400 shows a $2000 write and $2800 does not
+        (the header says vertical, the other way round)."""
+        ppu_write = lda_sta(0x20, 0x2006) + lda_sta(0x00, 0x2006) + lda_sta(0x5A, 0x2007)
+        code = (WAIT_VBLANK + lda_sta(0x00, 0x7EF0) + lda_sta(0x80, 0x7EF1) + ppu_write +
+                ppu_read(0x2400) + bytes([0x85, 0x01]) + ppu_read(0x2800) + END)
+        rom = bytearray(self.banked(207, code))
+        rom[6] |= 1  # header: vertical
+        self.assertEqual([peek(bytes(rom), a) for a in (1, 0)], [0x5A, 0x00])
+
 
 if __name__ == "__main__":
     unittest.main()

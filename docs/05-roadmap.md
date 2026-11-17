@@ -191,6 +191,10 @@ M7a (runtime):
   eight 1 KB CHR banks; submapper 1 (Major League) one-screen with $9000
   disconnected. 3,295 of 4,031 ROMs (95% of licensed); 7 games boot; 3
   identical to the interpreter (06).
+- [x] M7k: Taito TC0190 (33), TC0690 (48: MMC3's IRQ with an inverted
+  latch, about 4 CPU cycles late), X1-005 (80: registers and 128 bytes of
+  RAM at $7Exx-$7Fxx; 207: nametables from CHR bank bit 7). 3,320 of 4,031
+  ROMs (96% of licensed); 23 games boot; 8 identical to the interpreter (06).
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color
