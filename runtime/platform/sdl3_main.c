@@ -140,6 +140,78 @@ static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int
     SDL_RenderPresent(ren);
 }
 
+/* The emulator runs on its own thread, paced to the game's frame rate and
+ * feeding the audio. The main thread only handles the window, events and
+ * input: when Windows holds it (title bar dragged, a gamepad being
+ * plugged in) the picture stops for a moment but the game and its sound go on. */
+typedef struct {
+    Nes *nes;
+    SDL_Mutex *lock;          /* nes, fb, fb_new, jam_pc */
+    uint32_t fb[NES_W * NES_H], palette[512];
+    int fb_new, jam_pc;       /* jam_pc: -1, or where the CPU jammed */
+    SDL_AtomicInt pads, reset, quit, done;  /* pads: player 1 | player 2 << 8 */
+    SDL_AudioStream *audio;
+    double fps;
+    long max_frames;
+    InputLog *replay;
+    FILE *record;
+} Emu;
+
+static int emu_thread(void *arg) {
+    Emu *u = arg;
+    Nes *nes = u->nes;
+    static float samples[APU_BUF];
+    const double frame_ns = 1e9 / u->fps;
+    uint64_t next = SDL_GetTicksNS();
+    for (long frame = 0; !SDL_GetAtomicInt(&u->quit) && (u->max_frames <= 0 || frame < u->max_frames); frame++) {
+        InputFrame in;
+        int reset = SDL_SetAtomicInt(&u->reset, 0);
+        if (frame < u->replay->count) {
+            in = u->replay->frames[frame];
+        } else {
+            int pads = SDL_GetAtomicInt(&u->pads);
+            in.pad[0] = (uint8_t)pads, in.pad[1] = (uint8_t)(pads >> 8);
+            in.flags = reset ? INPUT_RESET : 0;
+        }
+        if (u->record) input_log_write(u->record, in);
+
+        SDL_LockMutex(u->lock);
+        if (in.flags & INPUT_RESET) nes_reset(nes);
+        nes->pad[0] = in.pad[0];
+        nes->pad[1] = in.pad[1];
+        nes_run_frame(nes);
+        int ns = apu_take_samples(&nes->apu, samples, APU_BUF);
+        for (int i = 0; i < NES_W * NES_H; i++) u->fb[i] = u->palette[nes->ppu.fb[i] & 0x1FF];
+        u->fb_new = 1;
+        /* A KIL opcode halts a real 6502 until reset while the TV keeps the
+         * last picture: the window stays open on it, so F5 or F4 can recover.
+         * shortcut: the PPU and APU stop too (on hardware they run on, so a
+         * held note drones); fine for a game that is dead anyway */
+        int jam = nes->cpu.jammed ? nes->cpu.pc : -1;
+        if (jam >= 0 && u->jam_pc < 0) SDL_Log("CPU jammed at $%04X", jam);
+        u->jam_pc = jam;
+        SDL_UnlockMutex(u->lock);
+
+        if (u->audio) {
+            SDL_PutAudioStreamData(u->audio, samples, ns * (int)sizeof(float));
+            const float target = 3.0f * APU_SAMPLE_RATE / (float)u->fps;
+            float queued = (float)SDL_GetAudioStreamQueued(u->audio) / sizeof(float);
+            float ratio = 1.0f + 0.005f * (queued - target) / target;
+            SDL_SetAudioStreamFrequencyRatio(u->audio, ratio < 0.995f ? 0.995f : ratio > 1.005f ? 1.005f : ratio);
+        }
+        next += (uint64_t)frame_ns;  /* pace to the game's rate regardless of monitor rate */
+        uint64_t now = SDL_GetTicksNS();
+        if (next > now) SDL_DelayPrecise(next - now);
+        else {  /* fell behind: don't try to catch up */
+            if (now - next > 3 * (uint64_t)frame_ns)  /* the audio queue ran dry */
+                SDL_Log("frame %ld: %.0f ms late", frame, (now - next) / 1e6);
+            next = now;
+        }
+    }
+    SDL_SetAtomicInt(&u->done, 1);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *rom_path = argc > 1 && argv[1][0] != '-' ? argv[1] : NULL;
     const int embedded = !rom_path && recomp_program && recomp_program->rom;
@@ -233,7 +305,7 @@ int main(int argc, char **argv) {
      * them would slow it down.
      * shortcut: checked once at start, not when the window moves to another display */
     const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(win));
-    const double fps = nes_frame_rate(&nes), frame_ns = 1e9 / fps;
+    const double fps = nes_frame_rate(&nes);
     if (!mode || mode->refresh_rate == 0 || mode->refresh_rate >= fps - 1) SDL_SetRenderVSync(ren, 1);
     if (cfg.fullscreen) SDL_SetWindowFullscreen(win, true);
     SDL_Texture *frame_tex = cfg.tv_frame ? make_tv_frame(ren, width, lines) : NULL;
@@ -242,9 +314,6 @@ int main(int argc, char **argv) {
                                          SDL_TEXTUREACCESS_STREAMING, NES_W, NES_H);
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_PIXELART);
 
-    uint32_t palette[512];
-    nes_palette_rgb(palette);
-    static uint32_t fb[NES_W * NES_H];
     /* Audio: mono float at the APU's 48 kHz. Video sets the pace (60.1 or 50 Hz);
      * the playback rate is nudged (+-0.5%) to keep about 3 frames queued, so
      * the two clocks never drift apart (no crackle, no growing latency). */
@@ -252,11 +321,25 @@ int main(int argc, char **argv) {
     SDL_AudioStream *audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
     if (audio) SDL_ResumeAudioStreamDevice(audio);
     else SDL_Log("no audio: %s", SDL_GetError());
-    static float samples[APU_BUF];
-    uint64_t next = SDL_GetTicksNS();
-    int running = 1, reset_pressed = 0;
-    char jam_line[32] = "";
-    for (long frame = 0; running && (max_frames <= 0 || frame < max_frames); frame++) {
+
+    static Emu emu;
+    emu.nes = &nes;
+    emu.lock = SDL_CreateMutex();
+    nes_palette_rgb(emu.palette);
+    emu.jam_pc = -1;
+    emu.audio = audio;
+    emu.fps = fps;
+    emu.max_frames = max_frames;
+    emu.replay = &replay_log;
+    emu.record = record_file;
+    SDL_Thread *thread = SDL_CreateThread(emu_thread, "emulator", &emu);
+    if (!thread) {
+        SDL_Log("thread: %s", SDL_GetError());
+        return 1;
+    }
+    static uint32_t fb[NES_W * NES_H];
+    int running = 1;
+    while (running && !SDL_GetAtomicInt(&emu.done)) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT) running = 0;
@@ -264,18 +347,20 @@ int main(int argc, char **argv) {
             if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
                 const char *msg = NULL;
                 char err[128], text[160];
-                if (e.key.key == SDLK_F5) reset_pressed = 1;
+                if (e.key.key == SDLK_F5) SDL_SetAtomicInt(&emu.reset, 1);
                 if (e.key.key == SDLK_F11 || (e.key.key == SDLK_RETURN && (e.key.mod & SDL_KMOD_ALT)))
                     SDL_SetWindowFullscreen(win, !(SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN));
                 if (e.key.key == SDLK_F10) {
                     if (frame_tex) SDL_DestroyTexture(frame_tex), frame_tex = NULL;
                     else frame_tex = make_tv_frame(ren, width, lines);
                 }
+                SDL_LockMutex(emu.lock);
                 if (e.key.key == SDLK_F2) msg = nes_state_save(&nes, state_path) == 0 ? "state saved" : "could not save state";
                 if (e.key.key == SDLK_F4) {
                     if (nes_state_load(&nes, state_path, err, sizeof err) == 0) msg = "state loaded";
                     else SDL_snprintf(text, sizeof text, "no state loaded (%s)", err), msg = text;
                 }
+                SDL_UnlockMutex(emu.lock);
                 if (msg) {
                     SDL_snprintf(title, sizeof title, "%s - %s", heading, msg);
                     SDL_SetWindowTitle(win, title);
@@ -284,52 +369,30 @@ int main(int argc, char **argv) {
             }
             gamepad_event(&e);
         }
-        InputFrame in;
-        if (frame < replay_log.count) {
-            in = replay_log.frames[frame];
-        } else {
-            in.pad[0] = input_clean(keyboard_buttons() | gamepad_buttons(gamepads[0]));
-            in.pad[1] = input_clean(gamepad_buttons(gamepads[1]));
-            in.flags = reset_pressed ? INPUT_RESET : 0;
-        }
-        reset_pressed = 0;
-        if (record_file) input_log_write(record_file, in);
-        if (in.flags & INPUT_RESET) nes_reset(&nes);
-        nes.pad[0] = in.pad[0];
-        nes.pad[1] = in.pad[1];
+        SDL_SetAtomicInt(&emu.pads, input_clean(keyboard_buttons() | gamepad_buttons(gamepads[0])) |
+                                        input_clean(gamepad_buttons(gamepads[1])) << 8);
 
-        nes_run_frame(&nes);
-        int ns = apu_take_samples(&nes.apu, samples, APU_BUF);
-        if (audio) {
-            SDL_PutAudioStreamData(audio, samples, ns * (int)sizeof(float));
-            const float target = 3.0f * APU_SAMPLE_RATE / (float)fps;
-            float queued = (float)SDL_GetAudioStreamQueued(audio) / sizeof(float);
-            float ratio = 1.0f + 0.005f * (queued - target) / target;
-            SDL_SetAudioStreamFrequencyRatio(audio, ratio < 0.995f ? 0.995f : ratio > 1.005f ? 1.005f : ratio);
+        SDL_LockMutex(emu.lock);
+        const int fresh = emu.fb_new, jam_pc = emu.jam_pc;
+        if (fresh) SDL_memcpy(fb, emu.fb, sizeof fb), emu.fb_new = 0;
+        SDL_UnlockMutex(emu.lock);
+        if (!fresh) {
+            SDL_Delay(1);
+            continue;
         }
-        /* A KIL opcode halts a real 6502 until reset while the TV keeps the
-         * last picture: stay open on it, so F5 or F4 can recover.
-         * shortcut: the PPU and APU stop too (on hardware they run on, so a
-         * held note drones); fine for a game that is dead anyway */
-        if (nes.cpu.jammed && !jam_line[0]) {
-            SDL_snprintf(jam_line, sizeof jam_line, "CPU jammed at $%04X", nes.cpu.pc);
-            SDL_Log("%s", jam_line);
-        }
-        if (!nes.cpu.jammed) jam_line[0] = 0;
+        char jam_line[32];
+        SDL_snprintf(jam_line, sizeof jam_line, "CPU jammed at $%04X", jam_pc);
         const char *jam_banner[] = {jam_line, "F5 reset, F4 load state", forced ? "(region forced in nes.ini)" : NULL, NULL};
-        for (int i = 0; i < NES_W * NES_H; i++) fb[i] = palette[nes.ppu.fb[i] & 0x1FF];
         SDL_UpdateTexture(tex, NULL, fb, NES_W * sizeof fb[0]);
-        present(ren, tex, frame_tex, cfg.scale, width, lines, jam_line[0] ? jam_banner : NULL);
+        present(ren, tex, frame_tex, cfg.scale, width, lines, jam_pc >= 0 ? jam_banner : NULL);
         if (message_until && SDL_GetTicks() > message_until) {
             SDL_SetWindowTitle(win, heading);
             message_until = 0;
         }
-
-        next += (uint64_t)frame_ns;  /* pace to the game's rate regardless of monitor rate */
-        uint64_t now = SDL_GetTicksNS();
-        if (next > now) SDL_DelayPrecise(next - now);
-        else next = now;  /* fell behind: don't try to catch up */
     }
+    SDL_SetAtomicInt(&emu.quit, 1);
+    SDL_WaitThread(thread, NULL);
+    SDL_DestroyMutex(emu.lock);
     if (record_file) fclose(record_file);
     input_log_free(&replay_log);
     for (int i = 0; i < 2; i++)
