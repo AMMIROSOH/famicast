@@ -139,6 +139,10 @@ static uint8_t read_no_tick(Nes *n, uint16_t a) {
         apu_run(&n->apu, n->cpu.cycles - 1);
         return apu_mmc5_read(&n->apu, a, n->cpu.open_bus);
     }
+    if (n->cart.mapper == 20 && a >= 0x4040 && a < 0x4100 && (n->cart.fds_io & 2)) {  /* FDS sound: in the APU */
+        apu_run(&n->apu, n->cpu.cycles - 1);
+        return apu_fds_read(&n->apu, a, n->cpu.open_bus);
+    }
     if (a < 0x6000) cart_run(&n->cart, n->cpu.cycles);  /* Namco 163 counter reads */
     if (a >= 0x4800 && a < 0x5000 && n->cart.n163_sound) apu_run(&n->apu, n->cpu.cycles - 1);  /* N163 sound updates its RAM */
     return cart_cpu_read(&n->cart, a, n->cpu.open_bus);
@@ -239,6 +243,12 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
         else if (a == 0x4016) {
             n->strobe = v & 1;
             if (n->strobe) { n->pad_shift[0] = n->pad[0]; n->pad_shift[1] = n->pad[1]; }
+        }
+        else if (n->cart.mapper == 20 && a >= 0x4040 && a < 0x4100) {  /* FDS sound: in the APU */
+            if (n->cart.fds_io & 2) {
+                sync_apu(n);
+                apu_fds_write(&n->apu, a, v);
+            }
         }
         else if (a >= 0x4020) cart_cpu_write(&n->cart, a, v, n->cpu.cycles);
         else if (a <= 0x4017) {  /* APU registers ($4014/$4016 handled above) */

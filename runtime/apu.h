@@ -91,6 +91,30 @@ typedef struct {
     int32_t out;                      /* the six carriers, summed */
 } Vrc7Audio;
 
+/* Famicom Disk System sound (nesdev "FDS audio"; details as Mesen2 models
+ * them): a 64-step 6-bit wavetable whose pitch a modulator bends, a volume
+ * envelope and a modulator gain envelope, all clocked every CPU cycle. */
+typedef struct {
+    uint8_t speed, gain, off, up;     /* $4080/$4084: envelope speed, gain 0-32, disabled, direction */
+    uint16_t freq;                    /* $4082-$4083 / $4086-$4087: 12 bits */
+    uint32_t timer;                   /* cycles to the next envelope step */
+} FdsEnvelope;
+
+typedef struct {
+    uint8_t wave[64], mod_table[64];  /* 6-bit samples; 3-bit modulator steps */
+    uint8_t wave_write, master;       /* $4089: bit 7 wave RAM writable (output held), bits 0-1 */
+    uint8_t halt, env_halt;           /* $4083 bits 7 (wave stops at 0), 6 (envelopes stop) */
+    uint8_t env_speed;                /* $408A, the envelopes' master speed */
+    FdsEnvelope vol, mod;
+    int8_t mod_counter;               /* $4085: 7-bit signed */
+    uint8_t mod_off, mod_pos;         /* $4087 bit 7; modulator table position */
+    uint16_t mod_acc, wave_acc;       /* 16-bit phase accumulators: a step on overflow */
+    uint8_t wave_pos;
+    int32_t mod_out;                  /* the pitch change */
+    uint8_t out;                      /* output level 0-63 */
+    float lp;                         /* the board's ~2 kHz low-pass, run every cycle */
+} FdsAudio;
+
 enum { APU_SAMPLE_RATE = 48000, APU_BUF = 8192 };
 
 typedef struct Apu {
@@ -122,6 +146,8 @@ typedef struct Apu {
     Vrc6Audio vrc6;
     uint8_t has_vrc7;         /* mapper 85 except VRC7b (submapper 1: no sound circuit) */
     Vrc7Audio vrc7;
+    uint8_t has_fds;
+    FdsAudio fds;
     float mix_last;           /* mixer output, recomputed only when mix_dirty: */
     uint8_t mix_dirty;        /* set wherever channel state can change */
     int64_t frac;
@@ -149,6 +175,9 @@ void apu_vrc6_write(Apu *a, uint16_t reg, uint8_t v);
 /* VRC7: port 0 = $9010 (register select), 1 = $9030 (data); $E000 bit 6 */
 void apu_vrc7_write(Apu *a, int port, uint8_t v);
 void apu_vrc7_silence(Apu *a, int on);
+/* FDS: $4040-$408A (reads: $4040-$407F wave, $4090, $4092 gains) */
+void apu_fds_write(Apu *a, uint16_t addr, uint8_t v);
+uint8_t apu_fds_read(const Apu *a, uint16_t addr, uint8_t open_bus);
 int apu_take_samples(Apu *a, float *out, int max);   /* drain the 48 kHz output */
 
 #endif
