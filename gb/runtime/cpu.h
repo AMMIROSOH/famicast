@@ -18,6 +18,7 @@ typedef struct GbCpu {
     uint8_t halted;   /* HALT: waiting for an interrupt (the system wakes it) */
     uint8_t stopped;  /* STOP: waiting for a button (the system wakes it) */
     uint8_t jammed;   /* one of the 11 unused opcodes locked the CPU up */
+    uint8_t halt_bug; /* the next opcode fetch does not step PC (gb.c gb_step) */
     uint64_t cycles;  /* M-cycles since power-on */
     void *bus;        /* owner's context for gb_read/gb_write/gb_idle */
 } GbCpu;
@@ -27,11 +28,14 @@ typedef struct GbCpu {
 uint8_t gb_read(GbCpu *c, uint16_t addr);
 void gb_write(GbCpu *c, uint16_t addr, uint8_t v);
 void gb_idle(GbCpu *c);  /* an internal cycle: no memory access */
+/* Interrupt entry, after pushing PC's high byte: the vector of the highest
+ * pending enabled interrupt, its IF bit cleared; 0 if none is left. */
+uint16_t gb_irq_ack(GbCpu *c);
 
 /* One instruction (or one cycle of a halted, stopped or jammed CPU). */
 void gb_cpu_step(GbCpu *c);
-/* Interrupt entry to `vector` (the system calls it when IME is on and an
- * enabled interrupt is pending): IME off, 5 M-cycles. */
-void gb_cpu_interrupt(GbCpu *c, uint16_t vector);
+/* Interrupt entry (the system calls it when IME is on and an enabled
+ * interrupt is pending): IME off, 5 M-cycles. */
+void gb_cpu_interrupt(GbCpu *c);
 
 #endif

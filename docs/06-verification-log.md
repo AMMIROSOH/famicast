@@ -3,6 +3,33 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-19 · Game Boy G2: memory map, timer, interrupts, cartridges
+- **Test ROMs**: the c-sp/game-boy-test-roms v7.0 zip (SHA-256 pinned);
+  `gb_headless` reads the result from the serial port (blargg text,
+  mooneye's 3 5 8 13 21 34 / six $42) or blargg's cartridge-RAM protocol.
+  `tests/test_gb_roms.py`: 102 pass; 21 open, and the test checks they
+  still fail (9 boot tests of other models, 9 PPU timing, serial boot
+  phase, `timer/rapid_toggle`, the MBC1 multicart).
+- **Found on the way** (each by its test):
+  - I/O was blocked during OAM DMA; only the DMA's bus is. With the bus
+    conflict (that bus reads the byte in flight) mooneye's instruction
+    timing tests, which measure through it, pass.
+  - The DMA starts 2 M-cycles after the write and holds the bus for 160
+    (`oam_dma_start`: the next cycle is free; `oam_dma_timing`).
+  - A halted CPU keeps reading the opcode at PC; with IME off it fetches
+    the next instruction in the cycle after the interrupt shows up
+    (`halt_ime0_nointr_timing`, traced to the cycle: 17,535 M-cycles
+    between the DIV reset and read). An extra cycle on the IME-on exit
+    (as Pan Docs puts it) broke `halt_ime1_timing2-GS` and `di_timing-GS`.
+  - DIV after boot: $ABC8 (with the clocks stepped before each access) is
+    the only value from $AB00-$AC00 that passes `boot_div-dmgABCmgb`.
+  - `halt_bug`'s header says MBC1+RAM with RAM size 0: such types get 8 KB.
+- **Open, tried**: `rapid_toggle` takes the timer interrupt one loop late
+  (BC $FFD8, want $FFD9); evaluating TAC writes at the cycle's start did
+  not change it, resetting DIV at the cycle's start broke every timer test.
+- **Mutations**: no timer interrupt on reload: 4 ROMs fail; MBC1 bank 0
+  not read as 1: 6 ROMs fail.
+
 ## 2026-11-19 · Game Boy G1: SM83 CPU
 - **What**: `gb/recomp/sm83.c` writes each opcode's C from its bit fields
   with the PC markers; `gbrecomp --cpu-switch` makes the interpreter's

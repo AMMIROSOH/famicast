@@ -113,7 +113,37 @@ def fetch_sst_sm83(name):
     return path
 
 
-SM83_UNUSED = {0xCB, 0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD}  # no file
+GB_ROMS_URL = "https://github.com/c-sp/game-boy-test-roms/releases/download/v7.0/game-boy-test-roms-v7.0.zip"
+GB_ROMS_SHA = "b9a9d7a1075aa35a3d07c07c34974048672d8520dca9e07a50178f5860c3832c"
+
+
+def fetch_gb_test_roms():
+    """Return the folder with the c-sp/game-boy-test-roms collection (v7.0:
+    blargg, mooneye, ...), downloading and unpacking the zip if needed."""
+    import zipfile
+    base = os.path.join(ROMS, "gb")
+    done = os.path.join(base, ".v7.0")
+    if os.path.exists(done):
+        return base
+    os.makedirs(base, exist_ok=True)
+    req = urllib.request.Request(GB_ROMS_URL, headers={"User-Agent": "retrocast-tests"})
+    data = urllib.request.urlopen(req, timeout=120).read()
+    if hashlib.sha256(data).hexdigest() != GB_ROMS_SHA:
+        raise RuntimeError("game-boy-test-roms zip: hash mismatch")
+    zip_path = os.path.join(base, "game-boy-test-roms.zip")
+    with open(zip_path, "wb") as f:
+        f.write(data)
+    with zipfile.ZipFile(zip_path) as z:
+        for name in z.namelist():  # stay inside base
+            if os.path.isabs(name) or ".." in name.split("/"):
+                raise RuntimeError("game-boy-test-roms zip: unsafe path " + name)
+        z.extractall(base)
+    os.remove(zip_path)
+    open(done, "w").close()
+    return base
+
+
+SM83_UNUSED ={0xCB, 0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD}  # no file
 SM83_FILES = ["%02x" % i for i in range(256) if i not in SM83_UNUSED] + ["cb %02x" % i for i in range(256)]
 
 
@@ -193,6 +223,7 @@ if __name__ == "__main__":
         print(n, "->", fetch(n))
     for p in NTR_FILES:
         print(p, "->", fetch_ntr(p))
+    print("game-boy-test-roms ->", fetch_gb_test_roms())
     if "--sst" in sys.argv:  # ~1 GB download, ~150 MB on disk after conversion
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(8) as ex:

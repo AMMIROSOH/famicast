@@ -47,7 +47,8 @@ plans in [docs/05-roadmap.md](docs/05-roadmap.md).
 - **Frontend**: save states, input recordings, fullscreen and scaling
   options, an optional TV frame.
 - **Game Boy**: started. The SM83 CPU passes SingleStepTests sm83 (every
-  opcode, cycle by cycle); no games run yet
+  opcode, cycle by cycle); timer, interrupts, OAM DMA and MBC1/2/3/5 pass
+  102 blargg and mooneye test ROMs. No picture yet, so no games
   ([roadmap](docs/05-roadmap.md#game-boy)).
 
 ## Mappers

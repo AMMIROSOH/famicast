@@ -22,7 +22,7 @@ only when that test passes in CI.
 | [Speed](#speed-passes) | Profiling passes | ongoing |
 | [Stretch](#stretch) | JIT, analysis build, native backend | open |
 | [G1](#g1--sm83-cpu) | Game Boy: SM83 CPU from templates, interpreter | done |
-| [G2](#g2--memory-timer-cartridges) | Game Boy: memory map, timer, interrupts, MBC1/2/3/5 | open |
+| [G2](#g2--memory-timer-cartridges) | Game Boy: memory map, timer, interrupts, MBC1/2/3/5 | done (1 timer test open) |
 | [G3](#g3--ppu-and-frontend) | Game Boy: PPU, the window program (core/frontend) | open |
 | [G4](#g4--apu) | Game Boy: sound | open |
 | [G5](#g5--recompiler) | Game Boy: recompiler, lockstep diff | open |
@@ -48,11 +48,11 @@ retrocast/
     frontend.c             the NES for core/frontend (system.h)
     tests/                 cpu_tests.c nes_headless.c
     games/<name>.toml      per-game hints (entry points, banked entries; fds.toml: the BIOS)
-  gb/                      the Game Boy (so far the SM83 CPU)
+  gb/                      the Game Boy (CPU, memory map, timer, cartridges; no PPU yet)
     CMakeLists.txt         gbrecomp, gbcpu, gb_cpu_tests
     recomp/                gbrecomp: sm83.c (C per opcode), main.c
-    runtime/               cpu.h cpu_ops.h cpu.c
-    tests/                 cpu_tests.c (SingleStepTests sm83)
+    runtime/               cpu.h cpu_ops.h cpu.c, gb.c (bus, timer, interrupts, DMA), cart.c (MBCs)
+    tests/                 cpu_tests.c (SingleStepTests sm83), gb_headless.c (test ROMs)
   tests/                   Python unittest suite, fetch_test_roms.py
   tools/                   bench.py, smoke_games.py, import_r2_6502.py, make_release.py
   dist/                    README.txt for the release archives
@@ -348,9 +348,22 @@ to `core/` when the Game Boy is its second user (`docs/02` "Frontend").
   every M-cycle; HALT and STOP registers and RAM only). Met.
 
 ### G2 · Memory, timer, cartridges
-- [ ] Memory map, IE/IF and interrupt entry, HALT (and its bug), DIV/TIMA,
-  joypad, OAM DMA; MBC1, MBC2, MBC3 (with the clock), MBC5; battery saves.
-- [ ] **Exit:** blargg `cpu_instrs` and `instr_timing`, mooneye timer tests.
+- [x] Memory map (`gb/runtime/gb.c`), everything stepped once per M-cycle
+  before the CPU's access; IE/IF, interrupt entry with the vector chosen
+  after the high push (IE can cancel it), HALT (a halted CPU keeps reading
+  the opcode at PC) and the HALT bug; DIV/TIMA with the overflow delay, TMA
+  reload and the TAC/DIV write edges; serial (internal clock, no partner);
+  joypad; OAM DMA with the bus conflicts (the DMA's bus reads the byte in
+  flight, OAM $FF); LY/STAT timing only, until G3.
+- [x] MBC1, MBC2, MBC3 with the clock (counted in emulated time), MBC5
+  (`gb/runtime/cart.c`). Battery saves come with the window program (G3).
+- [x] **Exit:** blargg `cpu_instrs` (all 11 and combined), `instr_timing`,
+  `mem_timing`, `mem_timing-2`, `halt_bug`; mooneye acceptance (timer,
+  interrupts, OAM DMA, instruction timing, DMG boot state) and MBC1/2/5:
+  102 ROMs pass (`tests/test_gb_roms.py`). Open: `timer/rapid_toggle`
+  (the interrupt one loop late), the MBC1 multicart wiring, the serial
+  clock's boot phase, and boot tests of other models; 9 PPU timing tests
+  belong to G3.
 
 ### G3 · PPU and frontend
 - [ ] Background, window, sprites, the mode timing and STAT interrupts; the
