@@ -63,6 +63,8 @@ static uint32_t rom_bank(const GbCart *c, int high) {
     return b & (c->rom_size / 0x4000 - 1);
 }
 
+uint32_t gb_cart_bank(const GbCart *c, uint16_t a) { return rom_bank(c, a >= 0x4000); }
+
 static int ram_offset(const GbCart *c, uint16_t a) {  /* -1: no RAM there */
     if (!c->ram_on || !c->ram_size) return -1;
     uint32_t bank = c->mbc == MBC_1 ? (c->mode ? c->bank2 : 0) : c->mbc == MBC_3 || c->mbc == MBC_5 ? c->bank2 : 0;

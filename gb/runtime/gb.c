@@ -6,6 +6,7 @@
 
 #include "cpu_ops.h"    /* rd */
 #include "input_log.h"  /* PAD_* */
+#include "recomp_rt.h"
 
 /* ---- timer (Pan Docs "Timer obscure behaviour") ---- */
 static int timer_bit(uint16_t div, uint8_t tac) {
@@ -189,6 +190,8 @@ uint16_t gb_irq_ack(GbCpu *c) {
     return (uint16_t)(0x40 + 8 * bit);
 }
 
+/* A step: interrupt entry, a halted cycle, or code: a recompiled block when
+ * there is one for this PC and bank, else one instruction interpreted. */
 void gb_step(Gb *g) {
     GbCpu *c = &g->cpu;
     uint8_t pending = g->ie & g->ifl & 0x1F;
@@ -208,7 +211,20 @@ void gb_step(Gb *g) {
         gb_cpu_interrupt(c);
         return;
     }
-    gb_cpu_step(c);
+    uint64_t before = c->cycles;
+    GbRecompFn f = NULL;
+    if (g->recomp_on && c->pc < 0x8000 && !c->halt_bug && !c->stopped && !c->jammed)
+        f = gb_recomp_program->lookup(c->pc, gb_cart_bank(&g->cart, c->pc));
+    if (f) {
+        if (c->ei) c->ei = 0, c->ime = 1;  /* as gb_cpu_step: EI ends blocks, so only here */
+        f(c);
+        g->cycles_native += c->cycles - before;
+    } else {
+        if (g->misses && c->pc < 0x8000 && !c->stopped && !c->jammed)
+            g->misses[gb_cart_bank(&g->cart, c->pc) * 0x8000 + c->pc] = 1;
+        gb_cpu_step(c);
+        g->cycles_interp += c->cycles - before;
+    }
     /* HALT with IME off and an interrupt already pending does not halt; the
      * next opcode byte is read twice (the "HALT bug") */
     if (c->halted && !c->ime && (g->ie & g->ifl & 0x1F)) c->halted = 0, c->halt_bug = 1;
@@ -240,6 +256,7 @@ int gb_load(Gb *g, const uint8_t *rom, size_t size, char *err, size_t errlen) {
     g->mode = 2;
     g->dma_reg = 0xFF;
     apu_boot(g);
+    g->recomp_on = gb_recomp_program && gb_recomp_program->rom_hash == gb_rom_hash(g);
     g->io[0x47] = 0xFC, g->io[0x48] = 0xFF, g->io[0x49] = 0xFF;
     return 0;
 }
@@ -252,14 +269,14 @@ void gb_free(Gb *g) { gb_cart_free(&g->cart); }
 enum { GB_STATE_VERSION = 1 };
 typedef struct { char magic[4]; uint32_t version, size, rom_hash; } GbStateHeader;
 
-static uint32_t rom_hash(const Gb *g) {  /* FNV-1a */
+uint32_t gb_rom_hash(const Gb *g) {  /* FNV-1a */
     uint32_t h = 2166136261u;
     for (uint32_t i = 0; i < g->cart.rom_size; i++) h = (h ^ g->cart.rom[i]) * 16777619u;
     return h;
 }
 
 int gb_state_save(const Gb *g, const char *path) {
-    GbStateHeader h = {{'G', 'B', 'S', 'S'}, GB_STATE_VERSION, (uint32_t)sizeof *g, rom_hash(g)};
+    GbStateHeader h = {{'G', 'B', 'S', 'S'}, GB_STATE_VERSION, (uint32_t)sizeof *g, gb_rom_hash(g)};
     FILE *f = fopen(path, "wb");
     if (!f) return -1;
     int ok = fwrite(&h, sizeof h, 1, f) == 1 && fwrite(g, sizeof *g, 1, f) == 1;
@@ -275,16 +292,23 @@ int gb_state_load(Gb *g, const char *path, char *err, size_t errlen) {
     if (!ok) snprintf(err, errlen, "not a save state");
     else if (h.version != GB_STATE_VERSION || h.size != sizeof *g)
         ok = 0, snprintf(err, errlen, "saved by a different version of the program");
-    else if (h.rom_hash != rom_hash(g))
+    else if (h.rom_hash != gb_rom_hash(g))
         ok = 0, snprintf(err, errlen, "saved with a different game");
     else if (fread(s, sizeof *s, 1, f) != 1)
         ok = 0, snprintf(err, errlen, "file is truncated");
     fclose(f);
-    if (ok) {  /* everything but what belongs to this process: the ROM copy and the CPU's link to its bus */
+    if (ok) {  /* everything but what belongs to this process: the ROM copy, the CPU's link to its bus,
+                * this program's recompiled code and the misses being recorded */
         s->cart.rom = g->cart.rom;
+        s->recomp_on = g->recomp_on, s->misses = g->misses;
         *g = *s;
         g->cpu.bus = g;
     }
     free(s);
     return ok ? 0 : -1;
+}
+
+void gb_misses_write(const Gb *g, FILE *f) {
+    for (size_t i = 0; g->misses && i < gb_miss_slots(g); i++)
+        if (g->misses[i]) fprintf(f, "MISS $%04X bank %u\n", (unsigned)(i & 0x7FFF), (unsigned)(i / 0x8000));
 }

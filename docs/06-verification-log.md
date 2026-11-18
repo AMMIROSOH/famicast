@@ -3,6 +3,31 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-19 · Game Boy G5: recompiler
+- **Lockstep**: every 80th licensed title of the GB set (21 games), each
+  traced (6,000 frames of scripted play) and recompiled, then run 1,800
+  frames with the same input against an interpreter-only Game Boy
+  (`gb_headless --diff`: CPU after every step, every field of the machine
+  after every frame): 21 of 21 identical. Also three more games for 3,600
+  frames and blargg cpu_instrs (passes, recompiled and in lockstep).
+- **Coverage** (`--coverage`, share of CPU cycles in recompiled code): 19
+  games 94.8-99.8%; Hook 29.4%, TMNT 3 74.1%. In both, no ROM code was
+  interpreted (`--misses` on the recompiled build lists nothing): the rest
+  runs from WRAM. HRAM DMA routines, interrupt entry and halted cycles are
+  never recompiled.
+- **Chaining**: MSVC has no guaranteed tail call, so blocks return to
+  `gb_step` there; with MinGW gcc 15.2 the generated code for one game has
+  5,709 tail calls between blocks, and two games plus cpu_instrs are in
+  lockstep with chaining on (the diff no longer turns it off).
+- **Speed**: 3,600 frames of one game, Release: recompiled 1.46 s,
+  interpreter 1.46 s (gcc; MSVC 1.56 s vs 1.49 s). The CPU's decoding is
+  a small part; every memory access steps the PPU, APU and timer.
+- **Correction (G4)**: the "11x real time" there was a Debug build; in
+  Release the interpreter runs about 40x.
+- **Tests**: `tests/test_gb_recomp.py`: block starts, chaining, the bank
+  check and a trace-made bank region from a small made-up ROM;
+  cpu_instrs recompiled passes and is in lockstep.
+
 ## 2026-11-19 · Game Boy G4: sound
 - **blargg dmg_sound**: the 12 singles pass (`tests/test_gb_roms.py`: 117
   ROMs must pass, 20 are listed open; the "103" in the G3 entry

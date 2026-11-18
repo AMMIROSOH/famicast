@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "apu.h"
 #include "cart.h"
@@ -50,6 +51,11 @@ typedef struct Gb {
     int dma_pos;
     uint16_t dma_src, dma_next;
     uint64_t frame_end;        /* cpu.cycles where the current frame ends */
+    uint8_t recomp_on;         /* recompiled code (recomp_rt.h) made from this ROM is linked in */
+    uint64_t cycles_native, cycles_interp;  /* where the CPU's cycles went (--coverage) */
+    /* ROM code the interpreter ran, by gb_miss_slot (gb_headless --misses
+     * for gbrecomp); NULL: not recorded. Not part of save states. */
+    uint8_t *misses;
 } Gb;
 
 /* Load a ROM (copied) and set the state the boot ROM leaves (DMG). */
@@ -58,6 +64,10 @@ void gb_free(Gb *g);
 void gb_step(Gb *g);           /* one instruction, interrupt entry or halted cycle */
 void gb_run_frame(Gb *g);      /* GB_FRAME_CYCLES M-cycles */
 void gb_set_pad(Gb *g, uint8_t pad);  /* PAD_* bits; a new press raises the joypad interrupt */
+uint32_t gb_rom_hash(const Gb *g);     /* FNV-1a of the ROM (recompiled code is matched by it) */
+/* misses: one slot per (ROM bank, address) for code at $0000-$7FFF */
+static inline size_t gb_miss_slots(const Gb *g) { return (size_t)g->cart.rom_size / 0x4000 * 0x8000; }
+void gb_misses_write(const Gb *g, FILE *f);  /* "MISS $PC bank B" lines */
 
 /* save states: the whole machine, for this ROM (by hash) and this build's layout */
 int gb_state_save(const Gb *g, const char *path);

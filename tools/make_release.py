@@ -4,7 +4,7 @@
 
 1. SDL3 (release-3.4.20), static, with the frontend's options (cmake/sdl3_options.cmake),
    installed into the staged kit/sdl3.
-2. nes, nes_headless, nesrecomp, gb and gb_headless, Release, linked against that SDL3.
+2. nes, nes_headless, nesrecomp, gb, gb_headless and gbrecomp, Release, linked against that SDL3.
 3. Stage: the programs, the recompile kit (this project's CMakeLists.txt, cmake/,
    core/, nes/, gb/ and the prebuilt SDL3), README.txt, licenses.
 4. Kit check: recompile a tiny generated ROM with the staged kit, as a user
@@ -70,7 +70,7 @@ def main():
     cmake_build(ROOT, build, "-DSDL3_PREFIX=" + os.path.join(kit, "sdl3"))
 
     # 3. stage
-    for prog in ("nes", "nes_headless", "nesrecomp", "gb", "gb_headless"):
+    for prog in ("nes", "nes_headless", "nesrecomp", "gb", "gb_headless", "gbrecomp"):
         shutil.copy2(os.path.join(build, prog + EXE), stage)
     for item in KIT_FILES:
         src = os.path.join(ROOT, item)
