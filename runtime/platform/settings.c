@@ -49,6 +49,14 @@ static const char DEFAULT_FILE[] =
     "# window_scale: starting window size, in multiples of the picture (1-8)\n"
     "window_scale = 3\n"
     "\n"
+    "# fds_bios: the Famicom Disk System BIOS (8 KB), needed for .fds disk images:\n"
+    "# a file name next to the program or the disk image, or a full path\n"
+    "fds_bios = disksys.rom\n"
+    "\n"
+    "# fds_auto_disk: 1 = swap disk sides when a game asks for another one;\n"
+    "# 0 = only with F6 (next side)\n"
+    "fds_auto_disk = 1\n"
+    "\n"
     "# record_misses: 1 = remember game code that ran in the interpreter because\n"
     "# the recompiler had not found it, in <program>.misses next to the program;\n"
     "# the next build of this game recompiles it (recompiled games only)\n"
@@ -61,7 +69,8 @@ static int parse_bool(const char *v, int *out) {
 }
 
 void settings_load(Settings *s, const char *path) {
-    *s = (Settings){0, SCALE_FIT, 0, 3, 1, 1, 0, 1, 1, -1};
+    *s = (Settings){.scale = SCALE_FIT, .window_scale = 3, .record_misses = 1, .overscan = 1, .sprite_limit = 1,
+                    .aspect_tv = 1, .region = -1, .fds_auto_disk = 1, .fds_bios = "disksys.rom"};
     FILE *f = fopen(path, "r");
     if (!f) {
         if ((f = fopen(path, "w"))) {
@@ -70,15 +79,16 @@ void settings_load(Settings *s, const char *path) {
         }
         return;
     }
-    char line[256];
+    char line[1024];
     for (int n = 1; fgets(line, sizeof line, f); n++) {
-        char key[32], val[32];
+        char key[32], val[512];
         char *hash = strchr(line, '#');
         if (hash) *hash = 0;
-        if (sscanf(line, " %31[a-z_] = %31s", key, val) != 2) {
+        if (sscanf(line, " %31[a-z_] = %511[^\r\n]", key, val) != 2) {
             if (strspn(line, " \t\r\n") != strlen(line)) fprintf(stderr, "%s:%d: not 'key = value'\n", path, n);
             continue;
         }
+        for (size_t len = strlen(val); len && (val[len - 1] == ' ' || val[len - 1] == '\t');) val[--len] = 0;
         int ok = 0;
         if (!strcmp(key, "fullscreen")) ok = parse_bool(val, &s->fullscreen);
         else if (!strcmp(key, "tv_frame")) ok = parse_bool(val, &s->tv_frame);
@@ -86,6 +96,11 @@ void settings_load(Settings *s, const char *path) {
         else if (!strcmp(key, "overscan")) ok = parse_bool(val, &s->overscan);
         else if (!strcmp(key, "overscan_sides")) ok = parse_bool(val, &s->overscan_sides);
         else if (!strcmp(key, "sprite_limit")) ok = parse_bool(val, &s->sprite_limit);
+        else if (!strcmp(key, "fds_auto_disk")) ok = parse_bool(val, &s->fds_auto_disk);
+        else if (!strcmp(key, "fds_bios")) {
+            ok = strlen(val) < sizeof s->fds_bios;
+            if (ok) strcpy(s->fds_bios, val);
+        }
         else if (!strcmp(key, "aspect")) {
             if (!strcmp(val, "tv")) s->aspect_tv = 1, ok = 1;
             else if (!strcmp(val, "square")) s->aspect_tv = 0, ok = 1;

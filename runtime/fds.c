@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { LEAD_IN = 28300 / 8, BLOCK_GAP = 976 / 8, SPIN_UP = 50000, BYTE_CYCLES = 149 };
+enum { LEAD_IN = 28300 / 8, BLOCK_GAP = 976 / 8, SPIN_UP = 50000, BYTE_CYCLES = 149, FRAME = 29781 };
 
 static const uint8_t *bios;
 
@@ -20,7 +20,7 @@ void cart_fds_bios(const uint8_t *b) { bios = b; }
 
 int cart_is_fds(const uint8_t *d, size_t size) {
     if (size >= 16 && !memcmp(d, "FDS\x1a", 4)) return 1;
-    return size >= FDS_SIDE && size % FDS_SIDE == 0 && d[0] == 1 && !memcmp(d + 1, "*NINTENDO-HVC*", 14);
+    return size >= FDS_SIDE && d[0] == 1 && !memcmp(d + 1, "*NINTENDO-HVC*", 14);
 }
 
 /* One side of the image (FDS_SIDE bytes: blocks back to back) as on the disk.
@@ -52,9 +52,10 @@ static uint32_t build_side(uint8_t *out, const uint8_t *src) {
 
 int fds_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) {
     int header = !memcmp(d, "FDS\x1a", 4);
-    size_t sides = header ? d[4] : size / FDS_SIDE;
     if (header) d += 16, size -= 16;
-    if (sides == 0 || sides > FDS_MAX_SIDES || size < sides * FDS_SIDE) {
+    size_t sides = size / FDS_SIDE;  /* some headers count sides the file does not have */
+    if (header && d[-12] < sides) sides = d[-12];
+    if (sides == 0 || sides > FDS_MAX_SIDES) {
         snprintf(err, errlen, "not a Famicom Disk System image");
         return -1;
     }
@@ -87,6 +88,7 @@ int fds_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) {
     c->fds_gap_ended = 1;
     c->disk_side = 0;  /* side A in the drive at power-on */
     c->disk_next = -1;
+    c->fds_auto = 1;
     return 0;
 }
 
@@ -94,6 +96,19 @@ void cart_fds_insert(Cart *c, int side, uint64_t at) {
     c->disk_side = -1;
     c->disk_next = (int8_t)(side >= 0 && side < c->disk_sides ? side : -1);
     c->disk_insert_at = at;
+}
+
+void cart_fds_check(Cart *c, const uint8_t id[10]) {
+    if (!c->fds_auto || c->fds_auto_off) return;
+    int match = -1, count = 0;
+    for (int s = 0; s < c->disk_sides; s++) {
+        const uint8_t *info = c->disk + (size_t)s * FDS_RAW_SIDE + LEAD_IN + 2;  /* after $80 and block type 1 */
+        int ok = 1;
+        for (int i = 0; i < 10; i++) ok &= id[i] == 0xFF || id[i] == info[14 + i];  /* block bytes 15-24 */
+        if (ok) match = s, count++;
+    }
+    if (count > 1) c->fds_auto_off = 1;  /* sides alike (unlicensed disks): leave it to the player */
+    else if (match >= 0) c->disk_side = (int8_t)match, c->disk_next = -1;
 }
 
 static void update_irq(Cart *c) { c->irq_line = c->fds_timer_irq | c->fds_disk_irq; }
@@ -108,6 +123,7 @@ static void disk_byte(Cart *c) {
     uint8_t *side = c->disk + (size_t)c->disk_side * FDS_RAW_SIDE;
     int irq = c->fds_ctrl & 0x80, crc_ctrl = c->fds_ctrl & 0x10, ready = c->fds_ctrl & 0x40;
     c->fds_scanning = 1;
+    c->fds_end_at = 0;
     if (c->fds_ctrl & 0x04) {  /* read */
         uint8_t v = side[c->disk_pos];
         if (!c->fds_prev_crc) crc_add(c, v);
@@ -142,6 +158,7 @@ static void disk_byte(Cart *c) {
     c->fds_prev_crc = (uint8_t)crc_ctrl;
     if (++c->disk_pos >= c->disk_len[c->disk_side]) {
         c->fds_motor = 0;  /* end of the disk */
+        c->fds_end_at = c->irq_cycle | 1;
         if (c->fds_ctrl & 0x80) c->fds_disk_irq = 1;
     } else {
         c->disk_delay = BYTE_CYCLES;
@@ -229,6 +246,18 @@ uint8_t fds_read(Cart *c, uint16_t a, uint8_t open_bus) {
         break;
     case 0x4032: {  /* bit 0: no disk, 1: not ready, 2: write protected (or no disk) */
         int none = c->disk_side < 0;
+        /* a game that read the disk to the end and keeps asking for one wants
+         * another side: out with it, and a side back in 77 frames later */
+        uint64_t now = c->irq_cycle;
+        c->fds_polls = now - c->fds_last_poll < 100 * FRAME ? (uint16_t)(c->fds_polls + 1) : 0;
+        c->fds_last_poll = now;
+        if (c->fds_auto && !c->fds_auto_off && c->fds_polls > 20 && !none && c->disk_next < 0 && c->fds_end_at &&
+            now - c->fds_end_at >= 77 * FRAME) {
+            c->fds_polls = 0;
+            c->fds_end_at = 0;
+            cart_fds_insert(c, 0, now + 77 * FRAME);  /* side 0 stands in: cart_fds_check picks the side */
+            none = 1;
+        }
         v = (uint8_t)((open_bus & 0xF8) | none | (none || !c->fds_scanning) << 1 | none << 2);
         break;
     }

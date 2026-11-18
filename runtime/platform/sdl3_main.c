@@ -6,7 +6,8 @@
  *   --replay     play a recording back; live input resumes when it ends
  * Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =
  * Select, F5 = reset, Esc = quit. F2 = save state, F4 = load state,
- * F10 = TV frame on/off, F11 or Alt+Enter = fullscreen on/off.
+ * F6 = next disk side (FDS), F10 = TV frame on/off, F11 or Alt+Enter =
+ * fullscreen on/off. FDS disk images need the BIOS (fds_bios in the .ini).
  * Display settings: <program>.ini next to the program (settings.c).
  * Recompiled games note ROM code that had to be interpreted in
  * <program>.misses; the build reads it (CMakeLists.txt, nes_recompile).
@@ -17,6 +18,7 @@
  * ROM.state (for an embedded ROM: next to the program). */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -212,6 +214,51 @@ static int emu_thread(void *arg) {
     return 0;
 }
 
+/* A start-up error: logged, and shown in a box (the program has no console
+ * when started from a file manager). Returns the exit code. */
+static int fail(const char *fmt, ...) {
+    char msg[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    SDL_vsnprintf(msg, sizeof msg, fmt, ap);
+    va_end(ap);
+    SDL_Log("%s", msg);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, NES_APP_NAME, msg, NULL);
+    return 1;
+}
+
+/* The FDS BIOS (8 KB): `name` as a full path, else next to the program, else
+ * next to the disk image. NULL if not found. */
+static void *load_fds_bios(const char *name, const char *image_path) {
+    char path[1536];
+    const char *tries[3] = {NULL, NULL, NULL};
+    int full = name[0] == '/' || name[0] == '\\' || (name[0] && name[1] == ':');
+    if (full) tries[0] = name;
+    else {
+        static char a[1536], b[1536];
+        SDL_snprintf(a, sizeof a, "%s%s", SDL_GetBasePath(), name);
+        tries[0] = a;
+        if (image_path) {
+            SDL_snprintf(b, sizeof b, "%s", image_path);
+            char *slash = SDL_strrchr(b, '/'), *back = SDL_strrchr(b, '\\');
+            if (back > slash) slash = back;
+            if (slash) slash[1] = 0;
+            else b[0] = 0;
+            SDL_snprintf(path, sizeof path, "%s%s", b, name);
+            SDL_strlcpy(b, path, sizeof b);
+            tries[1] = b;
+        }
+    }
+    for (int i = 0; i < 3 && tries[i]; i++) {
+        size_t size;
+        void *data = SDL_LoadFile(tries[i], &size);
+        if (data && size == 0x2000) return data;
+        if (data) SDL_Log("%s: not an 8 KB FDS BIOS", tries[i]);
+        SDL_free(data);
+    }
+    return NULL;
+}
+
 int main(int argc, char **argv) {
     const char *rom_path = argc > 1 && argv[1][0] != '-' ? argv[1] : NULL;
     const int embedded = !rom_path && recomp_program && recomp_program->rom;
@@ -233,16 +280,26 @@ int main(int argc, char **argv) {
         SDL_Log("%s: %s", rom_path, SDL_GetError());
         return 1;
     }
+    char ini_path[1024];
+    SDL_snprintf(ini_path, sizeof ini_path, "%s%s.ini", SDL_GetBasePath(), NES_APP_NAME);
+    Settings cfg;
+    settings_load(&cfg, ini_path);
+    const uint8_t *image = embedded ? recomp_program->rom : rom;
+    void *bios = NULL;
+    if (cart_is_fds(image, size) && !(bios = load_fds_bios(cfg.fds_bios, rom_path)))
+        return fail("Famicom Disk System games need the FDS BIOS (8 KB): put it next to the program as "
+                    "disksys.rom, or set fds_bios in %s", ini_path);
+    cart_fds_bios(bios);
     static Nes nes;
     char err[128];
-    if (nes_load(&nes, embedded ? recomp_program->rom : rom, size, err, sizeof err) != 0) {
-        SDL_Log("%s: %s", embedded ? recomp_program->rom_name : rom_path, err);
-        return 1;
-    }
+    if (nes_load(&nes, image, size, err, sizeof err) != 0)
+        return fail("%s: %s", embedded ? recomp_program->rom_name : rom_path, err);
     SDL_free(rom);
+    SDL_free(bios);  /* nes_load copied it */
     /* battery-backed PRG RAM (saves): ROM path + ".sav", 8 KB; for the
-     * embedded ROM, its file name + ".sav" next to the program */
-    char sav_path[1024], state_path[1024], ini_path[1024], title[512];
+     * embedded ROM, its file name + ".sav" next to the program. FDS: what
+     * the game wrote to the disk, all sides as on the disk */
+    char sav_path[1024], state_path[1024], title[512];
     const char *name = embedded ? recomp_program->rom_name : rom_path;
     if (embedded) SDL_snprintf(sav_path, sizeof sav_path, "%s%s", SDL_GetBasePath(), recomp_program->rom_name);
     else SDL_snprintf(sav_path, sizeof sav_path, "%s", rom_path);
@@ -250,9 +307,6 @@ int main(int argc, char **argv) {
     SDL_strlcat(sav_path, ".sav", sizeof sav_path);
     for (const char *p = name; *p; p++)
         if (*p == '/' || *p == '\\') name = p + 1;
-    SDL_snprintf(ini_path, sizeof ini_path, "%s%s.ini", SDL_GetBasePath(), NES_APP_NAME);
-    Settings cfg;
-    settings_load(&cfg, ini_path);
     const int forced = cfg.region >= 0 && cfg.region != nes.cart.region;
     if (forced) nes_set_region(&nes, cfg.region);
     ppu_all_sprites = !cfg.sprite_limit;
@@ -264,6 +318,14 @@ int main(int argc, char **argv) {
         void *sav = SDL_LoadFile(sav_path, &sav_size);
         if (sav && sav_size == nes.cart.prg_ram_size) SDL_memcpy(nes.cart.prg_ram, sav, sav_size);
         SDL_free(sav);
+    }
+    const size_t disk_size = nes.cart.disk ? (size_t)FDS_RAW_SIDE * nes.cart.disk_sides : 0;
+    if (disk_size) {
+        size_t sav_size;
+        void *sav = SDL_LoadFile(sav_path, &sav_size);
+        if (sav && sav_size == disk_size) SDL_memcpy(nes.cart.disk, sav, sav_size);
+        SDL_free(sav);
+        nes.cart.fds_auto = (uint8_t)cfg.fds_auto_disk;
     }
 
     InputLog replay_log = {0};
@@ -296,7 +358,7 @@ int main(int argc, char **argv) {
     /* the title: the game and the console it runs as, e.g. "Game (PAL)" */
     char heading[300];
     SDL_snprintf(heading, sizeof heading, "%s (%s)", name,
-                 nes.cart.region == REGION_PAL ? "PAL" : nes.cart.region == REGION_DENDY ? "Dendy" : "NTSC");
+                 nes.cart.disk ? "FDS" : nes.cart.region == REGION_PAL ? "PAL" : nes.cart.region == REGION_DENDY ? "Dendy" : "NTSC");
     SDL_snprintf(title, sizeof title, "%s", heading);
     if (!SDL_CreateWindowAndRenderer(title, cw * k, ch * k, SDL_WINDOW_RESIZABLE, &win, &ren)) {
         SDL_Log("window: %s", SDL_GetError());
@@ -362,6 +424,12 @@ int main(int argc, char **argv) {
                     if (nes_state_load(&nes, state_path, err, sizeof err) == 0) msg = "state loaded";
                     else SDL_snprintf(text, sizeof text, "no state loaded (%s)", err), msg = text;
                 }
+                if (e.key.key == SDLK_F6 && nes.cart.disk) {  /* FDS: the next side, after half a second out */
+                    int cur = nes.cart.disk_side >= 0 ? nes.cart.disk_side : nes.cart.disk_next;
+                    int side = (cur + 1) % nes.cart.disk_sides;
+                    cart_fds_insert(&nes.cart, side, nes.cpu.cycles + 900000);
+                    SDL_snprintf(text, sizeof text, "disk %d side %c", side / 2 + 1, 'A' + side % 2), msg = text;
+                }
                 SDL_UnlockMutex(emu.lock);
                 if (msg) {
                     SDL_snprintf(title, sizeof title, "%s - %s", heading, msg);
@@ -400,6 +468,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 2; i++)
         if (gamepads[i]) SDL_CloseGamepad(gamepads[i]);
     if (nes.cart.battery && !SDL_SaveFile(sav_path, nes.cart.prg_ram, nes.cart.prg_ram_size))
+        SDL_Log("%s: %s", sav_path, SDL_GetError());
+    if (disk_size && nes.cart.disk_dirty && !SDL_SaveFile(sav_path, nes.cart.disk, disk_size))
         SDL_Log("%s: %s", sav_path, SDL_GetError());
     /* rewrite the misses file only when this session found new ROM code, so
      * the next build does not rerun the recompiler for nothing */

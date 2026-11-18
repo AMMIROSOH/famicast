@@ -16,6 +16,8 @@ typedef struct {
     int sprite_limit;  /* 1: 8 sprites per line, as on the console; 0: all */
     int aspect_tv;     /* 1: pixels as on a TV (8:7 NTSC, 1.39:1 PAL); 0: square */
     int region;        /* -1 = auto (the ROM header), else REGION_* (cart.h) */
+    int fds_auto_disk; /* 1: swap disk sides when a game asks (cart_fds_check) */
+    char fds_bios[512];/* FDS BIOS: a file name (next to the program or disk image) or a path */
 } Settings;
 
 /* Fills s with defaults, then the values found in path. Writes a commented

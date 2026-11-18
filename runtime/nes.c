@@ -356,9 +356,23 @@ void nes_reset(Nes *n) {
 
 /* Dispatcher: recompiled block when there is one, else the interpreter.
  * Interrupt entry and a jammed CPU always go through cpu_step. */
+/* FDS: the BIOS's disk check ($E445) compares the disk's header with the
+ * 10-byte ID at ($00); automatic swaps put the matching side in first. */
+static void fds_disk_check(Nes *n) {
+    uint8_t id[10];
+    uint16_t p = (uint16_t)(n->ram[0] | n->ram[1] << 8);
+    for (int i = 0; i < 10; i++) {
+        uint16_t a = (uint16_t)(p + i);
+        const uint8_t *page = n->cpu.read_map[a >> 11];
+        id[i] = page ? page[a & 0x7FF] : 0;
+    }
+    cart_fds_check(&n->cart, id);
+}
+
 void nes_step(Nes *n) {
     Cpu *c = &n->cpu;
     uint64_t before = c->cycles;
+    if (n->cart.mapper == 20 && c->pc == 0xE445 && !c->poll_prev) fds_disk_check(n);
     if (n->recomp && !c->poll_prev && !c->jammed) {
         RecompFn f = n->recomp(c->pc, nes_prg_bank(n, c->pc));
         if (f) {

@@ -104,6 +104,11 @@ typedef struct Cart {
     uint8_t fds_ctrl, fds_motor;     /* $4025; the motor (stops by itself at the end of the disk) */
     uint8_t fds_wdata, fds_rdata, fds_ext;
     uint8_t fds_transfer, fds_gap_ended, fds_scanning, fds_end_of_head, fds_prev_crc, fds_bad_crc;
+    /* automatic disk swaps (cart_fds_auto): $4032 polls in a row, the last
+     * one, when the head last reached the end of the disk (0: reading) */
+    uint8_t fds_auto, fds_auto_off;  /* off: two sides match one request (unlicensed disks) */
+    uint16_t fds_polls;
+    uint64_t fds_last_poll, fds_end_at;
 } Cart;
 
 /* Famicom Disk System images: .fds, with or without the 16-byte "FDS" header
@@ -114,6 +119,12 @@ void cart_fds_bios(const uint8_t *bios);
 /* Ejects the disk now; `side` (>= 0) goes in at CPU cycle `at` (a real
  * swap takes a moment: games check that the disk was out). */
 void cart_fds_insert(Cart *c, int side, uint64_t at);
+/* Automatic swaps (on by default): when a game that has read the disk keeps
+ * polling the drive ($4032), the disk comes out and a side goes back in; the
+ * BIOS's disk check ($E445) then gets the side whose header matches the ID
+ * the game asks for (`id`: 10 bytes, $FF = any). After Mesen2's FDS
+ * auto-insert. */
+void cart_fds_check(Cart *c, const uint8_t id[10]);
 
 /* Returns 0 on success, else writes a message to err. Copies the data. */
 int cart_load(Cart *c, const uint8_t *data, size_t size, char *err, size_t errlen);
