@@ -23,7 +23,7 @@ endif()
 # switch, from the same table and C templates (recomp/ops.c, recomp/c6502.c),
 # so instruction semantics exist once.
 add_executable(nesrecomp recomp/main.c recomp/ops.c recomp/c6502.c recomp/analyze.c
-    recomp/emit.c runtime/cart.c)
+    recomp/emit.c runtime/cart.c runtime/fds.c)
 target_include_directories(nesrecomp PRIVATE runtime)
 
 set(GEN_DIR ${CMAKE_BINARY_DIR}/gen)
@@ -49,7 +49,7 @@ add_executable(cpu_tests runtime/tests/cpu_tests.c)
 target_link_libraries(cpu_tests PRIVATE nescpu recomp_none)
 
 # The NES system: bus, PPU, cartridge (implements cpu_read/cpu_write).
-add_library(nescore STATIC runtime/nes.c runtime/ppu.c runtime/apu.c runtime/cart.c
+add_library(nescore STATIC runtime/nes.c runtime/ppu.c runtime/apu.c runtime/cart.c runtime/fds.c
     runtime/palette.c runtime/input_log.c)
 target_link_libraries(nescore PUBLIC nescpu)
 if(NOT MSVC)

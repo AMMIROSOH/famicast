@@ -304,6 +304,8 @@ static void map_memory(Nes *n) {
         const uint8_t *mem = (n->cart.prg_ram_window >> w & 1) ? n->cart.prg_ram : n->cart.prg;
         c->read_map[i] = (uint8_t *)mem + n->cart.prg_off[w] + ((i & 3) * 0x800);
     }
+    if (n->cart.mapper == 20)  /* FDS: RAM up to $DFFF */
+        for (int i = 16; i < 28; i++) c->write_map[i] = (uint8_t *)c->read_map[i];
     c->bus_step = n->clk_cpu;
 }
 
@@ -381,29 +383,35 @@ void nes_step(Nes *n) {
 /* ---- save states ----
  * The whole machine is one struct, the same in interpreter and recompiled
  * builds (recompiled code keeps no state of its own), so a state from one
- * loads in the other. File: header, the Nes struct, then CHR RAM if any.
+ * loads in the other. File: header, the Nes struct, then CHR RAM if any, then
+ * the FDS disk sides (what the game wrote to them).
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 14 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
+enum { STATE_VERSION = 15 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
                                 4: MMC2/MMC4, SS88006, FME-7; 5: Bandai FCG EEPROMs; 6: TxSROM;
                                 7: emphasis in the frame buffer; 8: TC0690 IRQ delay;
                                 9: Namco 163 sound; 10: MMC5 sound; 11: Sunsoft 5B;
                                 12: VRC6 sound; 13: VRC7;
-                                14: regions (master clocks) */
+                                14: regions (master clocks); 15: FDS */
 
 typedef struct {
     char magic[4];  /* "NESS" */
     uint32_t version, size, prg_hash;
 } StateHeader;
 
+/* the game a state belongs to: PRG ROM, or for FDS the disk image */
+static uint32_t game_hash(const Nes *n) {
+    return n->cart.disk ? n->cart.disk_hash : recomp_prg_hash(n->cart.prg, n->cart.prg_size);
+}
+
 int nes_state_save(Nes *n, const char *path) {
-    StateHeader h = {{'N', 'E', 'S', 'S'}, STATE_VERSION, (uint32_t)sizeof *n,
-                     recomp_prg_hash(n->cart.prg, n->cart.prg_size)};
+    StateHeader h = {{'N', 'E', 'S', 'S'}, STATE_VERSION, (uint32_t)sizeof *n, game_hash(n)};
     FILE *f = fopen(path, "wb");
     if (!f) return -1;
     int ok = fwrite(&h, sizeof h, 1, f) == 1 && fwrite(n, sizeof *n, 1, f) == 1 &&
-             (!n->cart.chr_ram || fwrite(n->cart.chr, n->cart.chr_size, 1, f) == 1);
+             (!n->cart.chr_ram || fwrite(n->cart.chr, n->cart.chr_size, 1, f) == 1) &&
+             (!n->cart.disk || fwrite(n->cart.disk, FDS_RAW_SIDE, n->cart.disk_sides, f) == n->cart.disk_sides);
     return (fclose(f) == 0 && ok) ? 0 : -1;
 }
 
@@ -413,14 +421,17 @@ int nes_state_load(Nes *n, const char *path, char *err, size_t errlen) {
     StateHeader h;
     Nes *s = malloc(sizeof *s);
     uint8_t *chr = malloc(n->cart.chr_size);
+    size_t disk_size = n->cart.disk ? (size_t)FDS_RAW_SIDE * n->cart.disk_sides : 0;
+    uint8_t *disk = malloc(disk_size + 1);
     int ok = fread(&h, sizeof h, 1, f) == 1 && !memcmp(h.magic, "NESS", 4);
     if (!ok) snprintf(err, errlen, "not a save state");
     else if (h.version != STATE_VERSION || h.size != sizeof *n)
         ok = 0, snprintf(err, errlen, "saved by a different version of the program");
-    else if (h.prg_hash != recomp_prg_hash(n->cart.prg, n->cart.prg_size))
+    else if (h.prg_hash != game_hash(n))
         ok = 0, snprintf(err, errlen, "saved with a different game");
     else if (fread(s, sizeof *s, 1, f) != 1 || s->cart.chr_size != n->cart.chr_size ||
-             (n->cart.chr_ram && fread(chr, n->cart.chr_size, 1, f) != 1))
+             (n->cart.chr_ram && fread(chr, n->cart.chr_size, 1, f) != 1) ||
+             (disk_size && fread(disk, disk_size, 1, f) != 1))
         ok = 0, snprintf(err, errlen, "file is truncated");
     fclose(f);
     if (ok) {
@@ -428,6 +439,7 @@ int nes_state_load(Nes *n, const char *path, char *err, size_t errlen) {
          * code, statistics */
         s->cart.prg = n->cart.prg;
         s->cart.chr = n->cart.chr;
+        s->cart.disk = n->cart.disk;
         s->recomp = n->recomp;
         s->misses = n->misses;
         s->steps_native = n->steps_native, s->steps_interp = n->steps_interp;
@@ -435,12 +447,14 @@ int nes_state_load(Nes *n, const char *path, char *err, size_t errlen) {
         memcpy(s->cycles_fallback, n->cycles_fallback, sizeof s->cycles_fallback);
         *n = *s;
         if (n->cart.chr_ram) memcpy(n->cart.chr, chr, n->cart.chr_size);
+        if (disk_size) memcpy(n->cart.disk, disk, disk_size);
         n->ppu.cart = n->apu.cart = &n->cart;
         n->cpu.bus = n;
         map_memory(n);
     }
     free(s);
     free(chr);
+    free(disk);
     return ok ? 0 : -1;
 }
 
