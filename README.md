@@ -35,7 +35,8 @@ inside the CMake build; it can trace a game first to find code by itself
 display settings (fullscreen, scaling, TV frame) came with M8b. Recompiled
 example games run at about 33-38x real time. PAL and Dendy games run at
 their own timing (50 Hz, the PAL APU tables), chosen from the ROM header
-(M10). See
+(M10). Famicom Disk System games run in the interpreter, with their sound
+and automatic disk-side swaps (M11). See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
@@ -99,9 +100,18 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 207 | Taito X1-005 with nametables from CHR bank bit 7 | Fudou Myouou Den |
 | 210 | Namco 175/340 | Famista '91-'94, Splatterhouse: Wanpaku Graffiti, Wagyan Land 3 |
 
-Not yet: the Famicom Disk System (and its sound) and the long tail of
-rarer boards. Other mappers are refused at load ("mapper N
-not supported yet").
+Not yet: the long tail of rarer boards. Other mappers are refused at load
+("mapper N not supported yet").
+
+### Famicom Disk System
+`.fds` disk images (with or without the 16-byte header) play in the
+interpreter; they are not recompiled yet (`nesrecomp` refuses them). They
+need the FDS BIOS (8 KB, not included): put it next to the program as
+`disksys.rom`, or set `fds_bios` in the .ini. When a game asks for another
+disk side, it is swapped in by itself (`fds_auto_disk = 0` turns that off);
+F6 puts in the next side by hand. What a game writes to its disk is kept in
+`ROM.sav`. `nes_headless` takes `--bios FILE` and `--disk F:S` (swap to side
+S at frame F).
 
 ## Downloads
 [Releases](https://github.com/Viper-Bit/famicast/releases) have builds for
@@ -178,6 +188,7 @@ hot-plug; D-pad or left stick, East = A, South = B, Back = Select, Start.
 | Key | Action |
 |-----|--------|
 | F2 / F4 | save / load state (`ROM.state`; one slot) |
+| F6 | Famicom Disk System: next disk side |
 | F10 | TV frame on/off |
 | F11 or Alt+Enter | fullscreen on/off |
 
@@ -194,6 +205,8 @@ sprite_limit = 1    # 0 = draw every sprite (less flicker; a few games glitch)
 aspect = tv         # tv = pixels as on a TV (8:7 NTSC, 1.39:1 PAL), square = square pixels
 region = auto       # auto (from the ROM header), ntsc, pal, dendy
 window_scale = 3    # starting window size
+fds_bios = disksys.rom  # FDS BIOS: next to the program or the disk image, or a full path
+fds_auto_disk = 1   # 1 = swap disk sides when a game asks
 ```
 Forcing `region`: NTSC games on `pal` run slower but usually work;
 PAL-only games on `ntsc` often freeze or jam, as on a real NTSC console.

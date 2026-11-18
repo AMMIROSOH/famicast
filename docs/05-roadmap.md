@@ -226,7 +226,7 @@ M9 (expansion audio; numbered M8a-M8d in the PRs, which clashed with M8 below):
   rates, KSL, LFOs) from the OPL/OPLL structure as emu2413 models it,
   since the wiki does not give them. 3,330 of 4,031 ROMs (97% of
   licensed); 2 games boot; 2 identical to the interpreter, audio included.
-- [ ] FDS (not a mapper: the disk system needs its own loader).
+- [x] FDS: see M11.
 
 M10 (TV regions):
 - [x] PAL and Dendy (NES 2.0 byte 12, iNES byte 9): the bus clock in
@@ -237,6 +237,23 @@ M10 (TV regions):
   auto|ntsc|pal|dendy` in the ini (`--region` in nes_headless); the window
   title names the console. NTSC unchanged (123 games bit-identical). The
   PAL CPU/PPU phase and its OAM refresh are marked shortcuts (04, 06).
+M11 (Famicom Disk System, interpreter):
+- [x] `.fds` images (FDS header or none) load as mapper 20 with the BIOS
+  (8 KB, the user's): 32 KB RAM at $6000-$DFFF, 8 KB CHR RAM, the IRQ
+  timer and drive at $4020-$4033 (`runtime/fds.c`, after Mesen2's model:
+  gaps and start marks on the disk, 50000-cycle spin-up, a byte every 149
+  cycles). Save states carry the disk (version 15); disk writes go to
+  ROM.sav.
+- [x] Disk sides: swapped automatically when a game asks (Mesen2's $4032
+  poll and $E445 header match), F6 by hand, `--disk F:S` in nes_headless.
+- [x] FDS sound in the APU: wavetable, envelopes, modulator, 2.4x an APU
+  square through a 2 kHz low-pass.
+- [x] Frontend: `fds_bios`, `fds_auto_disk` in the ini; start-up errors in
+  a message box.
+- [ ] Recompiling FDS games (code is loaded from disk into RAM, in parts):
+  per disk file, keyed by content hash. The BIOS could be recompiled
+  first.
+- [ ] Jingorou (unlicensed) stays black; Graphic Editor Hokusai jams.
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

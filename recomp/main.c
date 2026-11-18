@@ -287,6 +287,10 @@ static const char *basename_of(const char *path) {
 static int load_rom(const char *path, Cart *cart, uint8_t **file, size_t *size) {
     char err[128];
     *file = read_file(path, size);
+    if (cart_is_fds(*file, *size)) {
+        fprintf(stderr, "%s: Famicom Disk System images are not recompiled yet (they play in the interpreter, nes)\n", path);
+        return 2;
+    }
     if (cart_load(cart, *file, *size, err, sizeof err) != 0) {
         fprintf(stderr, "%s: %s\n", path, err);
         return 2;

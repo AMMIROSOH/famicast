@@ -3,6 +3,30 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · M11: Famicom Disk System
+- **Sources**: nesdev "Family Computer Disk System", "FDS disk format",
+  "FDS audio" (read: the 2.4x level, polarity, 2 kHz low-pass, $408A =
+  $E8); Mesen2's FDS code (GPL-3) for the drive timing, gap detection,
+  the automatic swap and the sound's rounding (07).
+- **Unit checks without the BIOS** (`tests/test_fds.py`): a stand-in BIOS
+  reads the first 8 bytes off a minimal disk after spin-up and the lead-in
+  gap ($80 start mark, then the disk info block); an FDS square at F =
+  $400 plays at CPU * F / 65536 / 64 (436.9 Hz); its fundamental is 2.4 /
+  sqrt(1 + (437/2000)^2) times an APU square at 15. Mutations caught: the
+  2.4 level halved, gap detection off, a 32-bit wave accumulator.
+- **Boot survey** with the real BIOS (Rev 1), all 394 local images
+  (No-Intro FDS), 2,400 frames, Start pressed every ~5 s, automatic disk
+  swaps on: 325 end on a picture, 46 on a text screen (menus, prompts),
+  22 blank, 1 jam (Graphic Editor Hokusai, unlicensed). Of 9 blanks run
+  longer (to 6,000 frames), 8 went on to their games (loading at the
+  cutoff); Jingorou (unlicensed) stays black. Before the automatic
+  swap: 279 pictures, 108 text screens (many "SET SIDE B").
+- **Frontend**: Akumajou Dracula in the window with the BIOS given by a
+  full path with spaces in the .ini; title "(FDS)". Not checked: disk
+  saves across a restart, the sound by ear.
+- **NES unchanged**: full test suite as before (3 nestest download errors:
+  expired certificate).
+
 ## 2026-11-18 · M10: PAL and Dendy
 - **Sources**: nesdev "Cycle reference chart" (clocks, lines, vblank,
   emphasis order), "APU Frame Counter", "APU Noise", "APU DMC" (PAL

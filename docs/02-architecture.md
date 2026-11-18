@@ -6,8 +6,8 @@
 3. Keep the output readable: generated C, one function per block, named by
    address (`blk_C070`), so the binary also decompiles cleanly in IDA/Ghidra.
 
-Non-goals for now: Famicom Disk System, netplay. (PAL timing and expansion
-audio, once listed here, are done: 04, 05.)
+Non-goals for now: netplay. (PAL timing, expansion audio and the Famicom
+Disk System, once listed here, are done: 04, 05; FDS games are interpreted.)
 
 ## Components
 ```
