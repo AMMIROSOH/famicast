@@ -31,6 +31,8 @@ typedef struct Nes {
     RecompFn (*recomp)(uint16_t pc, uint32_t bank);
     uint32_t *misses;     /* optional [nes_miss_slots()]: interpreted instructions
                              per (PRG bank, address); see nes_miss_slot() */
+    uint64_t *ram_code;   /* FDS with misses: RAM code interpreted, as (address,
+                             3 bytes) keys; allocated by nes_step */
     uint64_t steps_native, steps_interp, steps_interrupt;
     /* coverage: CPU cycles in recompiled code, and in the interpreter by kind */
     uint64_t cycles_native, cycles_fallback[3];
@@ -55,7 +57,8 @@ uint32_t nes_prg_bank(Nes *n, uint16_t a);  /* 8 KB PRG bank mapped at a ($8000+
 size_t nes_miss_slots(Nes *n);
 size_t nes_miss_slot(Nes *n, uint16_t a);
 /* Misses as text, the input of nesrecomp --misses: "MISS $ADDR COUNT bank B"
- * (ROM, 8 KB bank) or "MISS $ADDR COUNT (RAM)". */
+ * (ROM, 8 KB bank) or "MISS $ADDR COUNT (RAM)"; FDS RAM code with its first
+ * 3 bytes, which tell the disk file it came from: "MISS $ADDR 1 (RAM A90512)". */
 void nes_misses_write(Nes *n, FILE *f);
 /* Adds the counts of such a file to n->misses. Returns how many ROM
  * addresses of n->misses (count > 0) the file did not list, or -1 if it

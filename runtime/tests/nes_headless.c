@@ -36,6 +36,9 @@
  * --audio-hash  print an FNV-1a hash of the 16-bit audio (regression tests).
  * --region  ntsc, pal or dendy instead of what the header says.
  * --all-sprites  draw every sprite on a line, not only 8 (the sprite_limit setting).
+ * --bios    the Famicom Disk System BIOS (8 KB), for .fds images.
+ * --disk F:S  at frame F eject the disk, and insert side S (0 = disk 1 side
+ *           A, 1 = side B, ...) half a second later; may be repeated.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -119,7 +122,8 @@ static int run_frame_diff(Nes *n, Nes *ref, long frame) {
         n->cpu.yield = 1;  /* one block per step: compare after each */
         Cpu before = n->cpu;
         nes_step(n);
-        while (ref->cpu.cycles < n->cpu.cycles && !ref->cpu.jammed) cpu_step(&ref->cpu);
+        /* nes_step (ref->recomp is NULL): the interpreter, with the hooks a real run has (FDS disk check) */
+        while (ref->cpu.cycles < n->cpu.cycles && !ref->cpu.jammed) nes_step(ref);
         const char *what = compare(n, ref);
         if (!what) continue;
         printf("DIVERGENCE (%s) in frame %ld, step starting at PC=%04X%s\n", what, frame, before.pc,
@@ -262,7 +266,9 @@ int main(int argc, char **argv) {
     const char *wav = NULL;
     long press_frame[64];
     unsigned press_mask[64];
-    const char *ppm = NULL, *record = NULL, *replay = NULL, *load_state = NULL, *save_state = NULL;
+    const char *ppm = NULL, *record = NULL, *replay = NULL, *load_state = NULL, *save_state = NULL, *bios = NULL;
+    long disk_frame[16];
+    int disk_side[16], ndisk = 0;
     for (int i = rom_path ? 2 : 1; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]);
         else if (!strcmp(argv[i], "--peek") && i + 1 < argc) peek = strtol(argv[++i], NULL, 16);
@@ -288,6 +294,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--record") && i + 1 < argc) record = argv[++i];
         else if (!strcmp(argv[i], "--replay") && i + 1 < argc) replay = argv[++i];
         else if (!strcmp(argv[i], "--play") && i + 1 < argc) play_seed = atol(argv[++i]);
+        else if (!strcmp(argv[i], "--bios") && i + 1 < argc) bios = argv[++i];
+        else if (!strcmp(argv[i], "--disk") && i + 1 < argc && ndisk < 16 &&
+                 sscanf(argv[++i], "%ld:%d", &disk_frame[ndisk], &disk_side[ndisk]) == 2) ndisk++;
         else if (!strcmp(argv[i], "--out") && i + 1 < argc) {
             if (!freopen(argv[++i], "w", stdout)) { perror(argv[i]); return 2; }
         }
@@ -300,6 +309,14 @@ int main(int argc, char **argv) {
     uint8_t *rom_file = NULL;
     if (rom_path) rom = rom_file = read_file(rom_path, &size);
     else rom = recomp_program->rom, size = (long)recomp_program->rom_size, rom_path = recomp_program->rom_name;
+    if (!bios && recomp_program && recomp_program->bios)
+        cart_fds_bios(recomp_program->bios);  /* FDS builds: the embedded BIOS */
+    if (bios) {
+        long bios_size;
+        uint8_t *b = read_file(bios, &bios_size);
+        if (bios_size != 0x2000) { fprintf(stderr, "%s: not an 8 KB FDS BIOS\n", bios); return 2; }
+        cart_fds_bios(b);
+    }
     static Nes nes;
     char err[128];
     if (nes_load(&nes, rom, size, err, sizeof err) != 0) {
@@ -347,6 +364,11 @@ int main(int argc, char **argv) {
         for (int i = 0; i < npress; i++)
             if (f >= press_frame[i] && f < press_frame[i] + 6) in.pad[0] |= (uint8_t)press_mask[i];
         if (rec) input_log_write(rec, in);
+        for (int i = 0; i < ndisk; i++)
+            if (f == disk_frame[i]) {
+                cart_fds_insert(&nes.cart, disk_side[i], nes.cpu.cycles + 900000);
+                if (diff) cart_fds_insert(&ref.cart, disk_side[i], ref.cpu.cycles + 900000);
+            }
         if (in.flags & INPUT_RESET) { nes_reset(&nes); if (diff) nes_reset(&ref); }
         frames_run++;
         if (wav || audio_hash) collect_audio(&nes);

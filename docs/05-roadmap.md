@@ -235,7 +235,7 @@ M9 (expansion audio; numbered M8a-M8d in the PRs, which clashed with M8 below):
   rates, KSL, LFOs) from the OPL/OPLL structure as emu2413 models it,
   since the wiki does not give them. 3,330 of 4,031 ROMs (97% of
   licensed); 2 games boot; 2 identical to the interpreter, audio included.
-- [ ] FDS (not a mapper: the disk system needs its own loader).
+- [x] FDS: see M11.
 
 M10 (TV regions):
 - [x] PAL and Dendy (NES 2.0 byte 12, iNES byte 9): the bus clock in
@@ -246,6 +246,36 @@ M10 (TV regions):
   auto|ntsc|pal|dendy` in the ini (`--region` in nes_headless); the window
   title names the console. NTSC unchanged (123 games bit-identical). The
   PAL CPU/PPU phase and its OAM refresh are marked shortcuts (04, 06).
+M11 (Famicom Disk System, interpreter):
+- [x] `.fds` images (FDS header or none) load as mapper 20 with the BIOS
+  (8 KB, the user's): 32 KB RAM at $6000-$DFFF, 8 KB CHR RAM, the IRQ
+  timer and drive at $4020-$4033 (`runtime/fds.c`, after Mesen2's model:
+  gaps and start marks on the disk, 50000-cycle spin-up, a byte every 149
+  cycles). Save states carry the disk (version 15); disk writes go to
+  ROM.sav.
+- [x] Disk sides: swapped automatically when a game asks (Mesen2's $4032
+  poll and $E445 header match), F6 by hand, `--disk F:S` in nes_headless.
+- [x] FDS sound in the APU: wavetable, envelopes, modulator, 2.4x an APU
+  square through a 2 kHz low-pass.
+- [x] Frontend: `fds_bios`, `fds_auto_disk` in the ini; start-up errors in
+  a message box.
+- [x] The BIOS recompiled: `-DFDS_BIOS=disksys.rom` builds `fds` /
+  `fds_headless` with it embedded; nesrecomp takes the raw 8 KB BIOS
+  (explored from $E000 only, never chaining into the $E445 disk check
+  the automatic swap hooks); hints in `games/fds.toml`. 11 games identical
+  to the interpreter in `--diff` (06).
+- [x] Recompiling FDS games: `.fds` in `ROMS` (with `FDS_BIOS`). Each PRG
+  file on the disk loaded from $0200 is its own region; entries come from
+  traces, whose RAM misses carry the instruction's bytes to tell the file
+  (`ram` hints: [file FNV-1a, address]). A block runs only while RAM holds
+  its bytes: checked on entry (a block that finds other code returns
+  without running, and the dispatcher interprets), by `ram_lookup` only
+  where several files have code at the address, and after stores that may
+  hit the block. 6 games identical in `--diff`,
+  98.7-99.8% recompiled (06).
+- [x] CMake options renamed: `ROMS`, `EMBED_ROM`, `AUTO_HINTS(_FRAMES)`,
+  `FRONTEND`, `SDL3_PREFIX` (old `NES_*` cache values carry over).
+- [ ] Jingorou (unlicensed) stays black; Graphic Editor Hokusai jams.
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
   window unit: 8 KB for MMC3, 16 KB for MMC1/UxROM, 32 KB for AxROM/Color

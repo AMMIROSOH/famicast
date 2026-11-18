@@ -58,6 +58,8 @@ void apu_reset(Apu *a, Cart *cart, int power_on) {
     a->has_5b = cart && cart->mapper == 69;
     a->has_vrc6 = cart && (cart->mapper == 24 || cart->mapper == 26);
     a->has_vrc7 = cart && cart->mapper == 85 && cart->submapper != 1;
+    a->has_fds = cart && cart->mapper == 20;
+    if (power_on) a->fds.env_speed = 0xE8;  /* as the BIOS sets it */
     if (power_on)
         for (int i = 0; i < 6; i++) a->vrc7.op[i][0].env = a->vrc7.op[i][1].env = 127;
     if (power_on) a->vrc6.step[0] = a->vrc6.step[1] = 15;
@@ -197,11 +199,18 @@ static void dmc_clock(Apu *a) {
     }
 }
 
+/* a silent pulse or noise channel: its timer steps leave mix() unchanged */
+static int env_volume(const Envelope *e) { return e->constant ? e->period : e->decay; }
+
 static void timers(Apu *a) {
     if (a->cycle & 1) {  /* pulse timers run on APU cycles (every other CPU cycle) */
         for (int i = 0; i < 2; i++) {
             Pulse *p = &a->pulse[i];
-            if (p->timer == 0) { p->timer = p->period; p->seq = (p->seq + 1) & 7; a->mix_dirty = 1; }
+            if (p->timer == 0) {
+                p->timer = p->period;
+                p->seq = (p->seq + 1) & 7;
+                if (p->len && env_volume(&p->env)) a->mix_dirty = 1;
+            }
             else p->timer--;
         }
     }
@@ -217,13 +226,14 @@ static void timers(Apu *a) {
         n->timer = n->period;
         uint16_t fb = (n->lfsr ^ (n->lfsr >> (n->mode ? 6 : 1))) & 1;
         n->lfsr = (uint16_t)(n->lfsr >> 1 | fb << 14);
-        a->mix_dirty = 1;
+        if (n->len && env_volume(&n->env)) a->mix_dirty = 1;
     }
     Dmc *d = &a->dmc;
     if (--d->timer == 0) {
         d->timer = d->period;
+        uint8_t level = d->level;
         dmc_clock(a);
-        a->mix_dirty = 1;
+        if (d->level != level) a->mix_dirty = 1;
     }
 }
 
@@ -310,6 +320,15 @@ static float mix(Apu *a) {
 static void output(Apu *a) {
     if (a->mix_dirty) a->mix_last = mix(a), a->mix_dirty = 0;
     a->acc += a->mix_last;
+    /* FDS: its ~2 kHz low-pass (1 pole) every cycle; full volume (63) about
+     * 2.4x an APU square at 15, same polarity (nesdev "FDS audio") */
+    if (a->has_fds) {
+        a->fds.lp += 0.0069966f * ((float)a->fds.out - a->fds.lp);  /* 1 - e^(-2 pi 2000 / 1789773) */
+        /* silent channel: the decay would stop on a denormal (x * 0.993 rounds
+         * back to x), and denormal math every cycle made FDS games 2.5x slower */
+        if (a->fds.lp < 1e-6f && a->fds.lp > -1e-6f) a->fds.lp = 0;
+        a->acc += 2.4f * 0.1494f / 63.0f * a->fds.lp;
+    }
     a->acc_n++;
     a->frac += APU_SAMPLE_RATE;
     if (a->frac < a->cpu_hz) return;
@@ -405,6 +424,120 @@ static void vrc6_clock(Apu *a) {
         else if (!(v->acc_clock & 1)) v->acc = (uint8_t)(v->acc + (v->reg[2][0] & 0x3F));
         a->mix_dirty = 1;
     }
+}
+
+/* ---- FDS (nesdev "FDS audio"; the envelope, modulator and rounding as
+ * Mesen2's FdsAudio and ModChannel, GPL-3 like this program) ---- */
+static const uint8_t FDS_MASTER[4] = {36, 24, 17, 14};          /* full, 2/3, 2/4, 2/5 */
+static const int8_t FDS_MOD_STEP[8] = {0, 1, 2, 4, 0, -4, -2, -1};  /* step 4 resets the counter */
+
+static void fds_env_reset(const FdsAudio *f, FdsEnvelope *e) { e->timer = 8u * (e->speed + 1u) * f->env_speed; }
+
+static int fds_env_tick(const FdsAudio *f, FdsEnvelope *e) {
+    if (e->off || !f->env_speed || --e->timer) return 0;
+    fds_env_reset(f, e);
+    if (e->up && e->gain < 32) e->gain++;
+    else if (!e->up && e->gain > 0) e->gain--;
+    return 1;
+}
+
+static void fds_set_counter(FdsAudio *f, int v) {
+    if (v >= 64) v -= 128;
+    else if (v < -64) v += 128;
+    f->mod_counter = (int8_t)v;
+}
+
+/* The pitch change: counter x gain, then x the wave's pitch, with the
+ * hardware's odd rounding (nesdev "FDS audio", frequency modulation). */
+static void fds_mod_update(FdsAudio *f) {
+    int32_t t = f->mod_counter * f->mod.gain, rem = t & 0xF;
+    t >>= 4;
+    if (rem > 0 && !(t & 0x80)) t += f->mod_counter < 0 ? -1 : 2;
+    if (t >= 192) t -= 256;
+    else if (t < -64) t += 256;
+    t *= f->vol.freq;
+    rem = t & 0x3F;
+    t >>= 6;
+    f->mod_out = t + (rem >= 32);
+}
+
+static void fds_clock(Apu *a) {
+    FdsAudio *f = &a->fds;
+    if (!f->halt && !f->env_halt) {
+        fds_env_tick(f, &f->vol);
+        if (fds_env_tick(f, &f->mod)) fds_mod_update(f);
+    }
+    if (!f->mod_off && f->mod.freq) {
+        f->mod_acc = (uint16_t)(f->mod_acc + f->mod.freq);
+        if (f->mod_acc < f->mod.freq) {  /* overflow: the next modulator step */
+            int step = f->mod_table[f->mod_pos];
+            fds_set_counter(f, step == 4 ? 0 : f->mod_counter + FDS_MOD_STEP[step]);
+            f->mod_pos = (f->mod_pos + 1) & 63;
+            fds_mod_update(f);
+        }
+    }
+    if (!f->wave_write) {  /* while the wave RAM is writable the output holds */
+        int gain = f->vol.gain < 32 ? f->vol.gain : 32;
+        f->out = (uint8_t)(f->wave[f->wave_pos] * gain * FDS_MASTER[f->master] / 1152);
+    }
+    int pitch = f->vol.freq + f->mod_out;
+    if (!f->halt && pitch > 0) {
+        f->wave_acc = (uint16_t)(f->wave_acc + pitch);
+        if (f->wave_acc < pitch) f->wave_pos = (f->wave_pos + 1) & 63;
+    }
+}
+
+void apu_fds_write(Apu *a, uint16_t addr, uint8_t v) {
+    FdsAudio *f = &a->fds;
+    if (addr < 0x4080) {
+        if (f->wave_write) f->wave[addr & 63] = v & 63;
+        return;
+    }
+    switch (addr) {
+    case 0x4080: case 0x4084: {
+        FdsEnvelope *e = addr == 0x4080 ? &f->vol : &f->mod;
+        e->speed = v & 63;
+        e->up = (v >> 6) & 1;
+        e->off = v >> 7;
+        fds_env_reset(f, e);  /* a write restarts the envelope's timer */
+        if (e->off) e->gain = e->speed;
+        fds_mod_update(f);
+        break;
+    }
+    case 0x4082: f->vol.freq = (uint16_t)((f->vol.freq & 0xF00) | v); fds_mod_update(f); break;
+    case 0x4083:
+        f->env_halt = (v >> 6) & 1;
+        f->halt = v >> 7;
+        if (f->halt) f->wave_pos = 0;
+        if (f->env_halt) fds_env_reset(f, &f->vol), fds_env_reset(f, &f->mod);
+        f->vol.freq = (uint16_t)((f->vol.freq & 0xFF) | (v & 15) << 8);
+        fds_mod_update(f);
+        break;
+    case 0x4085: fds_set_counter(f, v & 0x7F); fds_mod_update(f); break;
+    case 0x4086: f->mod.freq = (uint16_t)((f->mod.freq & 0xF00) | v); break;
+    case 0x4087:
+        f->mod.freq = (uint16_t)((f->mod.freq & 0xFF) | (v & 15) << 8);
+        f->mod_off = v >> 7;
+        if (f->mod_off) f->mod_acc = 0;
+        break;
+    case 0x4088:  /* table writes only while the modulator is off; each fills two steps */
+        if (f->mod_off) {
+            f->mod_table[f->mod_pos] = f->mod_table[(f->mod_pos + 1) & 63] = v & 7;
+            f->mod_pos = (f->mod_pos + 2) & 63;
+        }
+        break;
+    case 0x4089: f->master = v & 3; f->wave_write = v >> 7; break;
+    case 0x408A: f->env_speed = v; break;
+    default: break;
+    }
+}
+
+uint8_t apu_fds_read(const Apu *a, uint16_t addr, uint8_t open_bus) {
+    const FdsAudio *f = &a->fds;
+    if (addr <= 0x407F) return (uint8_t)((open_bus & 0xC0) | f->wave[f->wave_write ? addr & 63 : f->wave_pos]);
+    if (addr == 0x4090) return (uint8_t)((open_bus & 0xC0) | f->vol.gain);
+    if (addr == 0x4092) return (uint8_t)((open_bus & 0xC0) | f->mod.gain);
+    return open_bus;
 }
 
 /* ---- VRC7 (nesdev "VRC7 audio" for the registers, patches and
@@ -518,8 +651,51 @@ static void vrc7_clock(Apu *a) {
     if (!s->silent) vrc7_sample(a);
 }
 
+/* How many of the next cycles (up to target) change nothing but timer
+ * counts, the frame counter's count and the output sum: no timer reaching
+ * its event, no frame counter step, no output sample, mixer up to date.
+ * 0 with expansion sound (its own per-cycle clocks). */
+static int64_t quiet_cycles(const Apu *a, uint64_t target) {
+    if (a->mix_dirty || a->fc_delay || a->has_mmc5 || a->has_5b || a->has_vrc6 || a->has_vrc7 || a->has_fds ||
+        (a->cart && a->cart->n163_sound))
+        return 0;
+    /* e: the first of the next cycles (1 = the next one) with an event */
+    int64_t e = (int64_t)(target - a->cycle) + 1;
+    int64_t first_odd = (a->cycle + 1) & 1 ? 1 : 2;  /* pulses tick on odd cycles */
+    for (int i = 0; i < 2; i++) {
+        int64_t p = first_odd + 2 * (int64_t)a->pulse[i].timer;  /* the tick that finds 0 */
+        if (p < e) e = p;
+    }
+    if (a->tri.timer + 1 < e) e = a->tri.timer + 1;
+    if (a->noise.timer < e) e = a->noise.timer ? a->noise.timer : 1;  /* --timer == 0 */
+    if (a->dmc.timer < e) e = a->dmc.timer ? a->dmc.timer : 1;
+    const int32_t *s = FC_STEP[a->pal];
+    int32_t steps[6] = {s[0], s[1], s[2], a->fc_mode ? s[4] : s[3], a->fc_mode ? 1 : s[3] + 1, s[3] + 2};
+    for (int i = 0; i < 6; i++)
+        if (steps[i] > a->fc_count && steps[i] - a->fc_count < e) e = steps[i] - a->fc_count;
+    if (a->fc_count < 0) e = 1;  /* not expected; let the slow path handle it */
+    int64_t sample = (a->cpu_hz - a->frac + APU_SAMPLE_RATE - 1) / APU_SAMPLE_RATE;  /* frac crosses cpu_hz */
+    if (sample < e) e = sample;
+    return e - 1;
+}
+
 void apu_run(Apu *a, uint64_t target) {
     while (a->cycle < target) {
+        int64_t k = quiet_cycles(a, target);
+        if (k > 0) {  /* what k one-cycle steps below would do */
+            int ticks = (int)((a->cycle + k + 1) / 2 - (a->cycle + 1) / 2);  /* odd cycles in (cycle, cycle + k] */
+            a->pulse[0].timer = (uint16_t)(a->pulse[0].timer - ticks);
+            a->pulse[1].timer = (uint16_t)(a->pulse[1].timer - ticks);
+            a->tri.timer = (uint16_t)(a->tri.timer - k);
+            a->noise.timer = (uint16_t)(a->noise.timer - k);
+            a->dmc.timer = (uint16_t)(a->dmc.timer - k);
+            a->fc_count += (int32_t)k;
+            for (int64_t i = 0; i < k; i++) a->acc += a->mix_last;  /* one add per cycle: the same sum */
+            a->acc_n += (int)k;
+            a->frac += APU_SAMPLE_RATE * k;
+            a->cycle += (uint64_t)k;
+            continue;
+        }
         a->cycle++;
         frame_counter(a);
         timers(a);
@@ -528,6 +704,7 @@ void apu_run(Apu *a, uint64_t target) {
         if (a->has_5b) s5b_clock(a);
         if (a->has_vrc6) vrc6_clock(a);
         if (a->has_vrc7) vrc7_clock(a);
+        if (a->has_fds) fds_clock(a);
         output(a);
     }
 }

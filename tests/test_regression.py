@@ -1,4 +1,4 @@
-"""Frame-hash regression suite: each recompiled game built here (-DNES_GAMES,
+"""Frame-hash regression suite: each recompiled game built here (-DROMS,
 ROM embedded) plays the same scripted session; the last frame, CPU cycle
 count and audio must hash to the recorded values (tests/data/frame_hashes.json).
 
@@ -21,7 +21,7 @@ FRAMES = 3000
 
 
 def built_games():
-    """{name: PRG hash} of the games this build recompiles (-DNES_GAMES)."""
+    """{name: PRG hash} of the games this build recompiles (-DROMS)."""
     games = {}
     listing = os.path.join(BUILD, "nes_games.txt")
     names = open(listing).read().split() if os.path.exists(listing) else []
@@ -46,7 +46,7 @@ class TestFrameHashes(unittest.TestCase):
     def test_games(self):
         games = built_games()
         if not games:
-            self.skipTest("no recompiled games in the build (-DNES_GAMES=...)")
+            self.skipTest("no recompiled games in the build (-DROMS=...)")
         known = {}
         if os.path.exists(DATA):
             with open(DATA) as f:

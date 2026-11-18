@@ -67,7 +67,7 @@ def main():
 
     # 2. the programs, against that SDL3
     build = os.path.join(work, "build")
-    cmake_build(ROOT, build, "-DNES_SDL3_PREFIX=" + os.path.join(kit, "sdl3"))
+    cmake_build(ROOT, build, "-DSDL3_PREFIX=" + os.path.join(kit, "sdl3"))
 
     # 3. stage
     for prog in ("nes", "nes_headless", "nesrecomp"):
@@ -86,7 +86,7 @@ def main():
     rom = os.path.join(work, "kit_check.nes")
     tiny_rom(rom)
     kit_build = os.path.join(work, "kit-build")
-    cmake_build(kit, kit_build, "-DNES_GAMES=" + rom)
+    cmake_build(kit, kit_build, "-DROMS=" + rom)
     run(os.path.join(kit_build, "kit_check_headless" + EXE), "--frames", "30")
     run(os.path.join(stage, "nes_headless" + EXE), rom, "--frames", "30")
 

@@ -21,7 +21,8 @@ On macOS, remove the download quarantine once before the first run:
 PLAYING
 
 Keyboard: arrows, X = A, Z = B, Enter = Start, Right Shift = Select,
-F5 = reset, F2 / F4 = save / load state, F10 = TV frame,
+F5 = reset, F2 / F4 = save / load state, F6 = next disk side (FDS),
+F10 = TV frame,
 F11 or Alt+Enter = fullscreen, Esc = quit.
 Gamepads work too (first = player 1, second = player 2).
 Display settings are in nes.ini next to the program, created on first run.
@@ -38,7 +39,7 @@ natively. You need CMake 3.20 or newer and a C compiler:
 
 From the folder this file is in:
 
-  cmake -S kit -B build -DNES_GAMES="/path/to/My Game.nes"
+  cmake -S kit -B build -DROMS="/path/to/My Game.nes"
   cmake --build build --config Release
 
 The program is build/my_game (build/my_game.exe on Windows), plus
@@ -48,12 +49,19 @@ A relative path is relative to the folder you run cmake from.
 Code the recompiler cannot find on its own runs in the interpreter. Two
 things recompile more of it:
   - the build plays each game for a while first (scripted, about 6 seconds)
-    and recompiles everything that ran; -DNES_AUTO_HINTS=OFF skips this;
+    and recompiles everything that ran; -DAUTO_HINTS=OFF skips this;
   - your own play: the game notes code it had to interpret in
     build/my_game.misses, and the next
     "cmake --build build --config Release" recompiles it.
 
 DO NOT SHARE RECOMPILED PROGRAMS: they contain the game.
+
+Famicom Disk System: .fds images play in nes with the FDS BIOS (8 KB, not
+included) next to it as disksys.rom (or fds_bios in nes.ini). The kit
+recompiles them like the others, given the BIOS:
+  cmake -S kit -B build -DROMS="/path/to/Disk Game.fds" -DFDS_BIOS="/path/to/disksys.rom"
+The program carries the BIOS too (and build/fds, which plays any .fds
+image with only the BIOS recompiled). Do not share them either.
 
 Supported mappers and more: see the project page above.
 

@@ -4,9 +4,12 @@
 
 #define RENDERING(p) ((p)->mask & 0x18)
 
+static void spread_table(void);
+
 void ppu_reset(Ppu *p, Cart *cart) {
     memset(p, 0, sizeof *p);
     p->cart = cart;
+    spread_table();
     /* PAL and Dendy (nesdev "Cycle reference chart"): 312 lines (341 x 312
      * dots, so no odd-frame skip), 70 or 20 vblank lines after NMI (Dendy:
      * 51 post-render lines first). shortcut: the 2C07 refreshes OAM from
@@ -92,10 +95,10 @@ static inline uint8_t bg_pattern(Ppu *p, uint16_t a) {
     return p->cart->mapper == 5 ? cart_mmc5_bg_read(p->cart, a, p->v) : mem_read(p, a);
 }
 
-static void fetch_step(Ppu *p) {
+static inline void fetch_step_at(Ppu *p, int phase) {
     uint16_t bg_table = (p->ctrl & 0x10) ? 0x1000 : 0;
     uint16_t fine_y = (p->v >> 12) & 7;
-    switch ((p->dot - 1) & 7) {
+    switch (phase) {
     case 0:
         load_shifters(p);
         p->nt_byte = mem_read(p, 0x2000 | (p->v & 0x0FFF));
@@ -113,6 +116,8 @@ static void fetch_step(Ppu *p) {
     case 7: inc_x(p); break;
     }
 }
+
+static void fetch_step(Ppu *p) { fetch_step_at(p, (p->dot - 1) & 7); }
 
 /* ---- sprites (nesdev "PPU sprite evaluation") ----
  * Dots 1-64 clear secondary OAM; dots 65-256 copy up to 8 in-range sprites,
@@ -132,8 +137,7 @@ static int y_in_range(Ppu *p, uint8_t y) {
     return row >= 0 && row < ((p->ctrl & 0x20) ? 16 : 8);
 }
 
-static void evaluation_dot(Ppu *p) {
-    int dot = p->dot;
+static void evaluation_dot(Ppu *p, int dot) {
     if (dot <= 64) {
         if (!(dot & 1)) p->sec_oam[(dot - 1) >> 1] = 0xFF;
         return;
@@ -306,7 +310,7 @@ void ppu_step(Ppu *p) {
         if (dot == 256) inc_y(p);
         if (dot == 257) { load_shifters(p); copy_x(p); }
         if (pre && dot >= 280 && dot <= 304) copy_y(p);
-        if (visible && dot >= 1 && dot <= 256) evaluation_dot(p);
+        if (visible && dot >= 1 && dot <= 256) evaluation_dot(p, dot);
         if (pre && dot == 257) p->sp_zero_next = 0;
         if (dot >= 257 && dot <= 320) sprite_fetch_dot(p);
         if (dot == 337 || dot == 339) mem_read(p, 0x2000 | (p->v & 0x0FFF));  /* unused NT fetches */
@@ -343,6 +347,15 @@ void ppu_step(Ppu *p) {
  * without its checks for other lines and dots. Nothing the checks guard can
  * change inside one ppu_run call (no CPU access in between): mask, ctrl and
  * the vblank flag stay as they are. */
+/* SPREAD[b]: byte j = bit 7 - j of b (pixel j of a tile row in byte j) */
+static uint64_t SPREAD[256];
+
+static void spread_table(void) {
+    if (SPREAD[1]) return;  /* built */
+    for (int b = 0; b < 256; b++)
+        for (int j = 0; j < 8; j++) SPREAD[b] |= (uint64_t)((b >> (7 - j)) & 1) << (8 * j);
+}
+
 static void visible_dots(Ppu *p, int n) {
     /* render_pixel with the mask decoded once; pixels go to a local line
      * first (stores into p->fb could alias every PPU field) */
@@ -353,15 +366,105 @@ static void visible_dots(Ppu *p, int n) {
     const uint16_t emph = emphasis(p);
     const int first = p->dot - 1;
     uint16_t line[256];
+    /* tile path: the palette with greyscale and emphasis applied; sprite 0
+     * hits collected here (a store to p->status would make the compiler
+     * reload every PPU field each pixel) */
+    static const uint8_t no_sprites[8];
+    uint16_t pal[32];
+    for (int i = 0; i < 32; i++) pal[i] = (uint16_t)((p->pal[i] & grey) | emph);
+    const int fine_x = p->fine_x;
+    int hit = 0;
+    /* no mapper watches or changes the PPU's background fetches */
+    const Cart *cart = p->cart;
+    const int plain = !cart_is_mmc3(cart) && cart->mapper != 5 && cart->mapper != 9 && cart->mapper != 10 &&
+                      !cart_custom_nt(cart);
+    /* sprite evaluation touches nothing the fetches and pixels use: run it
+     * for the whole span first; once all 64 sprites are examined only its
+     * reads go on, always of the same OAM byte */
+    for (int dot = p->dot, end = p->dot + n; dot < end; dot++) {
+        if (dot <= 64) {  /* clearing secondary OAM: even dots */
+            int stop = end < 65 ? end : 65;
+            for (int d = dot + (dot & 1); d < stop; d += 2) p->sec_oam[(d - 1) >> 1] = 0xFF;
+            dot = stop - 1;
+            continue;
+        }
+        /* a sprite not on this line: checked on an even dot, the next read on the odd one */
+        while (dot >= 66 && !(dot & 1) && dot + 1 < end && !p->ev_done && p->ev_found < 32 && !p->ev_copying &&
+               !y_in_range(p, p->ev_buf)) {
+            p->sec_oam[p->ev_found] = p->ev_buf;
+            p->ev_n = (p->ev_n + 1) & 63;
+            if (!p->ev_n) p->ev_done = 1;
+            p->ev_buf = p->oam[(p->ev_n * 4 + p->ev_m) & 0xFF];
+            dot += 2;
+        }
+        if (dot >= end) break;
+        if (p->ev_done && dot > 65) {
+            if ((dot | 1) < end) p->ev_buf = p->oam[(p->ev_n * 4 + p->ev_m) & 0xFF];  /* an odd (read) dot left */
+            break;
+        }
+        evaluation_dot(p, dot);
+    }
     for (; n > 0; n--) {
         int dot = p->dot, x = dot - 1;
+        if (n >= 8 && !(x & 7)) {
+            /* a whole tile: the fetches at their dots (p->dots as the
+             * mapper sees them), then 8 pixels from the shifters as loaded */
+            uint64_t dots = p->dots;
+            if (bg_on && dot >= 2) { p->bg_lo <<= 1; p->bg_hi <<= 1; p->at_lo <<= 1; p->at_hi <<= 1; }
+            if (plain) {  /* what fetch_step does, without the mapper hooks */
+                Cart *c = p->cart;
+                load_shifters(p);
+                p->nt_byte = p->nt[cart_nt_index(c, p->v)];
+                uint8_t at = p->nt[cart_nt_index(c, 0x23C0 | (p->v & 0x0C00) | ((p->v >> 4) & 0x38) | ((p->v >> 2) & 0x07))];
+                if (p->v & 0x40) at >>= 4;
+                if (p->v & 0x02) at >>= 2;
+                p->at_bits = at & 3;
+                uint16_t row = (uint16_t)(((p->ctrl & 0x10) ? 0x1000 : 0) + p->nt_byte * 16 + ((p->v >> 12) & 7));
+                p->pt_lo = cart_chr_read(c, row);
+                p->pt_hi = cart_chr_read(c, (uint16_t)(row + 8));
+            } else {
+                p->dots = dots + 1;
+                fetch_step_at(p, 0);
+                p->dots = dots + 3;
+                fetch_step_at(p, 2);
+                p->dots = dots + 5;
+                fetch_step_at(p, 4);
+                p->dots = dots + 7;
+                fetch_step_at(p, 6);
+            }
+            p->dots = dots + 8;
+            inc_x(p);
+            if (dot + 7 == 256) inc_y(p);
+            /* the tile's 8 pixels, bit 7 first: bit 15 - fine_x - j of each shifter */
+            const int keep = bg_on && (x >= 8 || bg_left), shift = 8 - fine_x;
+            const unsigned blo = keep ? (uint8_t)(p->bg_lo >> shift) : 0, bhi = keep ? (uint8_t)(p->bg_hi >> shift) : 0;
+            const unsigned alo = (uint8_t)(p->at_lo >> shift), ahi = (uint8_t)(p->at_hi >> shift);
+            const uint8_t *sl = (sp_on && (x >= 8 || sp_left)) ? p->sp_line + x : no_sprites;
+            uint64_t sprites;
+            memcpy(&sprites, sl, 8);
+            if (!sprites) {  /* background only: the 8 palette indices at once, a byte each */
+                uint64_t idx = SPREAD[blo] | SPREAD[bhi] << 1 | SPREAD[alo] << 2 | SPREAD[ahi] << 3;
+                idx &= SPREAD[blo | bhi] * 0xFF;  /* transparent: index 0 */
+                for (int j = 0; j < 8; j++) line[x + j] = pal[(idx >> (8 * j)) & 0x1F];
+            } else for (int j = 0; j < 8; j++) {
+                int k = 7 - j;
+                unsigned bg = ((blo >> k) & 1) | ((bhi >> k) & 1) << 1, bg_pal = ((alo >> k) & 1) | ((ahi >> k) & 1) << 1;
+                unsigned s = sl[j], sp = s & 3;
+                hit |= (s & 0x40) && bg && x + j != 255;  /* sprite 0 hit */
+                unsigned idx = (!sp || (bg && (s & 0x20))) ? (bg ? bg_pal * 4 + bg : 0) : ((s >> 2) & 7) * 4 + sp;
+                line[x + j] = pal[idx];
+            }
+            if (bg_on) { p->bg_lo <<= 7; p->bg_hi <<= 7; p->at_lo <<= 7; p->at_hi <<= 7; }
+            p->dot = dot + 8;
+            n -= 7;
+            continue;
+        }
         p->dots++;
         if (bg_on && dot >= 2) {
             p->bg_lo <<= 1; p->bg_hi <<= 1; p->at_lo <<= 1; p->at_hi <<= 1;
         }
         fetch_step(p);
         if (dot == 256) inc_y(p);
-        evaluation_dot(p);
         uint8_t bg = 0, bg_pal = 0;
         if (bg_on && (x >= 8 || bg_left)) {
             uint16_t bit = 0x8000 >> p->fine_x;
@@ -375,6 +478,7 @@ static void visible_dots(Ppu *p, int n) {
         line[x] = (uint16_t)((p->pal[idx] & grey) | emph);
         p->dot = dot + 1;
     }
+    if (hit && p->sp_zero_on_line) p->status |= 0x40;
     memcpy(p->fb + p->scanline * 256 + first, line + first, (size_t)(p->dot - 1 - first) * sizeof line[0]);
     p->rendering_prev = 1;
     p->nmi_out = (p->status & 0x80) && (p->ctrl & 0x80);
@@ -398,6 +502,22 @@ void ppu_run(Ppu *p, int k) {
             p->rendering_prev = RENDERING(p) != 0;
             p->nmi_out = (p->status & 0x80) && (p->ctrl & 0x80);
             p->dots += (uint64_t)n;
+            k -= n;
+            continue;
+        }
+        if ((line < 240 || line == p->pre_line) && p->dot >= 258 && p->dot <= 320 && RENDERING(p)) {
+            /* sprite fetches: what ppu_step does at these dots (and copy_y on the
+             * pre-render line); no shifts, no background fetches, no pixels */
+            int n = 321 - p->dot;
+            if (n > k) n = k;
+            for (int i = 0; i < n; i++) {
+                p->dots++;
+                if (line == p->pre_line && p->dot >= 280 && p->dot <= 304) copy_y(p);
+                sprite_fetch_dot(p);
+                p->dot++;
+            }
+            p->rendering_prev = 1;
+            p->nmi_out = (p->status & 0x80) && (p->ctrl & 0x80);
             k -= n;
             continue;
         }

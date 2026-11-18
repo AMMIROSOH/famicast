@@ -3,6 +3,119 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · FDS: one RAM check per block, O(1) RAM lookup
+- **Profile** (recompiled Zelda no Densetsu): `ram_lookup` 12.7% (a binary
+  search over ~10,000 entries on every dispatch; MSVC has no musttail, so
+  every block returns to the dispatcher), the APU with FDS sound ~35%.
+- **Changes**: a block's entry check is the only RAM check where one file
+  has code at the address (a block that finds other code returns without
+  running; the dispatcher then interprets); an address -> first entry
+  index built once replaces the binary search.
+- **Result**: Zelda recompiled 20.7x -> 23.9x real time (interpreted
+  23.1x); `--diff` identical on its own disk (6,000 frames, 99.4%) and on
+  Metroid's (3,000 frames: blocks refusing other code).
+- **Not done**: the FDS channel and its low-pass every cycle (most of the
+  APU's share for FDS games). Skipping it while silent gained nothing in
+  Zelda (its channel plays); cheaper filter math would change the output
+  bits.
+
+## 2026-11-18 · Profiling: PPU and APU fast paths (bit-identical)
+- **Profile** (a sampling profiler on a /Zi Release build, recompiled Air
+  Fortress): PPU ~70%, APU ~20%, recompiled game code ~5%.
+- **Changes**: APU: runs of cycles with no timer event, frame counter step
+  or output sample are stepped at once (`quiet_cycles`; one float add per
+  cycle stays, so the sums are the same); silent pulse/noise steps and DMC
+  steps that leave the level no longer recompute the mixer. PPU: visible
+  lines a tile (8 dots) at a time: the four fetches at their dots, then 8
+  pixels; for background-only tiles the 8 palette indices come from a
+  table in one 64-bit word (SWAR); cartridges no mapper watches fetch
+  nametables and CHR directly; sprite evaluation in its own loop, with
+  off-line sprites two dots per step and nothing after the 64th; dots
+  258-320 (sprite fetches) skip ppu_step's checks.
+- **Same output**: frame and audio hashes (`--play 1/2`, 2,000-3,000
+  frames) unchanged for 27 games (mappers 0, 1, 2, 3, 4, 5, 7, 23, 69, 71,
+  FDS) against the build before; test suite as before; Zelda no Densetsu
+  `--diff` identical.
+- **Speed** (20,000 frames): Air Fortress 16.3x -> 33.1x real time
+  interpreted, 17.2x -> 34.8x recompiled (Mesen2's test runner: 6.3x).
+  Zelda no Densetsu 15.8x -> 23.5x interpreted, 14.6x -> 20.7x recompiled
+  (still slower than the interpreter: the RAM checks).
+
+## 2026-11-18 · Speed, and FDS denormals
+- **FDS 2.5x slower than NES games**: Zelda no Densetsu ran 6,000 frames
+  in 15.7 s in the interpreter (Air Fortress: 6.1 s), the recompiled build
+  no faster. The FDS output low-pass (every CPU cycle) decays to a
+  denormal while the channel is silent and stays there (x * 0.993 rounds
+  back to x). Flushed to 0 below 1e-6: 6.3 s.
+- **Headless speed, 6,000 frames, no input** (Release, MSVC): Air Fortress
+  16.3x real time interpreted, 17.2x recompiled (99.98%); Zelda no
+  Densetsu 15.8x interpreted, 14.6x recompiled (99.6%: the RAM checks
+  cost more than they save there). Most of the time is not the CPU.
+- **Mesen2** (`--testrunner` with a Lua script counting 20,000 frames,
+  which keeps its debugger on): Air Fortress 52.9 s (6.3x real time)
+  against 22.1 s / 20.6 s here. FDS images do not start in its test
+  runner (it stops at its 100 s limit), so no FDS comparison.
+
+## 2026-11-18 · M11: FDS games recompiled (per disk file)
+- **Build**: `-DROMS=<6 .fds>;Air Fortress -DFDS_BIOS=<Rev 1> -DFRONTEND=OFF`,
+  auto hints (6,000 frames, seed 1). Code found in 3-10 disk files per
+  game (2,445-7,686 instructions; Zelda 2,519 in 6 of 26 files).
+- **Lockstep** (`NAME_headless --play 7 --frames 6000 --diff --coverage`):
+  all identical. Recompiled share of CPU cycles: Zelda no Densetsu 99.44%,
+  Metroid (Rev 1) 99.77%, Akumajou Dracula 99.56%, Ai Senshi Nicol 98.73%,
+  Relics 99.04%, Link no Bouken (Rev 1) 99.75% (the rest is mostly
+  interrupt entry, always interpreted); with the BIOS alone it was 12-78%.
+  Air Fortress (NES) unchanged: identical, 99.97%.
+- **Other disks in a game's build** (Zelda's program, `--play 3`, 3,000
+  frames): Metroid and Relics identical, 24% / 51% recompiled (BIOS, and
+  blocks whose bytes happen to match). With the RAM checks removed
+  (dispatcher and block entry), the Metroid run did not finish in 590 s
+  (110 s with them). Removing only the entry checks changed nothing in
+  this run: chained entries into replaced code were not exercised.
+
+## 2026-11-18 · M11: the FDS BIOS recompiled
+- **Build**: `-DFDS_BIOS` with the Rev 1 BIOS: 1,990 instructions found
+  statically from the three vectors; 26 more entry points from tracing 25
+  games in the interpreter (6,000 frames of `--play` each) went to
+  `games/fds.toml`.
+- **Lockstep** (`fds_headless GAME --play 7 --frames 6000 --diff`):
+  identical to the interpreter for Ai Senshi Nicol, Puyo Puyo (Disk
+  Writer), Exciting Billiard, Fuuun Shourin Ken, Zelda no Densetsu, Link
+  no Bouken, Santa Claus no Takarabako, Relics, Metroid (Rev 1); Akumajou
+  Dracula and Baseball for 3,000 frames. Recompiled share of CPU cycles
+  12-78% (the rest is the games' code in RAM); BIOS code still
+  interpreted 0-0.8% (Relics 0.80%, Dracula 0.12%, most 0).
+- **Found on the way**: the diff's reference machine stepped the CPU
+  directly, so it skipped the $E445 disk-check hook and never swapped
+  disks; every game that swaps "diverged" at $E451. It now steps through
+  nes_step with its recompiled code off (the same hooks as a real run).
+  Recompiled code also no longer chains into $E445, or the swap would be
+  skipped in recompiled builds. NES games unaffected: Air Fortress
+  identical (3,000 frames, 99.98% recompiled), test suite as before.
+
+## 2026-11-18 · M11: Famicom Disk System
+- **Sources**: nesdev "Family Computer Disk System", "FDS disk format",
+  "FDS audio" (read: the 2.4x level, polarity, 2 kHz low-pass, $408A =
+  $E8); Mesen2's FDS code (GPL-3) for the drive timing, gap detection,
+  the automatic swap and the sound's rounding (07).
+- **Unit checks without the BIOS** (`tests/test_fds.py`): a stand-in BIOS
+  reads the first 8 bytes off a minimal disk after spin-up and the lead-in
+  gap ($80 start mark, then the disk info block); an FDS square at F =
+  $400 plays at CPU * F / 65536 / 64 (436.9 Hz); its fundamental is 2.4 /
+  sqrt(1 + (437/2000)^2) times an APU square at 15. Mutations caught: the
+  2.4 level halved, gap detection off, a 32-bit wave accumulator.
+- **Boot survey** with the real BIOS (Rev 1), all 394 local images
+  (No-Intro FDS), 2,400 frames, Start pressed every ~5 s, automatic disk
+  swaps on: 325 end on a picture, 46 on a text screen (menus, prompts),
+  22 blank, 1 jam (Graphic Editor Hokusai, unlicensed). Of 9 blanks run
+  longer (to 6,000 frames), 8 went on to their games (loading at the
+  cutoff); Jingorou (unlicensed) stays black. Before the automatic
+  swap: 279 pictures, 108 text screens (many "SET SIDE B").
+- **Frontend**: Akumajou Dracula in the window with the BIOS given by a
+  full path with spaces in the .ini; title "(FDS)". Not checked: disk
+  saves across a restart, the sound by ear.
+- **NES unchanged**: full test suite as before (3 nestest download errors:
+  expired certificate).
 ## 2026-11-18 · M7l: 36 more boards
 - **Survey** (the local No-Intro set, 4,031 ROMs): 701 were refused before,
   583 now. Licensed (no Unl/Pirate tag): 2,785 of 2,793 load (99.7%); the

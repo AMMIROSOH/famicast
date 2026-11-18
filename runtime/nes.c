@@ -139,6 +139,10 @@ static uint8_t read_no_tick(Nes *n, uint16_t a) {
         apu_run(&n->apu, n->cpu.cycles - 1);
         return apu_mmc5_read(&n->apu, a, n->cpu.open_bus);
     }
+    if (n->cart.mapper == 20 && a >= 0x4040 && a < 0x4100 && (n->cart.fds_io & 2)) {  /* FDS sound: in the APU */
+        apu_run(&n->apu, n->cpu.cycles - 1);
+        return apu_fds_read(&n->apu, a, n->cpu.open_bus);
+    }
     if (a < 0x6000) cart_run(&n->cart, n->cpu.cycles);  /* Namco 163 counter reads */
     if (a >= 0x4800 && a < 0x5000 && n->cart.n163_sound) apu_run(&n->apu, n->cpu.cycles - 1);  /* N163 sound updates its RAM */
     return cart_cpu_read(&n->cart, a, n->cpu.open_bus);
@@ -240,6 +244,12 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
             n->strobe = v & 1;
             if (n->strobe) { n->pad_shift[0] = n->pad[0]; n->pad_shift[1] = n->pad[1]; }
         }
+        else if (n->cart.mapper == 20 && a >= 0x4040 && a < 0x4100) {  /* FDS sound: in the APU */
+            if (n->cart.fds_io & 2) {
+                sync_apu(n);
+                apu_fds_write(&n->apu, a, v);
+            }
+        }
         else if (a >= 0x4020) cart_cpu_write(&n->cart, a, v, n->cpu.cycles);
         else if (a <= 0x4017) {  /* APU registers ($4014/$4016 handled above) */
             sync_apu(n);
@@ -304,6 +314,8 @@ static void map_memory(Nes *n) {
         const uint8_t *mem = (n->cart.prg_ram_window >> w & 1) ? n->cart.prg_ram : n->cart.prg;
         c->read_map[i] = (uint8_t *)mem + n->cart.prg_off[w] + ((i & 3) * 0x800);
     }
+    if (n->cart.mapper == 20)  /* FDS: RAM up to $DFFF */
+        for (int i = 16; i < 28; i++) c->write_map[i] = (uint8_t *)c->read_map[i];
     c->bus_step = n->clk_cpu;
 }
 
@@ -335,10 +347,12 @@ void nes_set_region(Nes *n, int region) {
     cart.region = region;
     RecompFn (*recomp)(uint16_t, uint32_t) = n->recomp;
     uint32_t *misses = n->misses;
+    uint64_t *ram_code = n->ram_code;
     memset(n, 0, sizeof *n);
     n->cart = cart;
     n->recomp = recomp;
     n->misses = misses;
+    n->ram_code = ram_code;
     power_on(n);
 }
 
@@ -354,16 +368,77 @@ void nes_reset(Nes *n) {
 
 /* Dispatcher: recompiled block when there is one, else the interpreter.
  * Interrupt entry and a jammed CPU always go through cpu_step. */
+/* FDS: the BIOS's disk check ($E445) compares the disk's header with the
+ * 10-byte ID at ($00); automatic swaps put the matching side in first. */
+static void fds_disk_check(Nes *n) {
+    uint8_t id[10];
+    uint16_t p = (uint16_t)(n->ram[0] | n->ram[1] << 8);
+    for (int i = 0; i < 10; i++) {
+        uint16_t a = (uint16_t)(p + i);
+        const uint8_t *page = n->cpu.read_map[a >> 11];
+        id[i] = page ? page[a & 0x7FF] : 0;
+    }
+    cart_fds_check(&n->cart, id);
+}
+
+/* FDS disk files' code: the block made from what RAM holds at pc. A block
+ * checks RAM itself on entry (and returns without running if it differs),
+ * so only where several files have code at pc is RAM compared here. */
+static RecompFn ram_lookup(const Cpu *c) {
+    const RecompProgram *p = recomp_program;
+    /* first[a]: the first entry at address a or later (ram_entries is sorted) */
+    static uint32_t first[0x10001];
+    static int built;
+    if (!built) {
+        size_t e = 0;
+        for (uint32_t a = 0; a <= 0x10000; a++) {
+            while (e < p->ram_entries_n && p->ram_entries[e].pc < a) e++;
+            first[a] = (uint32_t)e;
+        }
+        built = 1;
+    }
+    size_t lo = first[c->pc];
+    if (lo < p->ram_entries_n && p->ram_entries[lo].pc == c->pc &&
+        (lo + 1 == p->ram_entries_n || p->ram_entries[lo + 1].pc != c->pc))
+        return p->ram_blocks[p->ram_entries[lo].block].fn;  /* the only one */
+    for (; lo < p->ram_entries_n && p->ram_entries[lo].pc == c->pc; lo++) {
+        const RecompRamBlock *b = &p->ram_blocks[p->ram_entries[lo].block];
+        if (recomp_ram_is(c, b->start, b->bytes, b->len)) return b->fn;
+    }
+    return NULL;
+}
+
+/* ram_code: an open-addressing set of keys; the last slot counts them */
+enum { RAM_CODE_SLOTS = 1 << 19 };
+
+static int note_ram_key(Nes *n, uint64_t key) {  /* 1 if new */
+    if (!n->ram_code && !(n->ram_code = calloc(RAM_CODE_SLOTS + 1, sizeof *n->ram_code))) return 0;
+    uint64_t *count = &n->ram_code[RAM_CODE_SLOTS];
+    for (uint32_t i = (uint32_t)((key * 0x9E3779B97F4A7C15ull) >> 45);; i = (i + 1) & (RAM_CODE_SLOTS - 1)) {
+        if (n->ram_code[i] == key) return 0;
+        if (n->ram_code[i]) continue;
+        if (*count >= RAM_CODE_SLOTS / 4 * 3) return 0;  /* full: the rest is not recorded */
+        n->ram_code[i] = key, ++*count;
+        return 1;
+    }
+}
+
+static uint64_t ram_key(uint16_t pc, uint32_t bytes) { return 1ull << 40 | (uint64_t)pc << 24 | bytes; }
+
 void nes_step(Nes *n) {
     Cpu *c = &n->cpu;
     uint64_t before = c->cycles;
+    if (n->cart.mapper == 20 && c->pc == 0xE445 && !c->poll_prev) fds_disk_check(n);
     if (n->recomp && !c->poll_prev && !c->jammed) {
         RecompFn f = n->recomp(c->pc, nes_prg_bank(n, c->pc));
+        if (!f && recomp_program->ram_entries_n) f = ram_lookup(c);
         if (f) {
             f(c);
-            n->steps_native++;
-            n->cycles_native += c->cycles - before;
-            return;
+            if (c->cycles != before) {  /* else a disk file's block found other code in RAM */
+                n->steps_native++;
+                n->cycles_native += c->cycles - before;
+                return;
+            }
         }
     }
     int kind = c->poll_prev ? FALLBACK_INTERRUPT : nes_miss_slot(n, c->pc) < 0x8000 ? FALLBACK_RAM : FALLBACK_ROM;
@@ -373,6 +448,10 @@ void nes_step(Nes *n) {
         n->steps_interp++;
         /* without recompiled code this traces every instruction (nesrecomp --misses) */
         if (n->misses && !c->jammed) n->misses[nes_miss_slot(n, c->pc)]++;
+        if (n->misses && !c->jammed && n->cart.mapper == 20 && c->pc < 0xE000)
+            note_ram_key(n, ram_key(c->pc, (uint32_t)nes_peek(n, c->pc) << 16 |
+                                               (uint32_t)nes_peek(n, (uint16_t)(c->pc + 1)) << 8 |
+                                               nes_peek(n, (uint16_t)(c->pc + 2))));
     }
     cpu_step(c);
     n->cycles_fallback[kind] += c->cycles - before;
@@ -381,29 +460,35 @@ void nes_step(Nes *n) {
 /* ---- save states ----
  * The whole machine is one struct, the same in interpreter and recompiled
  * builds (recompiled code keeps no state of its own), so a state from one
- * loads in the other. File: header, the Nes struct, then CHR RAM if any.
+ * loads in the other. File: header, the Nes struct, then CHR RAM if any, then
+ * the FDS disk sides (what the game wrote to them).
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 15 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
+enum { STATE_VERSION = 16 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
                                 4: MMC2/MMC4, SS88006, FME-7; 5: Bandai FCG EEPROMs; 6: TxSROM;
                                 7: emphasis in the frame buffer; 8: TC0690 IRQ delay;
                                 9: Namco 163 sound; 10: MMC5 sound; 11: Sunsoft 5B;
                                 12: VRC6 sound; 13: VRC7;
-                                14: regions (master clocks); 15: more boards (cart.c) */
+                                14: regions (master clocks); 15: FDS; 16: more boards (cart.c) */
 
 typedef struct {
     char magic[4];  /* "NESS" */
     uint32_t version, size, prg_hash;
 } StateHeader;
 
+/* the game a state belongs to: PRG ROM, or for FDS the disk image */
+static uint32_t game_hash(const Nes *n) {
+    return n->cart.disk ? n->cart.disk_hash : recomp_prg_hash(n->cart.prg, n->cart.prg_size);
+}
+
 int nes_state_save(Nes *n, const char *path) {
-    StateHeader h = {{'N', 'E', 'S', 'S'}, STATE_VERSION, (uint32_t)sizeof *n,
-                     recomp_prg_hash(n->cart.prg, n->cart.prg_size)};
+    StateHeader h = {{'N', 'E', 'S', 'S'}, STATE_VERSION, (uint32_t)sizeof *n, game_hash(n)};
     FILE *f = fopen(path, "wb");
     if (!f) return -1;
     int ok = fwrite(&h, sizeof h, 1, f) == 1 && fwrite(n, sizeof *n, 1, f) == 1 &&
-             (!n->cart.chr_ram || fwrite(n->cart.chr, n->cart.chr_size, 1, f) == 1);
+             (!n->cart.chr_ram || fwrite(n->cart.chr, n->cart.chr_size, 1, f) == 1) &&
+             (!n->cart.disk || fwrite(n->cart.disk, FDS_RAW_SIDE, n->cart.disk_sides, f) == n->cart.disk_sides);
     return (fclose(f) == 0 && ok) ? 0 : -1;
 }
 
@@ -413,14 +498,17 @@ int nes_state_load(Nes *n, const char *path, char *err, size_t errlen) {
     StateHeader h;
     Nes *s = malloc(sizeof *s);
     uint8_t *chr = malloc(n->cart.chr_size);
+    size_t disk_size = n->cart.disk ? (size_t)FDS_RAW_SIDE * n->cart.disk_sides : 0;
+    uint8_t *disk = malloc(disk_size + 1);
     int ok = fread(&h, sizeof h, 1, f) == 1 && !memcmp(h.magic, "NESS", 4);
     if (!ok) snprintf(err, errlen, "not a save state");
     else if (h.version != STATE_VERSION || h.size != sizeof *n)
         ok = 0, snprintf(err, errlen, "saved by a different version of the program");
-    else if (h.prg_hash != recomp_prg_hash(n->cart.prg, n->cart.prg_size))
+    else if (h.prg_hash != game_hash(n))
         ok = 0, snprintf(err, errlen, "saved with a different game");
     else if (fread(s, sizeof *s, 1, f) != 1 || s->cart.chr_size != n->cart.chr_size ||
-             (n->cart.chr_ram && fread(chr, n->cart.chr_size, 1, f) != 1))
+             (n->cart.chr_ram && fread(chr, n->cart.chr_size, 1, f) != 1) ||
+             (disk_size && fread(disk, disk_size, 1, f) != 1))
         ok = 0, snprintf(err, errlen, "file is truncated");
     fclose(f);
     if (ok) {
@@ -428,19 +516,23 @@ int nes_state_load(Nes *n, const char *path, char *err, size_t errlen) {
          * code, statistics */
         s->cart.prg = n->cart.prg;
         s->cart.chr = n->cart.chr;
+        s->cart.disk = n->cart.disk;
         s->recomp = n->recomp;
         s->misses = n->misses;
+        s->ram_code = n->ram_code;
         s->steps_native = n->steps_native, s->steps_interp = n->steps_interp;
         s->steps_interrupt = n->steps_interrupt, s->cycles_native = n->cycles_native;
         memcpy(s->cycles_fallback, n->cycles_fallback, sizeof s->cycles_fallback);
         *n = *s;
         if (n->cart.chr_ram) memcpy(n->cart.chr, chr, n->cart.chr_size);
+        if (disk_size) memcpy(n->cart.disk, disk, disk_size);
         n->ppu.cart = n->apu.cart = &n->cart;
         n->cpu.bus = n;
         map_memory(n);
     }
     free(s);
     free(chr);
+    free(disk);
     return ok ? 0 : -1;
 }
 
@@ -460,8 +552,12 @@ uint32_t nes_prg_bank(Nes *n, uint16_t a) {
 size_t nes_miss_slots(Nes *n) { return 0x8000u + (size_t)n->cart.prg_size * 4; }
 
 void nes_misses_write(Nes *n, FILE *f) {
-    for (uint32_t a = 0; a < 0x8000; a++)
+    for (uint32_t a = 0; a < 0x8000 && n->cart.mapper != 20; a++)  /* FDS: ram_code instead */
         if (n->misses[a]) fprintf(f, "MISS $%04X %u (RAM)\n", a, n->misses[a]);
+    for (uint32_t i = 0; n->ram_code && i < RAM_CODE_SLOTS; i++)
+        if (n->ram_code[i])
+            fprintf(f, "MISS $%04X 1 (RAM %06X)\n", (unsigned)(n->ram_code[i] >> 24 & 0xFFFF),
+                    (unsigned)(n->ram_code[i] & 0xFFFFFF));
     for (size_t slot = 0x8000; slot < nes_miss_slots(n); slot++) {
         if (!n->misses[slot]) continue;
         size_t key = (slot - 0x8000) >> 13;  /* bank * 4 + window */
@@ -473,11 +569,17 @@ void nes_misses_write(Nes *n, FILE *f) {
 long nes_misses_merge(Nes *n, const char *path) {
     size_t slots = nes_miss_slots(n);
     uint8_t *listed = calloc(slots, 1);
+    uint64_t listed_ram = 0;
     FILE *f = fopen(path, "r");
     char line[96];
     while (f && fgets(line, sizeof line, f)) {
-        unsigned a, count, bank;
+        unsigned a, count, bank, bytes;
         size_t slot = SIZE_MAX;
+        if (sscanf(line, "MISS $%4x %u (RAM %6x)", &a, &count, &bytes) == 3) {
+            note_ram_key(n, ram_key((uint16_t)a, bytes));
+            listed_ram++;
+            continue;
+        }
         if (sscanf(line, "MISS $%4x %u bank %u", &a, &count, &bank) == 3 && a >= 0x8000)
             slot = 0x8000u + (((size_t)bank * 4 + ((a >> 13) & 3)) << 13 | (a & 0x1FFF));
         else if (sscanf(line, "MISS $%4x %u (RAM", &a, &count) == 2 && a < 0x8000)
@@ -488,6 +590,7 @@ long nes_misses_merge(Nes *n, const char *path) {
     }
     long fresh = 0;
     for (size_t slot = 0x8000; slot < slots; slot++) fresh += n->misses[slot] && !listed[slot];
+    if (n->ram_code) fresh += (long)(n->ram_code[RAM_CODE_SLOTS] - listed_ram);  /* the file's keys are distinct */
     free(listed);
     if (!f) return -1;
     fclose(f);

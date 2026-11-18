@@ -11,6 +11,7 @@
  * Mapper 207" and "NES 2.0 submappers" (032: 1); the EEPROMs from
  * the 24C02/X24C01 datasheets' I2C protocol. */
 #include "cart.h"
+#include "fds.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -372,6 +373,7 @@ void cart_run(Cart *c, uint64_t cycle) {
     if (cycle <= c->irq_cycle) { c->irq_cycle = cycle; return; }
     int64_t n = (int64_t)(cycle - c->irq_cycle);
     c->irq_cycle = cycle;
+    if (c->mapper == 20) { fds_run(c, n); return; }
     if (c->mapper == 19) {  /* Namco 163: counts up to $7FFF, then IRQ and stop */
         if (!c->n163_irq_enable || c->n163_counter >= 0x7FFF) return;
         int64_t to = c->n163_counter + n;
@@ -402,7 +404,9 @@ void cart_run(Cart *c, uint64_t cycle) {
 
 int64_t cart_cycles_to_irq(const Cart *c, uint64_t cycle) {
     int64_t need;
-    if (c->mapper == 19) {
+    if (c->mapper == 20) {
+        if ((need = fds_cycles_to_irq(c)) < 0) return -1;
+    } else if (c->mapper == 19) {
         if (!c->n163_irq_enable || c->n163_counter >= 0x7FFF) return -1;
         need = 0x7FFF - c->n163_counter;
     } else if (is_cycle_counter(c)) {
@@ -1288,6 +1292,7 @@ static void update_banks(Cart *c) {
 
 int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) {
     memset(c, 0, sizeof *c);
+    if (cart_is_fds(d, size)) return fds_load(c, d, size, err, errlen);
     if (size < 16 || memcmp(d, "NES\x1a", 4) != 0) {
         snprintf(err, errlen, "not an iNES file");
         return -1;
@@ -1378,7 +1383,8 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
 void cart_free(Cart *c) {
     free(c->prg);
     free(c->chr);
-    c->prg = c->chr = NULL;
+    free(c->disk);
+    c->prg = c->chr = c->disk = NULL;
 }
 
 uint8_t cart_cpu_read(Cart *c, uint16_t a, uint8_t open_bus) {
@@ -1398,6 +1404,7 @@ uint8_t cart_cpu_read(Cart *c, uint16_t a, uint8_t open_bus) {
     if (a >= 0x6000) return (c->rom_at_6000 ? c->prg : c->prg_ram)[c->ram_off + (a - 0x6000)];
     if (c->mapper == 5 && a >= 0x5000) return mmc5_read(c, a, open_bus);
     if (c->mapper == 19) return n163_read(c, a, open_bus);
+    if (c->mapper == 20) return fds_read(c, a, open_bus);
     return open_bus;
 }
 
@@ -1448,6 +1455,11 @@ static void mmc3_write(Cart *c, uint16_t a, uint8_t v) {
 }
 
 int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
+    if (c->mapper == 20 && a < 0x6000) {  /* FDS registers: timer and drive run to now first */
+        cart_run(c, cycle);
+        fds_write(c, a, v);
+        return 0;
+    }
     if (a < 0x8000 && cart_is_reg(c, a)) {  /* 79: $4100 (A8 set), 87: $6000-$7FFF, 5, 19: $5xxx */
         if (c->mapper == 5) return mmc5_write(c, a, v);
         if (c->mapper == 19) { n163_write(c, a, v); return 0; }
@@ -1482,7 +1494,7 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
         return 0;
     }
     switch (c->mapper) {
-    case 0: case 5: case 79: case 87: case 82: case 86: case 113: case 140: case 184: return 0;
+    case 0: case 5: case 20: case 79: case 87: case 82: case 86: case 113: case 140: case 184: return 0;
     case 19: n163_write(c, a, v); return 1;
     case 1: case 155: mmc1_write(c, a, v, cycle); return 1;
     case 4: case 118: case 37: case 47: case 64: case 119: case 158: mmc3_write(c, a, v); return 1;

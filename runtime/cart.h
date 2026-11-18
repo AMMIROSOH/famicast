@@ -5,8 +5,9 @@
  * 19 Namco 163, 9 MMC2, 10 MMC4, 18 Jaleco SS88006, 69 Sunsoft FME-7, 210
  * Namco 175/340, 16/153/157/159 Bandai FCG, 118 TxSROM, 75 Konami VRC1,
  * 32 Irem G-101, 33/48 Taito TC0190/TC0690, 80/207 Taito X1-005, 24/26
- * Konami VRC6, 85 Konami VRC7, and the boards in cart.c's "more boards"
- * section (nesdev wiki, see cart.c). Every mapper only sets the bank tables below; reads
+ * Konami VRC6, 85 Konami VRC7, the boards in cart.c's "more boards"
+ * section (nesdev wiki, see cart.c), and the Famicom Disk System as 20
+ * (fds.c). Every mapper only sets the bank tables below; reads
  * go through them. MMC5 and Namco 163 also map the nametables
  * (cart_nt_read), and MMC5 has its own background banks. */
 #ifndef NES_CART_H
@@ -29,6 +30,9 @@ typedef struct {
 /* TV system (nesdev "Cycle reference chart"): NTSC, PAL (2A07/2C07) or
  * Dendy (the UA6538 famiclones: PAL video, NTSC-like CPU and APU) */
 enum { REGION_NTSC = 0, REGION_PAL = 1, REGION_DENDY = 3 };
+
+/* FDS: bytes a side in an image; a side's room with gaps and block marks */
+enum { FDS_SIDE = 65500, FDS_RAW_SIDE = 0x18000, FDS_MAX_SIDES = 16 };
 
 typedef struct Cart {
     uint8_t *prg, *chr;
@@ -90,7 +94,42 @@ typedef struct Cart {
     /* Bandai FCG (16, 153, 157, 159): prg_bank[0], chr_bank, irq_ctrl/count16/reload16 above */
     Eeprom eeprom[2];                /* [0] on the board, [1] Datach cartridge (157) */
     uint8_t eeprom_count;
+    /* Famicom Disk System (loaded as mapper 20, runtime/fds.c): the BIOS is
+     * prg, 32 KB RAM at $6000-$DFFF is prg_ram, 8 KB CHR RAM */
+    uint8_t *disk;                   /* the sides as on the disk, FDS_RAW_SIDE bytes each */
+    uint32_t disk_len[FDS_MAX_SIDES];
+    uint32_t disk_hash;              /* of the image as loaded (save states check it) */
+    uint8_t disk_sides, disk_dirty;  /* dirty: the game wrote to the disk */
+    int8_t disk_side, disk_next;     /* inserted side (-1 none); side to insert at disk_insert_at */
+    uint64_t disk_insert_at;         /* CPU cycle */
+    uint32_t disk_pos, disk_delay;   /* head position; cycles to the next byte */
+    uint16_t fds_reload, fds_counter, fds_crc;
+    uint8_t fds_timer_on, fds_repeat, fds_timer_irq, fds_disk_irq;
+    uint8_t fds_io;                  /* $4023: bit 0 disk, bit 1 sound registers enabled */
+    uint8_t fds_ctrl, fds_motor;     /* $4025; the motor (stops by itself at the end of the disk) */
+    uint8_t fds_wdata, fds_rdata, fds_ext;
+    uint8_t fds_transfer, fds_gap_ended, fds_scanning, fds_end_of_head, fds_prev_crc, fds_bad_crc;
+    /* automatic disk swaps (cart_fds_auto): $4032 polls in a row, the last
+     * one, when the head last reached the end of the disk (0: reading) */
+    uint8_t fds_auto, fds_auto_off;  /* off: two sides match one request (unlicensed disks) */
+    uint16_t fds_polls;
+    uint64_t fds_last_poll, fds_end_at;
 } Cart;
+
+/* Famicom Disk System images: .fds, with or without the 16-byte "FDS" header
+ * (65500 bytes a side). cart_load needs the BIOS (8 KB, disksys.rom) for
+ * them: cart_fds_bios keeps a pointer to it for later loads. */
+int cart_is_fds(const uint8_t *data, size_t size);
+void cart_fds_bios(const uint8_t *bios);
+/* Ejects the disk now; `side` (>= 0) goes in at CPU cycle `at` (a real
+ * swap takes a moment: games check that the disk was out). */
+void cart_fds_insert(Cart *c, int side, uint64_t at);
+/* Automatic swaps (on by default): when a game that has read the disk keeps
+ * polling the drive ($4032), the disk comes out and a side goes back in; the
+ * BIOS's disk check ($E445) then gets the side whose header matches the ID
+ * the game asks for (`id`: 10 bytes, $FF = any). After Mesen2's FDS
+ * auto-insert. */
+void cart_fds_check(Cart *c, const uint8_t id[10]);
 
 /* Returns 0 on success, else writes a message to err. Copies the data. */
 int cart_load(Cart *c, const uint8_t *data, size_t size, char *err, size_t errlen);
@@ -102,6 +141,7 @@ uint8_t cart_cpu_read(Cart *c, uint16_t a, uint8_t open_bus);
  * bank switches can be raster effects.) Mapper 79 decodes $4100 with A8 set
  * ($4100-$5FFF), mapper 87 $6000-$7FFF; the rest $8000-$FFFF. */
 static inline int cart_is_reg(const Cart *c, uint16_t a) {
+    if (c->mapper == 20) return a == 0x4025;  /* FDS: mirroring; $8000-$DFFF is RAM */
     if (a >= 0x8000) return c->mapper != 0;
     if (c->mapper == 79 || c->mapper == 113) return (a & 0xE100) == 0x4100;
     if (c->mapper == 34) return c->submapper == 1 && a >= 0x7FFD;  /* NINA-001 */

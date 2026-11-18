@@ -86,10 +86,18 @@ typedef struct {
     Program *prog;
     uint8_t *mem;      /* 64 KB view */
     int banks[4];      /* window -> 8 KB bank, -1 if not part of the region */
+    /* ram: an FDS disk file (number `file`), loaded at [lo, hi); its blocks
+     * check that RAM holds their bytes (recomp_rt.h) */
+    int ram, file;
+    uint32_t lo, hi;
 } Region;
 
+/* dispatch_at: an address recompiled code never chains to, so the runtime's
+ * dispatcher sees it (the FDS BIOS disk check at $E445, nes.c); 0: none.
+ * bios: the FDS BIOS to embed, or NULL. */
 void emit_program(Buf *out, Region *regions, int nregions, const char *rom_name, uint32_t prg_hash,
-                  int nbanks, int bank_reg, const uint8_t *rom, size_t rom_size);
+                  int nbanks, int bank_reg, const uint8_t *rom, size_t rom_size, uint16_t dispatch_at,
+                  const uint8_t *bios);
 void emit_cpu_switch(Buf *out);
 
 #endif

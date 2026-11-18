@@ -3,7 +3,7 @@
 Blocks and suggestions: through nesrecomp (tests/nesrecomp.py).
 nestest: the CPU state after every recompiled block must equal the line of
 nestest.log with the same cycle count. Battle City (local ROM, built with
--DNES_GAMES=...): lockstep against the interpreter with zero fallbacks.
+-DROMS=...): lockstep against the interpreter with zero fallbacks.
 """
 import os
 import re
@@ -69,7 +69,7 @@ class TestNestestRecompiled(unittest.TestCase):
             self.assertEqual(want.get(int(line.split("CYC:")[1])), line)
 
 
-@unittest.skipUnless(os.path.exists(BC_HEADLESS), "build with -DNES_GAMES=<Battle City ROM>")
+@unittest.skipUnless(os.path.exists(BC_HEADLESS), "build with -DROMS=<Battle City ROM>")
 class TestBattleCityRecompiled(unittest.TestCase):
     def test_lockstep_with_interpreter_and_no_fallbacks(self):
         # the build embeds the ROM, so no ROM path is needed

@@ -1,21 +1,32 @@
 /* nesrecomp: recompile an NES ROM to C (docs/02).
  *
- *   nesrecomp ROM -o OUT.c [--hints GAME.toml] [--misses RUN.txt]... [--save-hints OUT.toml]
+ *   nesrecomp ROM -o OUT.c [--hints GAME.toml]... [--misses RUN.txt]... [--save-hints OUT.toml]
  *             [--no-rom]               do not embed the ROM (the program then needs the file)
+ *             [--bios disksys.rom]     ROM is a Famicom Disk System image (.fds)
  *   nesrecomp --cpu-switch OUT.inc     the interpreter's opcode switch (runtime/cpu.c)
  *   nesrecomp --ops                    the opcode table, one line per opcode (tests)
  *   nesrecomp --info ROM               iNES header summary (tests)
+ *
+ * ROM may also be the Famicom Disk System BIOS (8 KB): its code at $E000 is
+ * recompiled, and the program it builds plays .fds disk images with it.
+ * With --bios, ROM is an .fds image: the BIOS is recompiled and embedded,
+ * and so is the code of each file on the disk that is loaded into RAM
+ * (from $0200), wherever the hints or --misses show it ran. A disk file's
+ * code only runs while RAM holds it (recomp_rt.h), since another file may
+ * be loaded at the same address later.
  *
  * GAME.toml (all keys optional; only this subset of TOML is read):
  *   prg_fnv1a = "65D2E392"           # the dump the hints were made for
  *   entries   = [0xCE67, ...]        # extra entry points in assumed-bank windows
  *   banked    = [[5, 0x8123], ...]   # [8 KB PRG bank, address] entry points
  *   no_return = [0xD123, ...]        # subroutines that never return to the caller
+ *   ram       = [[0x1A2B3C4D, 0x6123], ...]  # [FNV-1a of an FDS disk file, address] entry points
  *
  * --misses takes the output of `nes_headless ROM --misses` (addresses the
  * runtime interpreted). An interpreter-only nes_headless reports every
  * instruction it ran, so one run is a complete trace of that session. The
- * first address of each run of misses becomes a banked entry; --save-hints
+ * first address of each run of misses becomes a banked entry (FDS: RAM
+ * misses carry the instruction's bytes, which tell the disk file); --save-hints
  * writes the merged hints (marked 'runtime') for games/<name>.toml. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,8 +49,40 @@ static void push(List *l, uint32_t x) {
 
 typedef struct {
     List entries, no_return, banked;  /* banked: bank << 16 | address */
+    List ram;                         /* pairs: disk file hash, address */
     char prg_fnv1a[16];
 } Hints;
+
+/* A file of an FDS disk that may hold code: loaded into RAM from $0200
+ * ($0200-$07FF or $6000-$DFFF; below is the stack). One per content. */
+typedef struct {
+    uint32_t hash, addr, size;
+    const uint8_t *data;
+} DiskFile;
+
+enum { MAX_FILES = 1024 };
+
+static int disk_files(const uint8_t *d, size_t size, DiskFile *out) {
+    if (size >= 16 && !memcmp(d, "FDS\x1a", 4)) d += 16, size -= 16;
+    int n = 0;
+    for (size_t s = 0; s + FDS_SIDE <= size; s += FDS_SIDE) {
+        const uint8_t *p = d + s;
+        /* block 1 (56 bytes), block 2 (2), then file header (16) + data (1 + size) pairs */
+        for (size_t j = 58; j + 17 <= FDS_SIDE && p[j] == 3 && p[j + 16] == 4;) {
+            uint32_t addr = p[j + 11] | p[j + 12] << 8, len = p[j + 13] | p[j + 14] << 8, end = addr + len;
+            int prg = p[j + 15] == 0;
+            const uint8_t *data = p + j + 17;
+            if (j + 17 + len > FDS_SIDE) break;
+            j += 17 + len;
+            if (!prg || !len || !((addr >= 0x200 && end <= 0x800) || (addr >= 0x6000 && end <= 0xE000))) continue;
+            uint32_t h = fnv1a(data, len);
+            int dup = 0;
+            for (int i = 0; i < n; i++) dup |= out[i].hash == h && out[i].addr == addr;
+            if (!dup && n < MAX_FILES) out[n++] = (DiskFile){h, addr, len, data};
+        }
+    }
+    return n;
+}
 
 static uint8_t *read_file(const char *path, size_t *size) {
     FILE *f = fopen(path, "rb");
@@ -113,6 +156,9 @@ static void load_hints(const char *path, Hints *h) {
     if (pairs.n % 2) { fprintf(stderr, "%s: banked needs [bank, address] pairs\n", path); exit(2); }
     for (size_t i = 0; i < pairs.n; i += 2) push(&h->banked, pairs.v[i] << 16 | (pairs.v[i + 1] & 0xFFFF));
     free(pairs.v);
+    size_t had = h->ram.n;
+    toml_ints(toml_value(text, "ram"), &h->ram, path, "ram");
+    if ((h->ram.n - had) % 2) { fprintf(stderr, "%s: ram needs [file hash, address] pairs\n", path); exit(2); }
     const char *v = toml_value(text, "prg_fnv1a");
     if (v && sscanf(v, "\"%8[0-9A-Fa-f]\"", h->prg_fnv1a) != 1) { fprintf(stderr, "%s: bad prg_fnv1a\n", path); exit(2); }
     for (char *p = h->prg_fnv1a; *p; p++) *p = (char)toupper((unsigned char)*p);
@@ -126,7 +172,13 @@ static int contains(const List *l, uint32_t x) {
     return 0;
 }
 
-static void render_hints(Buf *o, const Hints *h, const List *found, uint32_t prg_hash) {
+static int contains_pair(const List *l, uint32_t x, uint32_t y) {
+    for (size_t i = 0; i + 1 < l->n; i += 2)
+        if (l->v[i] == x && l->v[i + 1] == y) return 1;
+    return 0;
+}
+
+static void render_hints(Buf *o, const Hints *h, const List *found, const List *ram_found, uint32_t prg_hash) {
     bprintf(o, "# Recompiler hints (see recomp/main.c).\n");
     bprintf(o, "# Entries marked 'runtime' were found by running the game (nesrecomp --misses).\n");
     bprintf(o, "prg_fnv1a = \"%08X\"  # the dump these hints belong to\n", prg_hash);
@@ -138,6 +190,13 @@ static void render_hints(Buf *o, const Hints *h, const List *found, uint32_t prg
         bprintf(o, "    [%u, 0x%04X],%s\n", x >> 16, x & 0xFFFF, contains(found, x) ? "  # runtime" : "");
     }
     bprintf(o, "]\n");
+    if (h->ram.n) {
+        bprintf(o, "ram = [  # [FDS disk file FNV-1a, address]\n");
+        for (size_t i = 0; i + 1 < h->ram.n; i += 2)
+            bprintf(o, "    [0x%08X, 0x%04X],%s\n", h->ram.v[i], h->ram.v[i + 1],
+                    contains_pair(ram_found, h->ram.v[i], h->ram.v[i + 1]) ? "  # runtime" : "");
+        bprintf(o, "]\n");
+    }
     if (h->no_return.n) {
         bprintf(o, "no_return = [");
         for (size_t i = 0; i < h->no_return.n; i++) bprintf(o, i ? ", 0x%04X" : "0x%04X", h->no_return.v[i]);
@@ -145,20 +204,34 @@ static void render_hints(Buf *o, const Hints *h, const List *found, uint32_t prg
     }
 }
 
-/* Merge the chain starts of a --misses file into h->banked; new ones go to `found`. */
-static void add_misses(const char *path, const Rom *r, Hints *h, List *found) {
+/* Merge the chain starts of a --misses file into h->banked (and h->ram for
+ * the disk files); new ones go to `found` (`ram_found`). */
+static void add_misses(const char *path, const Rom *r, Hints *h, List *found, const DiskFile *files, int nfiles,
+                       List *ram_found) {
     size_t size;
     char *text = (char *)read_file(path, &size);
     int nbanks = (int)(r->prg_size / 0x2000), k = unit_windows(r), layout[4];
     assumed_layout(r, layout);
     /* misses per (bank, window) */
     AddrSet **groups = calloc((size_t)nbanks * 4, sizeof *groups);
-    long nrom = 0, nram = 0;
+    long nrom = 0, nram = 0, nfile = 0;
+    AddrSet **in_file = calloc((size_t)nfiles + 1, sizeof *in_file);
     for (char *line = text, *next; line; line = next) {
         if ((next = strchr(line, '\n'))) next++;
-        unsigned addr, count, bank;
+        unsigned addr, count, bank, bytes;
         char ram[8];
-        if (sscanf(line, "MISS $%4x %u bank %u", &addr, &count, &bank) == 3 && addr >= 0x8000 &&
+        if (sscanf(line, "MISS $%4x %u (RAM %6x)", &addr, &count, &bytes) == 3) {  /* FDS: with its bytes */
+            uint8_t k[3] = {(uint8_t)(bytes >> 16), (uint8_t)(bytes >> 8), (uint8_t)bytes};
+            int len = OPS[k[0]].size, hit = 0;
+            for (int f = 0; f < nfiles; f++) {
+                const DiskFile *F = &files[f];
+                if (addr < F->addr || addr + len > F->addr + F->size || memcmp(F->data + addr - F->addr, k, len)) continue;
+                if (!in_file[f]) in_file[f] = calloc(1, sizeof **in_file);
+                in_file[f]->b[addr] = 1;
+                hit = 1;
+            }
+            nfile += hit, nram += !hit;
+        } else if (sscanf(line, "MISS $%4x %u bank %u", &addr, &count, &bank) == 3 && addr >= 0x8000 &&
             (int)bank < nbanks) {
             int key = (int)bank * 4 + window_of(addr);
             if (!groups[key]) groups[key] = calloc(1, sizeof **groups);
@@ -171,6 +244,18 @@ static void add_misses(const char *path, const Rom *r, Hints *h, List *found) {
     static uint8_t mem[0x10000];
     static AddrSet starts;
     long nnew = 0;
+    for (int f = 0; f < nfiles; f++) {
+        if (!in_file[f]) continue;
+        const DiskFile *F = &files[f];
+        memset(mem, 0, sizeof mem);
+        memcpy(mem + F->addr, F->data, F->size);
+        chain_starts(mem, in_file[f], &starts);
+        for (uint32_t a = F->addr; a < F->addr + F->size; a++)
+            if (starts.b[a] && !contains_pair(&h->ram, F->hash, a))
+                push(&h->ram, F->hash), push(&h->ram, a), push(ram_found, F->hash), push(ram_found, a), nnew++;
+        free(in_file[f]);
+    }
+    free(in_file);
     for (int key = 0; key < nbanks * 4; key++) {
         if (!groups[key]) continue;
         int b = key / 4, w = key % 4, w0 = w - w % k, b0 = b - w % k, lay[4];
@@ -186,7 +271,8 @@ static void add_misses(const char *path, const Rom *r, Hints *h, List *found) {
     }
     free(groups);
     qsort(h->banked.v, h->banked.n, sizeof *h->banked.v, cmp_u32);
-    fprintf(stderr, "%s: %ld ROM misses, %ld RAM; %ld new entries\n", path, nrom, nram, nnew);
+    fprintf(stderr, "%s: %ld ROM misses, %ld RAM (%ld in disk files); %ld new entries\n", path, nrom,
+            nram + nfile, nfile, nnew);
     free(text);
 }
 
@@ -216,10 +302,19 @@ static int explore_regions(const Rom *r, const Hints *h, Region **out) {
         R->mem = malloc(0x10000);
         memcpy(R->banks, layout, sizeof layout);
         view(r, layout, R->mem);
-        for (int i = 0; i < 3; i++) R->prog->entries.b[vec[i]] |= vec[i] >= 0x8000;
-        for (size_t i = 0; i < h->entries.n; i++) R->prog->entries.b[h->entries.v[i] & 0xFFFF] = 1;
-        for (size_t i = 0; i < h->banked.n; i++) R->prog->entries.b[h->banked.v[i] & 0xFFFF] = 1;
-        explore(R->prog, R->mem, 0x8000, 0x10000, no_return);
+        /* from the first window with ROM (FDS: $E000; below it is RAM) */
+        uint32_t lo = 0x8000;
+        while (lo < 0x10000 && layout[window_of(lo)] < 0) lo += 0x2000;
+        for (int i = 0; i < 3; i++) R->prog->entries.b[vec[i]] |= vec[i] >= lo;
+        for (size_t i = 0; i < h->entries.n; i++) {
+            uint32_t a = h->entries.v[i] & 0xFFFF;
+            R->prog->entries.b[a] |= a >= lo;
+        }
+        for (size_t i = 0; i < h->banked.n; i++) {
+            uint32_t a = h->banked.v[i] & 0xFFFF;
+            R->prog->entries.b[a] |= a >= lo;
+        }
+        explore(R->prog, R->mem, lo, 0x10000, no_return);
         free(no_return);
         return 1;
     }
@@ -287,6 +382,19 @@ static const char *basename_of(const char *path) {
 static int load_rom(const char *path, Cart *cart, uint8_t **file, size_t *size) {
     char err[128];
     *file = read_file(path, size);
+    if (cart_is_fds(*file, *size)) {
+        fprintf(stderr, "%s: a Famicom Disk System image: give the BIOS with --bios disksys.rom\n", path);
+        return 2;
+    }
+    if (*size == 0x2000) {  /* no iNES file is 8 KB: the FDS BIOS, at $E000 */
+        memset(cart, 0, sizeof *cart);
+        cart->prg = *file;
+        cart->prg_size = 0x2000;
+        cart->mapper = 20;
+        cart->chr_ram = 1;
+        cart->mirroring = MIRROR_VERTICAL;
+        return 0;
+    }
     if (cart_load(cart, *file, *size, err, sizeof err) != 0) {
         fprintf(stderr, "%s: %s\n", path, err);
         return 2;
@@ -307,7 +415,8 @@ static void summary(const Cart *c, char *out, size_t len) {
 }
 
 static int usage(void) {
-    fprintf(stderr, "usage: nesrecomp ROM -o OUT.c [--hints GAME.toml] [--misses RUN.txt]... [--save-hints OUT.toml]\n"
+    fprintf(stderr, "usage: nesrecomp ROM -o OUT.c [--hints GAME.toml]... [--misses RUN.txt]... [--save-hints OUT.toml]\n"
+                    "                 [--no-rom] [--bios disksys.rom]\n"
                     "       nesrecomp --cpu-switch OUT.inc | --ops | --info ROM\n");
     return 2;
 }
@@ -337,52 +446,91 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (argc < 2 || argv[1][0] == '-') return usage();
-    const char *rom_path = argv[1], *output = NULL, *hints_path = NULL, *save_hints = NULL;
-    const char *misses[64];
-    int nmisses = 0, embed = 1;
+    const char *rom_path = argv[1], *output = NULL, *save_hints = NULL, *bios_path = NULL;
+    const char *misses[64], *hints_paths[8];
+    int nmisses = 0, nhints = 0, embed = 1;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "-o") && i + 1 < argc) output = argv[++i];
-        else if (!strcmp(argv[i], "--hints") && i + 1 < argc) hints_path = argv[++i];
+        else if (!strcmp(argv[i], "--hints") && i + 1 < argc && nhints < 8) hints_paths[nhints++] = argv[++i];
+        else if (!strcmp(argv[i], "--bios") && i + 1 < argc) bios_path = argv[++i];
         else if (!strcmp(argv[i], "--misses") && i + 1 < argc && nmisses < 64) misses[nmisses++] = argv[++i];
         else if (!strcmp(argv[i], "--save-hints") && i + 1 < argc) save_hints = argv[++i];
         else if (!strcmp(argv[i], "--no-rom")) embed = 0;
         else return usage();
     }
     if (!output && !save_hints) return usage();
-    if (load_rom(rom_path, &cart, &file, &size)) return 2;
+    if (load_rom(bios_path ? bios_path : rom_path, &cart, &file, &size)) return 2;
+    uint8_t *disk = NULL;  /* --bios: the .fds image */
+    size_t disk_size = 0;
+    static DiskFile files[MAX_FILES];
+    int nfiles = 0;
+    if (bios_path) {
+        if (size != 0x2000) { fprintf(stderr, "%s: not an 8 KB FDS BIOS\n", bios_path); return 2; }
+        disk = read_file(rom_path, &disk_size);
+        if (!cart_is_fds(disk, disk_size)) { fprintf(stderr, "%s: not an .fds disk image\n", rom_path); return 2; }
+        nfiles = disk_files(disk, disk_size, files);
+    }
     Rom rom = {cart.prg, cart.prg_size, cart.mapper};
     uint32_t prg_hash = fnv1a(cart.prg, cart.prg_size);
     Hints hints = {0};
-    if (hints_path) {
-        FILE *f = fopen(hints_path, "rb");  /* optional: games/<name>.toml may not exist yet */
-        if (f) fclose(f), load_hints(hints_path, &hints);
-    }
     char want[16];
     snprintf(want, sizeof want, "%08X", prg_hash);
-    if (hints.prg_fnv1a[0] && strcmp(hints.prg_fnv1a, want))
-        fprintf(stderr, "warning: %s was made for another dump (PRG %s); its entries may be wrong here "
-                        "(the runtime stays correct, misses go up)\n", hints_path, hints.prg_fnv1a);
-    List found = {0};
-    for (int i = 0; i < nmisses; i++) add_misses(misses[i], &rom, &hints, &found);
+    for (int i = 0; i < nhints; i++) {
+        FILE *f = fopen(hints_paths[i], "rb");  /* optional: games/<name>.toml may not exist yet */
+        if (!f) continue;
+        fclose(f);
+        hints.prg_fnv1a[0] = 0;
+        load_hints(hints_paths[i], &hints);
+        if (hints.prg_fnv1a[0] && strcmp(hints.prg_fnv1a, want))
+            fprintf(stderr, "warning: %s was made for another dump (PRG %s); its entries may be wrong here "
+                            "(the runtime stays correct, misses go up)\n", hints_paths[i], hints.prg_fnv1a);
+    }
+    List found = {0}, ram_found = {0};
+    for (int i = 0; i < nmisses; i++) add_misses(misses[i], &rom, &hints, &found, files, nfiles, &ram_found);
     if (save_hints) {
-        render_hints(&o, &hints, &found, prg_hash);
+        render_hints(&o, &hints, &found, &ram_found, prg_hash);
         write_file(save_hints, &o);
         o.len = 0;
     }
     if (!output) return 0;
 
     Region *regions;
-    int n = explore_regions(&rom, &hints, &regions);
+    int n = explore_regions(&rom, &hints, &regions), nrom_regions = n;
+    regions = realloc(regions, (size_t)(n + nfiles) * sizeof *regions);
+    for (int f = 0; f < nfiles; f++) {  /* disk files: from their entries only */
+        const DiskFile *F = &files[f];
+        Region *R = &regions[n];
+        memset(R, 0, sizeof *R);
+        R->ram = 1, R->file = f, R->lo = F->addr, R->hi = F->addr + F->size;
+        R->prog = calloc(1, sizeof *R->prog);
+        R->mem = calloc(1, 0x10000);
+        memcpy(R->mem + F->addr, F->data, F->size);
+        int any = 0;
+        for (size_t i = 0; i + 1 < hints.ram.n; i += 2)
+            if (hints.ram.v[i] == F->hash && hints.ram.v[i + 1] >= R->lo && hints.ram.v[i + 1] < R->hi)
+                R->prog->entries.b[hints.ram.v[i + 1]] = 1, any = 1;
+        if (!any) { free(R->prog), free(R->mem); continue; }
+        explore(R->prog, R->mem, R->lo, R->hi, NULL);
+        n++;
+    }
     const char *name = basename_of(rom_path);
+    const uint8_t *image = disk ? disk : cart.mapper == 20 ? NULL : file;  /* the BIOS goes in `bios` */
+    size_t image_size = disk ? disk_size : size;
     emit_program(&o, regions, n, name, prg_hash, (int)(cart.prg_size / 0x2000), prg_bank_reg(&rom),
-                 embed ? file : NULL, embed ? size : 0);
+                 embed ? image : NULL, embed && image ? image_size : 0, cart.mapper == 20 ? 0xE445 : 0,
+                 cart.mapper == 20 ? cart.prg : NULL);
     write_file(output, &o);
-    long ninstr = 0, nindirect = 0;
+    long ninstr = 0, nindirect = 0, nram = 0;
     for (int i = 0; i < n; i++)
-        for (uint32_t a = 0; a < 0x10000; a++)
+        for (uint32_t a = 0; a < 0x10000; a++) {
             ninstr += regions[i].prog->instrs.b[a], nindirect += regions[i].prog->indirect.b[a];
+            nram += regions[i].ram && regions[i].prog->instrs.b[a];
+        }
     summary(&cart, text, sizeof text);
     printf("%s: %s\n  %ld instructions in %d regions, %ld indirect jumps -> %s\n", name, text, ninstr, n,
            nindirect, output);
+    if (disk)
+        printf("  disk: %d files that may hold code; %ld instructions in %d of them\n", nfiles, nram,
+               n - nrom_regions);
     return 0;
 }

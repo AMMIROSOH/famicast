@@ -189,6 +189,9 @@ int assumed_layout(const Rom *r, int layout[4]) {
     case 64: case 158: case 65: case 82:  /* RAMBO-1, Irem H3001, Taito X1-017 */
         layout[3] = n8 - 1;
         return 0;
+    case 20:                     /* FDS BIOS at $E000; $6000-$DFFF is RAM */
+        layout[3] = 0;
+        return 0;
     }
     return -1;
 }
@@ -210,7 +213,7 @@ int unit_windows(const Rom *r) {
 
 int prg_bank_reg(const Rom *r) {
     switch (r->mapper) {
-    case 0: case 3: case 87: case 185: case 13: case 184: return 0;
+    case 0: case 3: case 20: case 87: case 185: case 13: case 184: return 0;
     case 79: case 113: return 0x4100;
     case 34: case 37: case 41: case 47: case 82: case 86: case 140: return 0x6000;  /* registers at $6000-$7FFF */
     case 5: return 0x5100;

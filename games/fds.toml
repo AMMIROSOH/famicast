@@ -1,0 +1,32 @@
+# Recompiler hints (see recomp/main.c).
+# Entries marked 'runtime' were found by running the game (nesrecomp --misses).
+prg_fnv1a = "66D1FD25"  # the dump these hints belong to
+entries = [
+]
+banked = [  # [8 KB PRG bank, address]
+    [0, 0xE149],  # runtime
+    [0, 0xE178],  # runtime
+    [0, 0xE18B],  # runtime
+    [0, 0xE239],  # runtime
+    [0, 0xE97D],  # runtime
+    [0, 0xEA4C],  # runtime
+    [0, 0xEAFD],  # runtime
+    [0, 0xEE24],  # runtime
+    [0, 0xEF51],  # runtime
+    [0, 0xEF56],  # runtime
+    [0, 0xEF60],  # runtime
+    [0, 0xF0DC],  # runtime
+    [0, 0xF0E6],  # runtime
+    [0, 0xF0EC],  # runtime
+    [0, 0xF0F2],  # runtime
+    [0, 0xF1CE],  # runtime
+    [0, 0xF1D9],  # runtime
+    [0, 0xF1E4],  # runtime
+    [0, 0xF3C7],  # runtime
+    [0, 0xF408],  # runtime
+    [0, 0xF413],  # runtime
+    [0, 0xF430],  # runtime
+    [0, 0xF444],  # runtime
+    [0, 0xF4A6],  # runtime
+    [0, 0xF4B1],  # runtime
+]

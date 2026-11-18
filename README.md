@@ -35,7 +35,8 @@ inside the CMake build; it can trace a game first to find code by itself
 display settings (fullscreen, scaling, TV frame) came with M8b. Recompiled
 example games run at about 33-38x real time. PAL and Dendy games run at
 their own timing (50 Hz, the PAL APU tables), chosen from the ROM header
-(M10). See
+(M10). Famicom Disk System games run in the interpreter, with their sound
+and automatic disk-side swaps (M11). See
 [docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
 x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
 see [docs/06-verification-log.md](docs/06-verification-log.md).
@@ -135,6 +136,28 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 228 | Active Enterprises | Action 52, Cheetahmen II |
 | 232 | Camerica Quattro | Quattro Adventure, Quattro Sports, Quattro Arcade |
 
+Not yet: the long tail of rarer boards. Other mappers are refused at load
+("mapper N not supported yet").
+
+### Famicom Disk System
+`.fds` disk images (with or without the 16-byte header) play in the
+interpreter. They need the FDS BIOS (8 KB, not included): put it next to
+the program as `disksys.rom`, or set `fds_bios` in the .ini. When a game asks for another
+disk side, it is swapped in by itself (`fds_auto_disk = 0` turns that off);
+F6 puts in the next side by hand. What a game writes to its disk is kept in
+`ROM.sav`. `nes_headless` takes `--bios FILE` and `--disk F:S` (swap to side
+S at frame F).
+
+Disk games are recompiled like cartridge games: put the `.fds` in `ROMS` and
+give the BIOS with `FDS_BIOS` (see [Recompiling a game](#recompiling-a-game)).
+The program carries the BIOS and the disk. A game's code is loaded from disk
+into RAM, so each file on the disk is recompiled on its own, and its code
+only runs while RAM holds it (other code is interpreted). In tests, 99-99.8%
+of CPU time ran recompiled (docs/06). `FDS_BIOS` alone also builds
+`build/fds`, which plays any `.fds` image with only the BIOS recompiled.
+`games/fds.toml` holds BIOS entry points traced from 25 games (Rev 1 BIOS;
+another revision only recompiles less). Do not share these builds: they
+contain the BIOS.
 Not yet: the Famicom Disk System (and its sound), the last licensed boards
 (Oeka Kids 96, the Nintendo World Championships carts 105 and 555, Konami
 VRC5 547) and the long tail of unlicensed and pirate boards. Other mappers are refused at load ("mapper N
@@ -153,7 +176,7 @@ explains both. Archives are made by `tools/make_release.py`
 Needs CMake ≥ 3.20 and a C11 compiler (clang/gcc/MSVC); any CMake generator
 works (Visual Studio, Ninja, Makefiles). SDL3 is downloaded and built by
 CMake, unless a prebuilt static SDL3 is found in `sdl3/` (or
-`-DNES_SDL3_PREFIX=...`). Python ≥ 3.11 is only needed for the tests.
+`-DSDL3_PREFIX=...`). Python ≥ 3.11 is only needed for the tests.
 ```
 cmake -S . -B build
 cmake --build build --config Release
@@ -164,26 +187,29 @@ Builds are **Release**; tests, timings and full-speed play assume it. Keep
 without it `cmake --build` builds Debug, which is too slow to play.
 Ninja and Makefiles ignore the flag and build Release anyway. Programs are
 put in `build/` with every generator (no `Release/` or `Debug/` subfolder).
-Headless (no SDL3): add `-DNES_FRONTEND=OFF`. On Windows the game programs open no console window;
+Headless (no SDL3): add `-DFRONTEND=OFF`. On Windows the game programs open no console window;
 use the `_headless` programs for text output.
 
 ## Recompiling a game
 ```
-cmake -S . -B build -DNES_GAMES="path/to/Game One.nes;path/to/Game Two (E) [!].nes"
+cmake -S . -B build -DROMS="path/to/Game One.nes;path/to/Game Two (E) [!].nes"
 cmake --build build --config Release   # -> build/game_one, build/game_two (+ _headless)
 build/game_one                         # the ROM is embedded: no path needed
 ```
+Famicom Disk System games (`.fds`) go in `ROMS` too, with the BIOS:
+`-DROMS="Disk Game.fds" -DFDS_BIOS=path/to/disksys.rom`.
+
 The whole ROM is embedded in the executable (graphics and data are read
 through pointers no analysis can bound), so **do not share these builds**:
-they contain the game. With `-DNES_EMBED_ROM=OFF` the program asks for the
-ROM file instead; the generated code still contains the game's code bytes,
+they contain the game. With `-DEMBED_ROM=OFF` the program asks for the
+ROM file instead (FDS programs still carry the BIOS); the generated code still contains the game's code bytes,
 so those builds are not for sharing either.
 
 Code the static decoder cannot find (jump tables, RTS used as a jump) runs in
 the interpreter. Two ways to recompile it too:
-- Automatically (on by default; `-DNES_AUTO_HINTS=OFF` to skip): before
+- Automatically (on by default; `-DAUTO_HINTS=OFF` to skip): before
   recompiling, the build runs each game in the interpreter for
-  `NES_AUTO_HINTS_FRAMES` (default 6000, about 6 s) frames of scripted
+  `AUTO_HINTS_FRAMES` (default 6000, about 6 s) frames of scripted
   play (`nes_headless --play 1`) and passes every address it ran to the
   recompiler. Merged hints are written to `build/gen/<name>.toml`; copy them
   to `games/` to keep them without tracing.
@@ -201,11 +227,14 @@ the interpreter. Two ways to recompile it too:
   ```
 `build/game_one_headless --play 1 --diff --misses` runs the interpreter in
 lockstep and reports the first difference, then what was still interpreted.
-Relative `NES_GAMES` paths are relative to the folder cmake is run from
+Relative `ROMS` paths are relative to the folder cmake is run from
 (else to the source folder), and are stored as absolute paths in the cache.
 Target names drop "(...)"/"[...]" tags from the file name; hints live in
 `games/<name>.toml` and record the PRG hash of the dump they were made for.
-On Windows with Git Bash, give `NES_GAMES` Windows paths (`pwd -W`).
+On Windows with Git Bash, give `ROMS` Windows paths (`pwd -W`). The options
+were called `NES_GAMES`, `NES_EMBED_ROM`, `NES_AUTO_HINTS(_FRAMES)`,
+`NES_FRONTEND` and `NES_SDL3_PREFIX` before; a build folder configured with
+them keeps its values under the new names.
 
 ## Controls
 Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =
@@ -215,6 +244,7 @@ hot-plug; D-pad or left stick, East = A, South = B, Back = Select, Start.
 | Key | Action |
 |-----|--------|
 | F2 / F4 | save / load state (`ROM.state`; one slot) |
+| F6 | Famicom Disk System: next disk side |
 | F10 | TV frame on/off |
 | F11 or Alt+Enter | fullscreen on/off |
 
@@ -231,6 +261,8 @@ sprite_limit = 1    # 0 = draw every sprite (less flicker; a few games glitch)
 aspect = tv         # tv = pixels as on a TV (8:7 NTSC, 1.39:1 PAL), square = square pixels
 region = auto       # auto (from the ROM header), ntsc, pal, dendy
 window_scale = 3    # starting window size
+fds_bios = disksys.rom  # FDS BIOS: next to the program or the disk image, or a full path
+fds_auto_disk = 1   # 1 = swap disk sides when a game asks
 ```
 Forcing `region`: NTSC games on `pal` run slower but usually work;
 PAL-only games on `ntsc` often freeze or jam, as on a real NTSC console.
