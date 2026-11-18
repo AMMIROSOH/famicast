@@ -9,7 +9,7 @@ Windows (x64, arm64), Linux (x64, arm64; glibc 2.35+), macOS (Apple Silicon). Ea
 - `nes`: plays a game in the interpreter
 - `nes_headless`: the same without a window, for scripts and checks
 - `nesrecomp`: the recompiler (ROM to C)
-- `gb`, `gb_headless`: Game Boy games in the interpreter (in progress: no sound, not recompiled yet)
+- `gb`, `gb_headless`: Game Boy games in the interpreter (in progress: not recompiled yet)
 - `kit/`: recompiles your own ROMs into native programs with only CMake and a C compiler installed (SDL3 comes prebuilt)
 
 `README.txt` in the archive explains how to play and how to recompile. macOS builds are unsigned: run `xattr -dr com.apple.quarantine retrocast-*` once after unpacking.

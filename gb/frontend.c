@@ -1,7 +1,7 @@
 /* The Game Boy for the SDL3 frontend (core/frontend/system.h): loading,
  * battery saves (ROM.sav: the cartridge RAM, then for MBC3 the clock and
  * when it was saved, so it moves on while the program is closed), the
- * screen's palette. No sound yet (G4). */
+ * screen's palette, the sound. */
 #include <SDL3/SDL.h>
 #include <string.h>
 #include <time.h>
@@ -86,7 +86,7 @@ int sys_open(const char *path, const Settings *settings, SysInfo *info, char *er
     info->height = info->lines = 144;
     info->fps = 4194304.0 / 70224;  /* 59.73 Hz */
     info->aspect = 1.0;
-    info->sample_rate = 48000;
+    info->sample_rate = GB_SAMPLE_RATE;
     return 0;
 }
 
@@ -102,14 +102,13 @@ void sys_reset(void) {
 }
 
 int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
-    (void)samples, (void)max;
     static const uint32_t GREEN[4] = {0xE0F8D0, 0x88C070, 0x346856, 0x081820};
     static const uint32_t GRAY[4] = {0xFFFFFF, 0xAAAAAA, 0x555555, 0x000000};
     const uint32_t *pal = gray ? GRAY : GREEN;
     gb_set_pad(&gb, in->pad[0]);
     gb_run_frame(&gb);
     for (int i = 0; i < 160 * 144; i++) rgb[i] = pal[gb.frame[i] & 3];
-    return 0;  /* no sound yet */
+    return apu_take_samples(&gb, samples, max);
 }
 
 const char *sys_halted(char *buf, size_t len) {

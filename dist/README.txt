@@ -11,9 +11,10 @@ WHAT IS IN HERE
   nes_headless    The same without a window, for scripts and checks
                   (--frames N, --record/--replay, --diff, --coverage, ...).
   nesrecomp       The recompiler: turns a ROM into C source.
-  gb              Plays a Game Boy game in the built-in interpreter (no sound
-                  yet, not recompiled yet). Usage: gb path/to/game.gb
-  gb_headless     The same without a window, for test ROMs (--frames N).
+  gb              Plays a Game Boy game in the built-in interpreter (not
+                  recompiled yet). Usage: gb path/to/game.gb
+  gb_headless     The same without a window, for test ROMs (--frames N,
+                  --wav FILE to record the sound).
   kit/            Everything needed to build a recompiled game into a
                   native program (see below), with SDL3 prebuilt.
 

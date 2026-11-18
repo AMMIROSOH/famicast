@@ -47,9 +47,10 @@ plans in [docs/05-roadmap.md](docs/05-roadmap.md).
 - **Frontend**: save states, input recordings, fullscreen and scaling
   options, an optional TV frame.
 - **Game Boy**: in progress. `build/gb game.gb` plays games in the
-  interpreter, without sound yet and not recompiled yet. The CPU passes
-  SingleStepTests sm83, the system 103 blargg and mooneye test ROMs, the
-  PPU dmg-acid2 ([roadmap](docs/05-roadmap.md#game-boy)).
+  interpreter, with sound, not recompiled yet. The CPU passes
+  SingleStepTests sm83, the system 117 blargg and mooneye test ROMs
+  (dmg_sound among them), the PPU dmg-acid2
+  ([roadmap](docs/05-roadmap.md#game-boy)).
 
 ## Mappers
 The mapper is the cartridge's banking hardware; the iNES header names it.

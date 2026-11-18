@@ -28,8 +28,10 @@ static void tick(Gb *g) {
     if (g->tima_reload == 2) g->tima_reload = 0;
     else if (g->tima_reload == 1) g->tima = g->tma, g->ifl |= INT_TIMER, g->tima_reload = 2;
     int before = timer_bit(g->div, g->tac);
+    uint16_t old = g->div;
     g->div += 4;
     if (before && !timer_bit(g->div, g->tac)) timer_inc(g);
+    if (old & ~g->div & 0x1000) apu_frame_step(g);  /* DIV bit 4 fell */
 
     if (g->serial_left && !--g->serial_left) g->sb = 0xFF, g->sc &= 0x7F, g->ifl |= INT_SERIAL;
 
@@ -40,16 +42,11 @@ static void tick(Gb *g) {
     }
 
     ppu_tick(g);
+    apu_tick(g);
     gb_cart_tick(&g->cart);
 }
 
 /* ---- registers ---- */
-/* bits that read as 1 in $FF10-$FF3F (sound, until G4: stored, not played) */
-static const uint8_t SOUND_MASK[0x30] = {
-    0x80, 0x3F, 0x00, 0xFF, 0xBF, 0xFF, 0x3F, 0x00, 0xFF, 0xBF, 0x7F, 0xFF, 0x9F, 0xFF, 0xBF, 0xFF,
-    0xFF, 0x00, 0x00, 0xBF, 0x00, 0x00, 0x70, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-};
-
 static uint8_t io_read(Gb *g, uint16_t a) {
     switch (a) {
     case 0xFF00: {  /* buttons pressed read 0 in the selected group(s) */
@@ -76,8 +73,7 @@ static uint8_t io_read(Gb *g, uint16_t a) {
     case 0xFF4A: return g->wy;
     case 0xFF4B: return g->wx;
     }
-    if (a >= 0xFF10 && a < 0xFF30) return g->io[a & 0x7F] | SOUND_MASK[a - 0xFF10];
-    if (a >= 0xFF30 && a < 0xFF40) return g->io[a & 0x7F];  /* wave RAM */
+    if (a >= 0xFF10 && a < 0xFF40) return apu_read(g, a);
     return 0xFF;
 }
 
@@ -94,6 +90,7 @@ static void io_write(Gb *g, uint16_t a, uint8_t v) {
         return;
     case 0xFF04: {  /* reset the counter; a falling edge on the way counts */
         int before = timer_bit(g->div, g->tac);
+        if (g->div & 0x1000) apu_frame_step(g);
         g->div = 0;
         if (before) timer_inc(g);
         return;
@@ -123,7 +120,7 @@ static void io_write(Gb *g, uint16_t a, uint8_t v) {
     case 0xFF4A: g->wy = v; return;
     case 0xFF4B: g->wx = v; return;
     }
-    if (a >= 0xFF10 && a < 0xFF40) g->io[a & 0x7F] = v;
+    if (a >= 0xFF10 && a < 0xFF40) apu_write(g, a, v);
     else if (a >= 0xFF47 && a <= 0xFF49) g->io[a & 0x7F] = v;
 }
 
@@ -242,9 +239,7 @@ int gb_load(Gb *g, const uint8_t *rom, size_t size, char *err, size_t errlen) {
     g->lcdc = 0x91;
     g->mode = 2;
     g->dma_reg = 0xFF;
-    static const uint8_t SOUND[0x17] = {0x80, 0xBF, 0xF3, 0xFF, 0xBF, 0x00, 0x3F, 0x00, 0xFF, 0xBF, 0x7F, 0xFF,
-                                        0x9F, 0xFF, 0xBF, 0x00, 0xFF, 0x00, 0x00, 0xBF, 0x77, 0xF3, 0xF1};
-    memcpy(g->io + 0x10, SOUND, sizeof SOUND);
+    apu_boot(g);
     g->io[0x47] = 0xFC, g->io[0x48] = 0xFF, g->io[0x49] = 0xFF;
     return 0;
 }
