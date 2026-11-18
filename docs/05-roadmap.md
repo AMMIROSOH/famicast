@@ -25,7 +25,7 @@ only when that test passes in CI.
 | [G2](#g2--memory-timer-cartridges) | Game Boy: memory map, timer, interrupts, MBC1/2/3/5 | done (1 timer test open) |
 | [G3](#g3--ppu-and-frontend) | Game Boy: PPU, the window program (core/frontend) | done (8 PPU timing tests open) |
 | [G4](#g4--apu) | Game Boy: sound | done |
-| [G5](#g5--recompiler) | Game Boy: recompiler, lockstep diff | open |
+| [G5](#g5--recompiler) | Game Boy: recompiler, lockstep diff | done (code in RAM interpreted) |
 | [G6](#g6--game-boy-color) | Game Boy Color | open |
 
 ## Layout
@@ -391,8 +391,20 @@ to `core/` when the Game Boy is its second user (`docs/02` "Frontend").
   and the combined ROM.
 
 ### G5 · Recompiler
-- [ ] Decoding, banks (MBCs), blocks from the templates, auto hints,
-  lockstep diff against the interpreter.
+- [x] `gbrecomp` (`gb/recomp/recomp.c`): regions of one ROM bank in one
+  window, static flow followed inside the window; entries from the vectors
+  and the interpreter's trace (`gb_headless --misses`, `AUTO_HINTS`); one C
+  function per block from the templates, chaining inside the region; a bank
+  check after stores that may switch it. `gb_step` runs a block when there
+  is one for (PC, mapped bank), else interprets. `.gb` files in `ROMS` build
+  `NAME` and `NAME_headless` with the ROM embedded.
+- [x] **Exit:** `gb_headless --diff` (CPU after every step, the whole
+  machine after every frame): 21 sampled games and blargg cpu_instrs in
+  lockstep; 94.8-99.8% of CPU cycles recompiled in 19 of the 21.
+- [ ] Open: code run from WRAM (two of the 21 games: 29% and 74%), hint
+  files and play misses (as the NES has), and speed: recompiled runs as
+  fast as the interpreter, every access ticking the PPU and APU (a
+  catch-up scheme, as the NES's, would be the next step).
 
 ### G6 · Game Boy Color
 - [ ] Double speed, VRAM/WRAM banks, palettes, HDMA.

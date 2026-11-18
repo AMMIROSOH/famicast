@@ -46,10 +46,12 @@ plans in [docs/05-roadmap.md](docs/05-roadmap.md).
   most of the time, so recompiling gains little over the interpreter here.
 - **Frontend**: save states, input recordings, fullscreen and scaling
   options, an optional TV frame.
-- **Game Boy**: in progress. `build/gb game.gb` plays games in the
-  interpreter, with sound, not recompiled yet. The CPU passes
-  SingleStepTests sm83, the system 117 blargg and mooneye test ROMs
-  (dmg_sound among them), the PPU dmg-acid2
+- **Game Boy**: in progress (no Game Boy Color yet). `build/gb game.gb`
+  plays games in the interpreter, with sound; `.gb` files in `ROMS` are
+  recompiled like NES games. The CPU passes SingleStepTests sm83, the
+  system 117 blargg and mooneye test ROMs (dmg_sound among them), the PPU
+  dmg-acid2. 21 sampled games ran recompiled in lockstep with the
+  interpreter, most with 94.8-99.8% of their CPU cycles recompiled
   ([roadmap](docs/05-roadmap.md#game-boy)).
 
 ## Mappers
@@ -201,7 +203,9 @@ cmake -S . -B build -DROMS="path/to/Game One.nes;path/to/Game Two (E) [!].nes"
 cmake --build build --config Release   # -> build/game_one, build/game_two (+ _headless)
 build/game_one                         # the ROM is embedded: no path needed
 ```
-Disk games (`.fds`) go in `ROMS` too, with the BIOS:
+Game Boy games (`.gb`) go in `ROMS` the same way (traced first, as with
+`AUTO_HINTS` below; hint files and the misses of your own play are NES-only
+so far). Disk games (`.fds`) go in `ROMS` too, with the BIOS:
 `-DROMS="Disk Game.fds" -DFDS_BIOS=path/to/disksys.rom`. The program then
 carries the BIOS as well. `FDS_BIOS` alone also builds `build/fds`, which
 plays any `.fds` image with only the BIOS recompiled; `nes/games/fds.toml` holds

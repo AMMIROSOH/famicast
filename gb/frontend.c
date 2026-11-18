@@ -1,12 +1,14 @@
 /* The Game Boy for the SDL3 frontend (core/frontend/system.h): loading,
  * battery saves (ROM.sav: the cartridge RAM, then for MBC3 the clock and
  * when it was saved, so it moves on while the program is closed), the
- * screen's palette, the sound. */
+ * screen's palette, the sound. A recompiled game (gb_recompile) plays its
+ * embedded ROM when started without one. */
 #include <SDL3/SDL.h>
 #include <string.h>
 #include <time.h>
 
 #include "gb.h"
+#include "recomp_rt.h"
 #include "system.h"
 
 #ifndef APP_NAME
@@ -69,13 +71,24 @@ static void save_sav(void) {
 
 int sys_open(const char *path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
     (void)settings;
-    if (!path) return SDL_snprintf(err, errlen, "usage: %s ROM [--frames N] [--record FILE] [--replay FILE]", APP_NAME), 2;
-    rom = SDL_LoadFile(path, &rom_size);
-    if (!rom) return SDL_snprintf(err, errlen, "%s: %s", path, SDL_GetError()), 1;
+    const int embedded = !path && gb_recomp_program && gb_recomp_program->rom;
+    if (!path && !embedded) return SDL_snprintf(err, errlen, "usage: %s ROM [--frames N] [--record FILE] [--replay FILE]", APP_NAME), 2;
+    if (embedded) {  /* saves and states: the ROM's file name next to the program */
+        rom_size = gb_recomp_program->rom_size;
+        rom = SDL_malloc(rom_size);
+        if (!rom) return SDL_snprintf(err, errlen, "out of memory"), 1;
+        SDL_memcpy(rom, gb_recomp_program->rom, rom_size);
+        SDL_snprintf(sav_path, sizeof sav_path, "%s%s", SDL_GetBasePath(), gb_recomp_program->rom_name);
+        path = gb_recomp_program->rom_name;
+    } else {
+        rom = SDL_LoadFile(path, &rom_size);
+        if (!rom) return SDL_snprintf(err, errlen, "%s: %s", path, SDL_GetError()), 1;
+        SDL_strlcpy(sav_path, path, sizeof sav_path);
+    }
     char msg[128];
     if (gb_load(&gb, rom, rom_size, msg, sizeof msg) != 0) return SDL_snprintf(err, errlen, "%s: %s", path, msg), 1;
-    SDL_snprintf(sav_path, sizeof sav_path, "%s.sav", path);
-    SDL_snprintf(info->state_path, sizeof info->state_path, "%s.state", path);
+    SDL_snprintf(info->state_path, sizeof info->state_path, "%s.state", sav_path);
+    SDL_strlcat(sav_path, ".sav", sizeof sav_path);
     if (gb.cart.battery) load_sav();
     const char *name = path;
     for (const char *p = path; *p; p++)

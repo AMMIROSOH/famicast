@@ -1,6 +1,5 @@
-/* gbrecomp: the SM83 instruction templates (sm83.c). The recompiler itself
- * (decoding, blocks, emitting) comes later; for now gbrecomp writes the
- * interpreter's opcode switch from these templates. */
+/* gbrecomp: the SM83 instruction templates (sm83.c), for the interpreter's
+ * opcode switch and for recompiled blocks (recomp.c). */
 #ifndef GB_SM83_H
 #define GB_SM83_H
 

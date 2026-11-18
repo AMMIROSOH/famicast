@@ -81,11 +81,11 @@ option(AUTO_HINTS "Trace each game in the interpreter before recompiling it" ON)
 option(EMBED_ROM "Embed the ROM in recompiled programs" ON)
 set(AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by AUTO_HINTS")
 
-# Your own games (never committed): -DROMS="a.nes;b.fds" (.fds needs FDS_BIOS).
+# Your own games (never committed): -DROMS="a.nes;b.fds;c.gb" (.fds needs FDS_BIOS).
 # Target name = file name without "(...)"/"[...]" tags, lower case,
 # non-alphanumerics -> '_' (e.g. "Arkista's Ring (U) [!].nes" -> arkista_s_ring);
 # hints are read from nes/games/<name>.toml when present.
-set(ROMS "" CACHE STRING "ROM files (.nes, .fds) to recompile (semicolon-separated)")
+set(ROMS "" CACHE STRING "ROM files (.nes, .fds, .gb) to recompile (semicolon-separated)")
 # Relative paths are relative to the folder cmake was run from (for the
 # release kit that is the archive folder, not kit/), else to this source
 # folder. CMake has no variable for the former, but a cmake -P child sees it
@@ -122,7 +122,7 @@ if(ROMS)
             message(FATAL_ERROR "ROMS: not found: ${rom} (looked in ${cwd} and ${CMAKE_SOURCE_DIR})")
         endif()
     endforeach()
-    set(ROMS "${absolute_roms}" CACHE STRING "ROM files (.nes, .fds) to recompile (semicolon-separated)" FORCE)
+    set(ROMS "${absolute_roms}" CACHE STRING "ROM files (.nes, .fds, .gb) to recompile (semicolon-separated)" FORCE)
 endif()
 
 add_subdirectory(nes)
@@ -134,8 +134,14 @@ foreach(rom IN LISTS ROMS)
     string(TOLOWER "${stem}" name)
     string(REGEX REPLACE "[^a-z0-9]+" "_" name "${name}")
     string(REGEX REPLACE "^_+|_+$" "" name "${name}")
-    nes_recompile(${name} "${rom}" ${NES_DIR}/games/${name}.toml)
-    list(APPEND game_names ${name})
+    get_filename_component(ext "${rom}" LAST_EXT)
+    string(TOLOWER "${ext}" ext)
+    if(ext STREQUAL ".gb")
+        gb_recompile(${name} "${rom}")
+    else()
+        nes_recompile(${name} "${rom}" ${NES_DIR}/games/${name}.toml)
+        list(APPEND game_names ${name})
+    endif()
 endforeach()
 # for tests/test_regression.py: the games this build recompiles
 list(JOIN game_names "\n" game_lines)

@@ -10,6 +10,11 @@
 static inline uint8_t rd(GbCpu *c, uint16_t a) { c->cycles++; return gb_read(c, a); }
 static inline void wr(GbCpu *c, uint16_t a, uint8_t v) { c->cycles++; gb_write(c, a, v); }
 static inline void idle(GbCpu *c) { c->cycles++; gb_idle(c); }
+/* recompiled code: a code byte read as the CPU does (the cycle, the bus),
+ * the value known when it was recompiled.
+ * shortcut: ROM code run during OAM DMA from ROM would read the DMA's byte;
+ * games wait in HRAM then (gb_headless --diff would show it). */
+static inline uint8_t fetch_k(GbCpu *c, uint16_t a, uint8_t k) { c->cycles++; (void)gb_read(c, a); return k; }
 
 static inline uint16_t bc(const GbCpu *c) { return (uint16_t)(c->b << 8 | c->c); }
 static inline uint16_t de(const GbCpu *c) { return (uint16_t)(c->d << 8 | c->e); }

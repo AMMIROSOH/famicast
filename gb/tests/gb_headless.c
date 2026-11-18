@@ -1,9 +1,16 @@
-/* Game Boy without a window, for tests (tests/test_gb_roms.py).
+/* Game Boy without a window, for tests (tests/test_gb_roms.py, test_gb_recomp.py).
  *   gb_headless ROM [--frames N] [--pgm FILE] [--wav FILE] [--play] [--state-at F FILE] [--load-state FILE]
+ *               [--misses FILE] [--diff] [--coverage]
  *   --pgm         write the last whole frame as a grey image (shade 0 = white)
  *   --wav         write the sound (48 kHz mono, 16-bit)
  *   --play        scripted input: Start and A taps, later walking right
  *   --state-at    save a state before frame F; --load-state: start from one
+ *   --misses      write the ROM code the interpreter ran ("MISS $PC bank B",
+ *                 input for gbrecomp; without recompiled code: everything run)
+ *   --diff        run an interpreter-only Game Boy in lockstep: the CPU must
+ *                 match after every step (chained blocks: one step), the whole
+ *                 machine after every frame
+ *   --coverage    print the share of CPU cycles run by recompiled code
  * Runs up to N frames (default 3600), stopping early when a test ROM
  * reports on the serial port: blargg's "Passed" / "Failed" text, or
  * mooneye's bytes 3 5 8 13 21 34 (pass) / six $42 (fail), or blargg's
@@ -13,8 +20,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <stddef.h>
+
 #include "gb.h"
 #include "input_log.h"  /* PAD_* */
+#include "recomp_rt.h"
 
 static int result(const Gb *g) {  /* 1 pass, -1 fail, 0 not yet */
     static const char FIB[6] = {3, 5, 8, 13, 21, 34}, FAIL[6] = {0x42, 0x42, 0x42, 0x42, 0x42, 0x42};
@@ -41,6 +51,62 @@ static const char *memory_text(const Gb *g) {
     return (const char *)m + 4;
 }
 
+/* ---- lockstep comparison (--diff) ---- */
+static int same_cpu(const GbCpu *a, const GbCpu *b) {
+    GbCpu x = *a, y = *b;
+    x.bus = y.bus = NULL;
+    return !memcmp(&x, &y, sizeof x);
+}
+
+/* The machine's fields; what differs between the two runs by design
+ * (recomp_*, cycles_*, misses, the pointers) is left out. */
+#define F(x) {#x, offsetof(Gb, x), sizeof(((Gb *)0)->x)}
+static const struct { const char *name; size_t off, len; } FIELDS[] = {
+    F(vram), F(wram), F(oam), F(hram), F(io), F(apu), F(ie), F(ifl), F(div), F(tima), F(tma), F(tac),
+    F(tima_reload), F(sb), F(sc), F(serial_left), F(serial_out), F(serial_n), F(p1), F(pad), F(lcdc), F(stat),
+    F(scy), F(scx), F(ly), F(lyc), F(wy), F(wx), F(stat_line), F(mode), F(wy_hit), F(win_line), F(dot),
+    F(mode3_end), F(fb), F(frame), F(frame_count), F(dma_reg), F(dma_start), F(dma_on), F(dma_pos), F(dma_src),
+    F(dma_next), F(frame_end),
+};
+static const char *differs(const Gb *a, const Gb *b) {
+    if (!same_cpu(&a->cpu, &b->cpu)) return "cpu";
+    static GbCart x, y;
+    x = a->cart, y = b->cart;
+    x.rom = y.rom = NULL;
+    if (memcmp(&x, &y, sizeof x)) return "cart";
+    for (size_t i = 0; i < sizeof FIELDS / sizeof *FIELDS; i++)
+        if (memcmp((const char *)a + FIELDS[i].off, (const char *)b + FIELDS[i].off, FIELDS[i].len)) return FIELDS[i].name;
+    return NULL;
+}
+
+static void print_cpu(const char *who, const GbCpu *c) {
+    printf("  %-11s PC=%04X SP=%04X A=%02X F=%02X B=%02X C=%02X D=%02X E=%02X H=%02X L=%02X ime=%d ei=%d halt=%d cycles=%llu\n",
+           who, c->pc, c->sp, c->a, c->f, c->b, c->c, c->d, c->e, c->h, c->l, c->ime, c->ei, c->halted,
+           (unsigned long long)c->cycles);
+}
+
+/* One frame of both; 0, or -1 after printing the first difference. */
+static int frame_diff(Gb *g, Gb *ref, long frame) {
+    g->frame_end += GB_FRAME_CYCLES;
+    ref->frame_end = g->frame_end;
+    while (g->cpu.cycles < g->frame_end) {
+        GbCpu before = g->cpu;
+        int native = g->recomp_on && before.pc < 0x8000 && gb_recomp_program->lookup(before.pc, gb_cart_bank(&g->cart, before.pc));
+        gb_step(g);
+        while (ref->cpu.cycles < g->cpu.cycles) gb_step(ref);
+        const char *what = same_cpu(&g->cpu, &ref->cpu) ? NULL : "cpu";
+        if (!what && g->cpu.cycles >= g->frame_end) what = differs(g, ref);
+        if (!what) continue;
+        printf("DIVERGENCE (%s) in frame %ld, step from PC=%04X (%s)\n", what, frame, before.pc,
+               native ? "recompiled block" : "interpreted");
+        print_cpu("before", &before);
+        print_cpu("recompiled", &g->cpu);
+        print_cpu("interpreter", &ref->cpu);
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: gb_headless ROM [--frames N]\n");
@@ -48,7 +114,8 @@ int main(int argc, char **argv) {
     }
     long frames = 3600, state_at = -1;
     const char *pgm = NULL, *wav = NULL, *state_out = NULL, *state_in = NULL;
-    int play = 0;
+    const char *misses = NULL;
+    int play = 0, diff = 0, coverage = 0;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]);
         else if (!strcmp(argv[i], "--pgm") && i + 1 < argc) pgm = argv[++i];
@@ -56,6 +123,10 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--play")) play = 1;
         else if (!strcmp(argv[i], "--state-at") && i + 2 < argc) state_at = atol(argv[++i]), state_out = argv[++i];
         else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) state_in = argv[++i];
+        else if (!strcmp(argv[i], "--misses") && i + 1 < argc) misses = argv[++i];
+        else if (!strcmp(argv[i], "--diff")) diff = 1;
+        else if (!strcmp(argv[i], "--coverage")) coverage = 1;
+        else { fprintf(stderr, "gb_headless: unknown option %s\n", argv[i]); return 2; }
     }
     FILE *f = fopen(argv[1], "rb");
     if (!f) { perror(argv[1]); return 2; }
@@ -65,17 +136,23 @@ int main(int argc, char **argv) {
     uint8_t *rom = malloc((size_t)size);
     if (!rom || fread(rom, 1, (size_t)size, f) != (size_t)size) { perror(argv[1]); return 2; }
     fclose(f);
-    static Gb g;
+    static Gb g, ref;
     char err[128];
-    if (gb_load(&g, rom, (size_t)size, err, sizeof err) != 0) {
+    if (gb_load(&g, rom, (size_t)size, err, sizeof err) != 0 || (diff && gb_load(&ref, rom, (size_t)size, err, sizeof err) != 0)) {
         fprintf(stderr, "%s: %s\n", argv[1], err);
         return 2;
     }
     free(rom);
-    if (state_in && gb_state_load(&g, state_in, err, sizeof err) != 0) {
+    if (gb_recomp_program && !g.recomp_on)
+        printf("WARNING: the recompiled code is for %s; this ROM differs, all of it is interpreted\n", gb_recomp_program->rom_name);
+    if (diff && !g.recomp_on) { fprintf(stderr, "--diff needs matching recompiled code\n"); return 2; }
+    ref.recomp_on = 0;
+    if (state_in && (gb_state_load(&g, state_in, err, sizeof err) != 0 || (diff && gb_state_load(&ref, state_in, err, sizeof err) != 0))) {
         fprintf(stderr, "%s: %s\n", state_in, err);
         return 2;
     }
+    ref.recomp_on = 0;
+    if (misses && !(g.misses = calloc(gb_miss_slots(&g), 1))) { perror("misses"); return 2; }
     FILE *w = wav ? fopen(wav, "wb") : NULL;
     if (wav && !w) { perror(wav); return 2; }
     static const uint8_t WAV[44] = {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ',
@@ -88,9 +165,13 @@ int main(int argc, char **argv) {
         if (i == state_at && gb_state_save(&g, state_out) != 0) { perror(state_out); return 2; }
         if (play) {  /* Start and A taps to get past menus, then some walking right */
             long k = i % 90;
-            gb_set_pad(&g, k < 5 ? PAD_START : k >= 45 && k < 48 ? PAD_A : i > 900 && k >= 60 ? PAD_RIGHT : 0);
+            uint8_t pad = k < 5 ? PAD_START : k >= 45 && k < 48 ? PAD_A : i > 900 && k >= 60 ? PAD_RIGHT : 0;
+            gb_set_pad(&g, pad);
+            if (diff) gb_set_pad(&ref, pad);
         }
-        gb_run_frame(&g);
+        if (!diff) gb_run_frame(&g);
+        else if (frame_diff(&g, &ref, i) != 0) return 1;
+        ref.apu.buf_len = 0;  /* drained as g is below */
         float buf[GB_APU_BUF];
         int n = apu_take_samples(&g, buf, GB_APU_BUF);
         for (int k = 0; w && k < n; k++) {
@@ -119,6 +200,19 @@ int main(int argc, char **argv) {
     }
     if (!g.serial_n) printf("%.1024s", memory_text(&g));
     printf("\nresult: %s%s\n", r > 0 ? "passed" : r < 0 ? "failed" : "timeout", g.cpu.jammed ? " (CPU jammed)" : "");
+    if (diff) printf("DIFF OK: no divergence\n");
+    if (coverage) {
+        double total = (double)(g.cycles_native + g.cycles_interp);
+        printf("COVERAGE %.3f%% of CPU cycles recompiled\n", total ? 100 * g.cycles_native / total : 0.0);
+    }
+    if (misses) {
+        FILE *m = fopen(misses, "w");
+        if (!m) { perror(misses); return 2; }
+        gb_misses_write(&g, m);
+        fclose(m);
+        return 0;  /* a trace: how the ROM's own test ended does not matter */
+    }
     gb_free(&g);
+    if (diff) gb_free(&ref);
     return r > 0 ? 0 : 1;
 }
