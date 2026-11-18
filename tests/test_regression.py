@@ -5,7 +5,7 @@ count and audio must hash to the recorded values (tests/data/frame_hashes.json).
 Hashes are kept per game name and PRG hash, so a different dump of a game is
 skipped, not failed. After an intended change in output (a PPU or APU fix):
     NES_UPDATE_HASHES=1 python -m unittest tests.test_regression
-and say in docs/06 why the hashes changed.
+and say in nes/docs/verification-log.md why the hashes changed.
 """
 import json
 import os

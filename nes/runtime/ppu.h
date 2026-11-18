@@ -1,5 +1,5 @@
 /* 2C02 PPU (and the PAL 2C07 and Dendy timings: ppu_reset), stepped one dot
- * at a time (3 dots per CPU cycle, 3.2 on PAL; docs/04).
+ * at a time (3 dots per CPU cycle, 3.2 on PAL; nes/docs/timing-constants.md).
  * References: nesdev wiki "PPU registers", "PPU scrolling" (loopy v/t/x/w),
  * "PPU rendering", "PPU sprite evaluation", "PPU frame timing". */
 #ifndef NES_PPU_H

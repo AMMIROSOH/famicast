@@ -1,4 +1,4 @@
-# 07 · Sources and credits
+# Sources and credits
 
 Every external source we use goes here: what it is, what we used it for,
 and its license if we take code or data from it. If code is copied or adapted,

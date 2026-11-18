@@ -3,7 +3,7 @@
  * Instructions are keyed by address, so two decodes may overlap (e.g. the SMB
  * `BIT abs` trick, where the operand bytes are also an instruction reached by
  * a jump). Code that cannot be followed statically (JMP (ind), RTS used as a
- * jump, jumps into RAM) is left to the runtime's interpreter (docs/02). */
+ * jump, jumps into RAM) is left to the runtime's interpreter (nes/docs/architecture.md). */
 #include <stdlib.h>
 #include <string.h>
 

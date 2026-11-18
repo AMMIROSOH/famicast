@@ -1,4 +1,4 @@
-/* nesrecomp: recompile an NES ROM to C (docs/02).
+/* nesrecomp: recompile an NES ROM to C (docs/architecture.md).
  *
  *   nesrecomp ROM -o OUT.c [--hints GAME.toml]... [--misses RUN.txt]... [--save-hints OUT.toml]
  *             [--no-rom]               do not embed the ROM (the program then needs the file)

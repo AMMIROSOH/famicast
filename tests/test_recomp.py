@@ -1,4 +1,4 @@
-"""Recompiler checks (docs/02 verification ladder 4-5).
+"""Recompiler checks (docs/architecture.md verification ladder 4-5).
 
 Blocks and suggestions: through nesrecomp (tests/nesrecomp.py).
 nestest: the CPU state after every recompiled block must equal the line of

@@ -1,4 +1,4 @@
-/* nesrecomp: 6502 -> C static recompiler (docs/02). Build-time tool, plain
+/* nesrecomp: 6502 -> C static recompiler (docs/architecture.md). Build-time tool, plain
  * C11, no dependencies beyond runtime/cart.c (iNES loading and banking). */
 #ifndef NES_RECOMP_H
 #define NES_RECOMP_H
@@ -53,7 +53,7 @@ void block_starts(const Program *prog, const uint8_t *mem, AddrSet *starts);
  * from elsewhere (RAM, another bank) get their lowest address. */
 void chain_starts(const uint8_t *mem, const AddrSet *misses, AddrSet *starts);
 
-/* ---- banks.c (in analyze.c): PRG banking, see docs/02 "Banked mappers" ---- */
+/* ---- banks.c (in analyze.c): PRG banking, see nes/docs/architecture.md "Banked mappers" ---- */
 typedef struct {
     const uint8_t *prg;
     uint32_t prg_size;

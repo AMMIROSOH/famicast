@@ -1,7 +1,7 @@
-# 04 · Timing constants (NTSC; PAL and Dendy below)
+# Timing constants (NTSC; PAL and Dendy below)
 
 Source: nesdev wiki "Cycle reference chart" and "PPU frame timing"
-([07-sources.md](07-sources.md)).
+([sources.md](../../docs/sources.md)).
 
 - Master clock 21.477272 MHz.
 - CPU = master / 12 = **1.789773 MHz**.

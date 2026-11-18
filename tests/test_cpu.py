@@ -1,4 +1,4 @@
-"""Interpreter vs independent references (docs/02, verification ladder 2-3).
+"""Interpreter vs independent references (docs/architecture.md, verification ladder 2-3).
 
 Needs the C build: cmake -S . -B build -G Ninja && cmake --build build
 SingleStepTests: python tests/fetch_test_roms.py --sst (opcodes not yet

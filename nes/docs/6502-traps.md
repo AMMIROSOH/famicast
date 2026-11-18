@@ -1,8 +1,8 @@
-# 03 · 6502 / 2A03 traps
+# 6502 / 2A03 traps
 
 Details that are easy to get wrong. Each item says how we test it.
 Primary references: nesdev wiki (CPU, Status flags, Stack, NMI pages), see
-[07-sources.md](07-sources.md).
+[sources.md](../../docs/sources.md).
 
 ## CPU
 - **2A03 = 6502 without decimal mode.** The D flag can be set and is pushed
@@ -80,7 +80,7 @@ addressing case above), blargg `instr_test-v5`, `cpu_interrupts_v2`.
 
 ## Lessons from the first prototype
 The first prototype failed on these points; see
-[08-first-prototype.md](08-first-prototype.md) for the whole story.
+[first-prototype.md](first-prototype.md) for the whole story.
 - **Lifting a load to a no-op loses its flags.** A load that the driver
   performs must still set N/Z.
 - **Two addressing modes in one tag**: `JMP (abs)` (3 bytes) and `(zp),Y`

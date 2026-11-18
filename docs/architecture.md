@@ -1,0 +1,146 @@
+# Architecture
+
+How the project is built, for every system. Each system's own details:
+[NES](../nes/docs/architecture.md), [Game Boy](../gb/docs/architecture.md).
+
+## Goals
+1. Run games as native executables built from their recompiled CPU code.
+2. Be correct first: every layer is checked against an independent reference.
+3. Keep the output readable: generated C, one function per basic block,
+   named by bank and address (`b_07_C079`), so the binary also decompiles
+   cleanly in IDA/Ghidra.
+
+Non-goals for now: netplay.
+
+## Layout
+```
+retrocast/
+  CMakeLists.txt     build defaults, SDL3, frontend(), ROMS / FDS_BIOS / AUTO_HINTS / EMBED_ROM
+  cmake/             SDL3 build options
+  core/              shared by every system
+    input_log.c      input recordings, pad bits
+    frontend/        sdl3_main.c settings.c tv_frame.c; system.h: a system's interface
+    recomp/          template.c: instruction templates and their PC markers
+  nes/               the NES and the Famicom Disk System
+    README.md, docs/ its status, mappers, roadmap, verification log
+    CMakeLists.txt   nes_recompile(), nes, nes_headless, nesrecomp
+    recomp/          nesrecomp: opcode table, C per opcode, analysis, emitter
+    runtime/         CPU, bus, PPU, APU, mappers, disk drive; recomp_rt.h
+    frontend.c       the NES behind core/frontend/system.h
+    tests/           C test runners (cpu_tests.c, nes_headless.c)
+    games/           per-game hints (<name>.toml)
+  gb/                the Game Boy and Game Boy Color, laid out the same way
+    README.md, docs/
+    CMakeLists.txt   gb_recompile(), gb, gb_headless, gbrecomp
+    recomp/          gbrecomp: sm83.c (C per opcode), recomp.c (regions, blocks)
+    runtime/         CPU, bus (gb.c), PPU, APU, cartridges; recomp_rt.h
+    frontend.c, tests/
+  tests/             Python unittest suite for every system, fetch_test_roms.py
+  tools/             bench.py, smoke_games.py, make_release.py, ...
+  dist/              README.txt for the release archives
+  docs/              this: what is shared
+```
+A new system is a new folder beside `nes/` and `gb/` with the same parts.
+Code moves to `core/` once a second system needs it.
+
+## The pipeline
+```
+              build time (CMake)                                  run time
+ROM ─► trace: <sys>_headless --play --misses (interpreter) ─┐
+    └► <sys>recomp: decode, blocks, emit C, embed ROM ◄──────┘
+                 └► gen/<game>.c ─► cc + <sys>/runtime + core ─► <game>(.exe)
+                                                                  │
+               dispatch: (pc, bank mapped at pc) → block function ┤
+                        none → the interpreter, one instruction   │
+               core/frontend: SDL3 window, sound, gamepads,       │
+                        settings, states, recordings              ┘
+```
+
+## Instruction templates
+Each CPU's instructions are written once, as a few lines of C per opcode
+(`nes/recomp/c6502.c`, `gb/recomp/sm83.c`). The recompiler generates the
+interpreter's opcode switch from them (`--cpu-switch`) and builds the
+recompiled blocks from the same lines, so bus traffic and cycle counts of
+both are identical by construction. The templates never name the PC in C:
+every use is a marker (`core/recomp/template.h`: operand fetch, read at the
+PC, its value, step, jump, branch), which the interpreter expands to
+run-time C and the recompiler to constants (the code bytes and addresses
+it knows). A raw `c->pc` in a template stops the build, and so do operand
+fetches that stop matching the instruction's size, so a template change
+cannot silently read the wrong bytes.
+
+## Recompiled code
+- **Blocks**: one C function per basic block. A `switch (c->pc)` at the
+  top makes every instruction an entry point (code resumes mid-block after
+  an interrupt without falling back). After each instruction the block
+  returns if the interpreter would do something else next (an interrupt
+  is due, the frame is over), so recompiled and interpreted runs take the
+  same steps.
+- **Chaining**: a block continues in the next one when it is known at
+  build time and in the same region (`RECOMP_CHAIN`, a guaranteed tail
+  call with clang and gcc 15+; other compilers return to the dispatcher).
+- **Banks**: code is compiled per region (a ROM bank in an address window)
+  and looked up by the bank mapped at run time, so a wrong guess about
+  banking costs coverage, never correctness. After a store that may switch
+  banks, a block checks its own bank and returns if it changed.
+- **Identity**: the generated code carries an FNV-1a hash of the ROM; the
+  runtime uses it only if the loaded ROM matches.
+- **Embedded ROM**: the generated C also holds the whole ROM, used when no
+  ROM path is given. Data is read through pointers whose range no static
+  analysis can bound, so leaving bytes out could break a game late. A build
+  therefore contains the game and must not be shared.
+
+## Missed code: the feedback loop
+Static decoding cannot see every target (jump tables, returns used as
+jumps, code in RAM). The interpreter runs what was missed, and
+`<sys>_headless --misses` lists it; run without recompiled code it lists
+every instruction executed, so one interpreter run is a complete trace of
+that session. With `AUTO_HINTS` (on by default) the build traces each game
+with scripted input before recompiling it. The NES also keeps hints per
+game and the misses of your own play (`nes/README.md`).
+
+## The interpreter
+Every system has a reference interpreter, sharing the CPU struct and the
+bus with the recompiled code. It runs what the recompiler did not see and
+interrupt entry; it runs whole games on its own (`build/nes`, `build/gb`);
+and it is the **oracle**: validated against independent tests (per-opcode
+suites, test ROMs), then the recompiled code is diffed against it.
+
+## What the lockstep diff proves, and what it does not
+`<game>_headless --diff` runs an interpreter-only machine beside the
+recompiled one and stops at the first difference. Since both share the
+templates, a match proves that translation, block discovery and bank
+handling are right: the recompiled program does what the interpreter
+does. It cannot catch an instruction both get wrong. That rests on the
+interpreter's own checks (rungs 2, 3 and 6 below).
+
+## Save states
+The whole machine is one struct per system, the same in interpreter and
+recompiled builds (recompiled code keeps no state of its own), so a state
+saved by one loads in the other: header (magic, version, struct size, game
+hash), then the struct. Pointers (ROM data, bus, linked code) are re-created
+on load. Shortcut: the raw struct ties a state to one build layout; a
+field-wise format is needed once states must survive program updates.
+
+## Frontend
+SDL3 window, audio and gamepads (`core/frontend/`), the same for every
+system. A system plugs in through `core/frontend/system.h`: it loads the
+game and its saves, runs a frame (input in, picture and sound out), saves
+and loads states, says why a game halted, and takes the keys and settings
+that are its own. The frontend does the rest. The emulator runs on its own
+thread, so window moves and device changes do not stall the sound.
+Settings come from `<program>.ini` next to the program (`settings.c`).
+Scaling is done by the frontend (fit, integer or stretch), so the optional
+TV frame (`tv_frame.c`) and the picture scale together.
+
+## Verification ladder (each rung must pass before the next)
+1. The opcode table matches an independent table.
+2. The interpreter matches a reference log (NES: `nestest.log`).
+3. The interpreter passes per-opcode tests cycle by cycle (SingleStepTests).
+4. Recompiled test code matches the same references.
+5. Lockstep diff: games run recompiled and interpreted side by side, the
+   first divergence printed.
+6. The system's test ROMs (blargg, mooneye, acid2 and others) pass in the
+   interpreter build.
+7. Frame-hash regression for the recompiled games in a build (NES:
+   `tests/test_regression.py`).

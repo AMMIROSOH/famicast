@@ -1,5 +1,5 @@
 """Whole-system test ROMs (CPU, PPU, APU, interrupts) on the interpreter
-(docs/02, verification ladder 6).
+(docs/architecture.md, verification ladder 6).
 
 Needs the C build (see tests/test_cpu.py). ROMs come from the pinned
 nes-test-roms mirror (tests/fetch_test_roms.py).

@@ -1,5 +1,5 @@
 # Recompiler hints for nestest.nes: code reached only through dynamic jumps
-# (found by tests/test_decoder.py from nestest.log, see docs/06).
+# (found by tests/test_decoder.py from nestest.log, see nes/docs/verification-log.md).
 entries = [
     0xC000,  # automation-mode entry (not a vector; reset goes to the menu at $C004)
     0xCE67,  # RTS used as a jump: PHA/PHA/RTS at $CE60-$CE66

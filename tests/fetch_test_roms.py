@@ -1,6 +1,6 @@
 """Download public test ROMs into tests/roms/ (git-ignored), checking SHA-256.
 
-Sources and licenses: docs/07-sources.md. Run: python tests/fetch_test_roms.py
+Sources and licenses: docs/sources.md. Run: python tests/fetch_test_roms.py
 """
 import hashlib
 import json

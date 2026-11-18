@@ -60,7 +60,7 @@ endif()
 # AUTO_HINTS (on by default): first run the game in the interpreter with
 # scripted input (nes_headless --play) and give every address it ran to
 # nesrecomp, so code reached in that session is recompiled without hand-made
-# hints (~6 s per game; coverage from as low as 0.3% static to 99.9%, docs/06).
+# hints (~6 s per game; coverage from as low as 0.3% static to 99.9%, nes/docs/verification-log.md).
 # Traced once per ROM: a rebuilt nes_headless does not trace again. The merged
 # hints are written to ${GEN_DIR}/NAME.toml; copy them to nes/games/ to keep them.
 #
@@ -119,7 +119,7 @@ function(nes_recompile name rom)
         COMMENT "Recompiling ${name}")
     add_library(${name}_code STATIC ${out})
     # bus helpers out of line in generated code: thousands of blocks with them
-    # inlined outgrow the CPU caches (Kirby: 8.6 -> 4.6 MB, 19.9x -> 23.4x, docs/06)
+    # inlined outgrow the CPU caches (Kirby: 8.6 -> 4.6 MB, 19.9x -> 23.4x, nes/docs/verification-log.md)
     target_compile_definitions(${name}_code PRIVATE CPU_OPS_OUTLINE)
     target_link_libraries(${name}_code PUBLIC nescpu)
     add_executable(${name}_headless ${NES_DIR}/tests/nes_headless.c)

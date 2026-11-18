@@ -1,7 +1,7 @@
-# 01 · Prior art
+# Prior art
 
 What already exists and what we take from each. Links and licenses are in
-[07-sources.md](07-sources.md). Entries marked *unverified* were not read
+[sources.md](sources.md). Entries marked *unverified* were not read
 first-hand yet; check them before relying on the detail.
 
 ## NES static recompilers
@@ -59,11 +59,11 @@ first-hand yet; check them before relying on the detail.
   254/256 opcodes; the two differences are radare2 mistakes (see 06).
   radare2's code analysis cannot resolve the jumps that really hurt static
   recompilation (RTS/RTI used as jumps, JMP through RAM pointers); those come
-  from the runtime feedback loop (02).
+  from the runtime feedback loop ([architecture](architecture.md)).
 
 ## Corrections to the earlier version of this file
 The first draft of these docs was produced by another AI model and contained
-errors. Fixed here and in [06](06-verification-log.md):
+errors. Fixed here and in [the NES verification log](../nes/docs/verification-log.md):
 - The 2A03 has **no** PHX/PHY/PLX/PLY. `$0A` is `ASL A`. (Those are 65C02
   opcodes.)
 - The 6502 has **no** half-carry (H) flag.

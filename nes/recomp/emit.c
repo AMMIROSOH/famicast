@@ -1,4 +1,4 @@
-/* Emit C for a recompiled program (docs/02 "Recompiled code").
+/* Emit C for a recompiled program (docs/architecture.md "Recompiled code").
  *
  * One function per basic block. Each instruction is the interpreter's own
  * code for that opcode (c6502.c), so bus traffic and timing are identical by

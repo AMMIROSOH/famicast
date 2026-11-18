@@ -1,6 +1,6 @@
 /* Instruction semantics shared by the interpreter and (later) recompiled
  * code: bus cycles, register pairs, ALU and flags. Flag rules: Pan Docs "CPU
- * instruction set" and gbdev's opcode table (docs/07); all checked against
+ * instruction set" and gbdev's opcode table (docs/sources.md); all checked against
  * SingleStepTests sm83. */
 #ifndef GB_CPU_OPS_H
 #define GB_CPU_OPS_H

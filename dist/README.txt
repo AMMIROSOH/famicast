@@ -29,7 +29,7 @@ Keyboard: arrows, X = A, Z = B, Enter = Start, Right Shift = Select,
 F5 = reset, F2 / F4 = save / load state, F6 = next disk side (FDS),
 F10 = TV frame, F11 or Alt+Enter = fullscreen, Esc = quit.
 Gamepads work too (first = player 1, second = player 2).
-Settings are in nes.ini next to the program, created on first run.
+Settings are in nes.ini / gb.ini next to the program, created on first run.
 
 
 RECOMPILING A GAME (the kit)
@@ -48,19 +48,21 @@ From the folder this file is in:
 
 The program is build/my_game (build/my_game.exe on Windows), plus
 build/my_game_headless. Several games: separate the paths with ";".
-Game Boy games (.gb, .gbc) are recompiled the same way (the notes from your own
-play below are NES-only so far).
-A relative path is relative to the folder you run cmake from.
+A relative path is relative to the folder you run cmake from. The file's
+extension picks the system: .nes, .fds, .gb, .gbc.
 
 Code the recompiler cannot find on its own runs in the interpreter. Two
 things recompile more of it:
   - the build plays each game for a while first (scripted, about 6 seconds)
     and recompiles everything that ran; -DAUTO_HINTS=OFF skips this;
-  - your own play: the game notes code it had to interpret in
-    build/my_game.misses, and the next
+  - your own play (NES games so far): the game notes code it had to
+    interpret in build/my_game.misses, and the next
     "cmake --build build --config Release" recompiles it.
 
 DO NOT SHARE RECOMPILED PROGRAMS: they contain the game.
+
+
+NES AND FAMICOM DISK SYSTEM
 
 Famicom Disk System: .fds images need the FDS BIOS (8 KB, not included):
 put it next to nes as disksys.rom, or set fds_bios in nes.ini. Disk sides
@@ -70,10 +72,18 @@ recompiles disk games like the others, given the BIOS:
 The program carries the BIOS too (and build/fds, which plays any .fds
 image with only the BIOS recompiled). Do not share them either.
 
-Supported mappers and more: see the project page above.
+Supported mappers and more: nes/README.md on the project page.
+
+
+GAME BOY AND GAME BOY COLOR
+
+Color games run as on a Game Boy Color, the others as on the original
+Game Boy (palette = green or gray in gb.ini). Battery saves are kept in
+game.gb.sav next to the game, with the cartridge clock where there is one.
+More: gb/README.md on the project page.
 
 
 LICENSES
 
 retrocast: GPL-3.0-or-later (LICENSE); the source is on the project page.
-SDL3 (linked into nes and the kit): zlib license (LICENSE-SDL3.txt).
+SDL3 (linked into nes, gb and the kit): zlib license (LICENSE-SDL3.txt).

@@ -1,5 +1,5 @@
 /* Instruction semantics shared by the interpreter and recompiled code.
- * Flag rules: docs/03-6502-traps.md. Unofficial opcodes: nesdev wiki
+ * Flag rules: nes/docs/6502-traps.md. Unofficial opcodes: nesdev wiki
  * "CPU unofficial opcodes"; all checked against SingleStepTests. */
 #ifndef NES_CPU_OPS_H
 #define NES_CPU_OPS_H
@@ -116,7 +116,7 @@ static inline void op_AXS(Cpu *c, uint8_t v) {
 /* $8B XAA and $AB LXA are unstable on hardware (result depends on the chip).
  * XAA: magic 0xEE, matches SingleStepTests. LXA: A = X = operand (magic 0xFF),
  * matches blargg instr_test-v5, which was verified on a real NES; SingleStepTests
- * assumes 0xEE here, see docs/06. */
+ * assumes 0xEE here, see nes/docs/verification-log.md. */
 static inline void op_XAA(Cpu *c, uint8_t v) { c->a = (c->a | 0xEE) & c->x & v; nz(c, c->a); }
 static inline void op_LXA(Cpu *c, uint8_t v) { c->a = c->x = v; nz(c, c->a); }
 

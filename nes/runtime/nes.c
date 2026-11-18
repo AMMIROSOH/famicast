@@ -1,7 +1,7 @@
 /* CPU bus. Memory map: nesdev wiki "CPU memory map". Every CPU cycle makes
  * exactly one bus access (runtime/cpu.c) and is worth 3 PPU dots: 2 before the
  * access and 1 after. The 2/1 split was measured: of 0-3 dots before, only 2
- * passes blargg ppu_vbl_nmi 05-nmi_timing (docs/06).
+ * passes blargg ppu_vbl_nmi 05-nmi_timing (nes/docs/verification-log.md).
  *
  * The clock counts master clocks ("Cycle reference chart"): a CPU cycle is
  * 12 (NTSC), 16 (PAL) or 15 (Dendy), a PPU dot 4, 5 or 5, so PAL runs 3.2
@@ -14,7 +14,7 @@
  * PPU acts on the CPU by itself is reached (vblank start: NMI, frame end).
  * Between those points nothing can observe the PPU, so running its dots later
  * in one batch gives the same result; checked by the test ROMs, frame hashes
- * and --diff (docs/06). The APU (M6) is caught up the same way; its events
+ * and --diff (nes/docs/verification-log.md). The APU (M6) is caught up the same way; its events
  * are the frame IRQ and DMC sample fetches. The MMC3 IRQ (M7) asserts on a
  * PPU A12 rise: while it is armed, the PPU is caught up every cycle around
  * the sprite fetches (dots 255-330 of rendering lines). The VRC4, Namco

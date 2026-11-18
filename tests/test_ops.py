@@ -45,7 +45,7 @@ class TestOps(unittest.TestCase):
                                    sorted(mismatches.items()) if c not in R2_KNOWN_WRONG))
 
     def test_regressions_from_prototype(self):
-        # docs/06: (zp),Y was decoded as 3 bytes; JMP (abs) shares nothing with it
+        # nes/docs/verification-log.md: (zp),Y was decoded as 3 bytes; JMP (abs) shares nothing with it
         self.assertEqual((OPS[0xB1].mode, OPS[0xB1].size), ("IZY", 2))
         self.assertEqual((OPS[0x6C].mode, OPS[0x6C].size), ("IND", 3))
         self.assertEqual(OPS[0x0A].mn, "ASL")  # no PHX on the 2A03

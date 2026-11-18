@@ -1,0 +1,101 @@
+# Game Boy and Game Boy Color roadmap
+
+Same order as the NES: the reference interpreter first, checked against
+independent tests, then the system, then the recompiler. Shared code goes
+to `core/` when the Game Boy is its second user ([architecture](../../docs/architecture.md) "Frontend").
+
+Exit tests and results: [verification-log.md](verification-log.md).
+
+| Milestone | Content | State |
+|---|---|---|
+| [G1](#g1--sm83-cpu) | SM83 CPU from templates, interpreter | done |
+| [G2](#g2--memory-timer-cartridges) | memory map, timer, interrupts, MBC1/2/3/5 | done (1 timer test open) |
+| [G3](#g3--ppu-and-frontend) | PPU, the window program (core/frontend) | done (8 PPU timing tests open) |
+| [G4](#g4--apu) | sound | done |
+| [G5](#g5--recompiler) | recompiler, lockstep diff | done (code in RAM interpreted) |
+| [G6](#g6--game-boy-color) | Game Boy Color | done |
+
+## G1 · SM83 CPU
+- [x] Instruction templates from the opcode bit fields (`gb/recomp/sm83.c`),
+  with the NES's PC markers, now in `core/recomp/template.c` (the NES
+  recompiler uses them from there too).
+- [x] `gbrecomp --cpu-switch`: the interpreter's switch (both tables, CB
+  nested); `gb/runtime/cpu.c`, one M-cycle per bus access or internal cycle.
+- [x] **Exit:** SingleStepTests sm83, all 500 opcode files (registers, RAM,
+  every M-cycle; HALT and STOP registers and RAM only). Met.
+
+## G2 · Memory, timer, cartridges
+- [x] Memory map (`gb/runtime/gb.c`), everything stepped once per M-cycle
+  before the CPU's access; IE/IF, interrupt entry with the vector chosen
+  after the high push (IE can cancel it), HALT (a halted CPU keeps reading
+  the opcode at PC) and the HALT bug; DIV/TIMA with the overflow delay, TMA
+  reload and the TAC/DIV write edges; serial (internal clock, no partner);
+  joypad; OAM DMA with the bus conflicts (the DMA's bus reads the byte in
+  flight, OAM $FF); LY/STAT timing only, until G3.
+- [x] MBC1, MBC2, MBC3 with the clock (counted in emulated time), MBC5
+  (`gb/runtime/cart.c`). Battery saves come with the window program (G3).
+- [x] **Exit:** blargg `cpu_instrs` (all 11 and combined), `instr_timing`,
+  `mem_timing`, `mem_timing-2`, `halt_bug`; mooneye acceptance (timer,
+  interrupts, OAM DMA, instruction timing, DMG boot state) and MBC1/2/5:
+  102 ROMs pass (`tests/test_gb_roms.py`). Open: `timer/rapid_toggle`
+  (the interrupt one loop late), the MBC1 multicart wiring, the serial
+  clock's boot phase, and boot tests of other models; 9 PPU timing tests
+  belong to G3.
+
+## G3 · PPU and frontend
+- [x] `gb/runtime/ppu.c`: background, window (its own line counter),
+  objects (10 per line, DMG priority, flips, 8x16), palettes; mode 3 as
+  long as SCX, the window and objects make it; VRAM/OAM closed to the CPU
+  while the PPU uses them; the DMG STAT-write interrupt. A line is drawn
+  when mode 3 starts (mid-line register writes show on the next line).
+- [x] `gb` (`gb/frontend.c` behind `core/frontend/system.h`): 160 x 144 at
+  59.73 Hz, battery saves (`ROM.sav`; MBC3's clock moves on while the
+  program is closed), save states (F2/F4), palette setting (green, gray).
+- [x] **Exit:** dmg-acid2 pixel for pixel (`tests/test_gb_ppu.py`, with a
+  save-state round trip); every 40th licensed title of a ~1,900-ROM set
+  (41 games) reaches a title, menu or play screen. Open: 8 mooneye PPU
+  timing tests (mode 3 lengths, LCD-on timing, STAT details).
+
+## G4 · APU
+- [x] `gb/runtime/apu.c`: two pulses (sweep on the first), wave, noise;
+  the frame sequencer on DIV bit 12; the DMG details dmg_sound checks
+  (length clocking on enable and trigger, sweep negate, lengths kept and
+  writable while powered off, wave RAM reachable only in the cycle a
+  sample is read, the retrigger corruption). Mixed to 48 kHz mono
+  through the console's output capacitor.
+- [x] **Exit:** blargg `dmg_sound`, the 12 singles (in `tests/test_gb_roms.py`)
+  and the combined ROM.
+
+## G5 · Recompiler
+- [x] `gbrecomp` (`gb/recomp/recomp.c`): regions of one ROM bank in one
+  window, static flow followed inside the window; entries from the vectors
+  and the interpreter's trace (`gb_headless --misses`, `AUTO_HINTS`); one C
+  function per block from the templates, chaining inside the region; a bank
+  check after stores that may switch it. `gb_step` runs a block when there
+  is one for (PC, mapped bank), else interprets. `.gb` files in `ROMS` build
+  `NAME` and `NAME_headless` with the ROM embedded.
+- [x] **Exit:** `gb_headless --diff` (CPU after every step, the whole
+  machine after every frame): 21 sampled games and blargg cpu_instrs in
+  lockstep; 94.8-99.8% of CPU cycles recompiled in 19 of the 21.
+- [ ] Open: code run from WRAM (two of the 21 games: 29% and 74%), hint
+  files and play misses (as the NES has), and speed: recompiled runs as
+  fast as the interpreter, every access ticking the PPU and APU (a
+  catch-up scheme, as the NES's, would be the next step).
+
+## G6 · Game Boy Color
+- [x] CGB mode for games whose header asks for it (`gb_headless --model`
+  to force one): double speed (the PPU and sound keep their pace), VRAM
+  bank 1, WRAM banks 1-7, palette RAM, map attributes (palette, bank,
+  flips, priority), OAM-order object priority, general and HBlank HDMA
+  (in the bus cycle, so recompiled code waits where the interpreter
+  does), the CGB's separate WRAM bus during OAM DMA, no STAT-write
+  interrupt, the APU's CGB details; the speed switch skips the byte after
+  STOP.
+- [x] **Exit:** cgb-acid2 pixel for pixel, blargg cgb_sound (12 singles
+  and the combined ROM); 36 sampled Color games reach title, menu or
+  play screens; 18 recompiled in lockstep.
+- [ ] Open: DMG games are not run in the CGB's compatibility mode (its
+  palettes; mooneye's CGB boot tests are of that mode), the speed switch
+  takes no time, the CGB boot DIV value is unchecked, palette RAM is not
+  closed during mode 3, cgb-acid-hell (needs mid-line rendering).
+

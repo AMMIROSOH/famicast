@@ -841,7 +841,7 @@ void apu_write(Apu *a, uint16_t addr, uint8_t v) {
 /* shortcut: PCM read mode ($5010 bit 0: the DAC takes CPU reads of
  * $8000-$BFFF) is not emulated; every ROM read would need the slow bus path,
  * and recompiled code fetches its instructions as constants. The one game
- * with PCM (Shin 4 Nin Uchi Mahjong) is checked in docs/06. */
+ * with PCM (Shin 4 Nin Uchi Mahjong) is checked in nes/docs/verification-log.md. */
 void apu_mmc5_write(Apu *a, uint16_t addr, uint8_t v) {
     Mmc5Audio *m = &a->mmc5;
     a->mix_dirty = 1;

@@ -1,4 +1,4 @@
-# 08 · The first prototype (retired)
+# The first prototype (retired)
 
 Before this project took its current shape, an earlier AI-driven session
 built a different recompiler. It was audited on 2026-11-15, found not to
@@ -55,7 +55,7 @@ copy and running it again:
 
 With 1-4 patched, reset ran further (RAM clear, VRAM fill) and then looped
 on bugs 5 and 7. Its docs also had errors (PHX/PLX on the 2A03, an H flag,
-NMI masked by I, Mesen as MIT); see [01](01-prior-art.md).
+NMI masked by I, Mesen as MIT); see [prior art](../../docs/prior-art.md).
 
 ## Why it was retired, and what replaced it
 Every bug above came from translating instructions by hand into another
@@ -70,6 +70,6 @@ reversed the order:
   matches the interpreter state by state (`--diff`), never because "it ran
   N frames".
 
-The lessons are also listed in [03](03-6502-traps.md). Hand-written native
+The lessons are also listed in [6502 traps](6502-traps.md). Hand-written native
 code generation is still on the roadmap's stretch list, but only checked
 against the C backend with `--diff`.

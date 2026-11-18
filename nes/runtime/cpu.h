@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-/* Status register bits, real 6502 layout (docs/03). B and U exist only in
+/* Status register bits, real 6502 layout (nes/docs/6502-traps.md). B and U exist only in
  * copies pushed to the stack; the register keeps U set and B clear. */
 enum {
     FLAG_C = 0x01, FLAG_Z = 0x02, FLAG_I = 0x04, FLAG_D = 0x08,

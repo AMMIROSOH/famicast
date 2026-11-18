@@ -1,7 +1,7 @@
 /* NES palette from an NTSC signal model, so no third-party palette table is
  * copied. Signal levels and method: nesdev wiki "NTSC video" (Bisqwit's
  * model). The 3.9 hue offset puts $16 at red, $12 at blue, $1A at green;
- * checked against the usual palette layout (docs/06).
+ * checked against the usual palette layout (nes/docs/verification-log.md).
  * Colour emphasis ($2001 bits 5-7, NTSC: red, green, blue): the PPU
  * attenuates its output while the colour wave of phase 0, 4 or 8 is high
  * (the hue opposite red, green or blue), by 0.816328 of the absolute

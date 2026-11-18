@@ -584,7 +584,7 @@ int cart_mmc5_split(const Cart *c, int dot, int phase, uint16_t a, uint8_t *out)
  * IRQ at $5000/$5800, 128 bytes of RAM behind $4800 (address at $F800).
  * shortcut: with $E800 bit 6/7 clear, CHR values $E0-$FF select nametable
  * RAM as pattern data; read as CHR ROM here (the 21 games checked either set
- * both bits or never write such values, docs/06). The wavetable sound: see
+ * both bits or never write such values, nes/docs/verification-log.md). The wavetable sound: see
  * cart_n163_clock. */
 static void n163_update(Cart *c) {
     uint32_t n8 = c->prg_size / 0x2000;
