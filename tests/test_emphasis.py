@@ -1,4 +1,4 @@
-"""Colour emphasis ($2001 bits 5-7, runtime/palette.c): a backdrop of white
+"""Colour emphasis ($2001 bits 5-7, nes/runtime/palette.c): a backdrop of white
 ($30) with rendering off, read back from nes_headless --ppm. On the NTSC PPU
 bit 5 tints red, 6 green, 7 blue; all three dim every colour evenly. PAL and
 Dendy swap red and green (nesdev "Cycle reference chart")."""

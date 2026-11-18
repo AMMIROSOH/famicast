@@ -2,11 +2,18 @@
  * File: "NESI", version byte 1, then 3 bytes per frame:
  * pad 1 buttons, pad 2 buttons, flags (bit 0: reset before this frame).
  * Emulation is deterministic from power-on, so a recording replays exactly. */
-#ifndef NES_INPUT_LOG_H
-#define NES_INPUT_LOG_H
+#ifndef CORE_INPUT_LOG_H
+#define CORE_INPUT_LOG_H
 
 #include <stdint.h>
 #include <stdio.h>
+
+/* Buttons as the frontend reports them (the NES controller's shift-register
+ * order; other systems map them to their own pads). */
+enum {
+    PAD_A = 0x01, PAD_B = 0x02, PAD_SELECT = 0x04, PAD_START = 0x08,
+    PAD_UP = 0x10, PAD_DOWN = 0x20, PAD_LEFT = 0x40, PAD_RIGHT = 0x80
+};
 
 enum { INPUT_RESET = 0x01 };
 

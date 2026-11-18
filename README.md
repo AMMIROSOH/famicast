@@ -10,12 +10,14 @@ reference interpreter (`--diff`); every game tested that way so far
 matches. Built for the challenge. No games included: bring your own.
 
 ## How it works
-1. `recomp/` (`nesrecomp`, C, built and run by CMake) finds the reachable
+1. `nes/recomp/` (`nesrecomp`, C, built and run by CMake) finds the reachable
    6502 code and emits one C function per basic block, plus the ROM itself.
    Before that, the build plays the game for a few seconds in the
    interpreter to find code static analysis cannot.
-2. `runtime/` (C11) provides the hardware: CPU bus, PPU, APU, mappers, the
-   disk drive, input.
+2. `nes/runtime/` (C11) provides the hardware: CPU bus, PPU, APU, mappers, the
+   disk drive, input. `core/frontend/` (SDL3) is the window, sound,
+   gamepads, settings, save states and recordings, written to be shared by
+   later systems; the NES plugs into it through `nes/frontend.c`.
 3. Anything the recompiler did not see (jump tables, code in RAM) falls back
    to a **reference 6502 interpreter**, which is validated against public
    test suites and is also the oracle the recompiled code is diffed against.
@@ -197,7 +199,7 @@ build/game_one                         # the ROM is embedded: no path needed
 Disk games (`.fds`) go in `ROMS` too, with the BIOS:
 `-DROMS="Disk Game.fds" -DFDS_BIOS=path/to/disksys.rom`. The program then
 carries the BIOS as well. `FDS_BIOS` alone also builds `build/fds`, which
-plays any `.fds` image with only the BIOS recompiled; `games/fds.toml` holds
+plays any `.fds` image with only the BIOS recompiled; `nes/games/fds.toml` holds
 BIOS entry points (Rev 1 BIOS; another revision only recompiles less).
 
 The whole ROM is embedded in the executable (graphics and data are read
@@ -213,7 +215,7 @@ the interpreter. Three ways to recompile it too:
   `AUTO_HINTS_FRAMES` (default 6000, about 6 s) frames of scripted
   play (`nes_headless --play 1`) and passes every address it ran to the
   recompiler. Merged hints are written to `build/gen/<name>.toml`; copy them
-  to `games/` to keep them without tracing.
+  to `nes/games/` to keep them without tracing.
 - **By playing**: a recompiled game notes code it had to interpret in
   `build/<name>.misses` (setting `record_misses` in its `.ini`); the next
   `cmake --build build --config Release` sees the file changed and
@@ -222,7 +224,7 @@ the interpreter. Three ways to recompile it too:
   ```
   build/nes game.nes --record run.nesi
   build/nes_headless game.nes --replay run.nesi --misses --out misses.txt
-  build/nesrecomp game.nes --hints games/game.toml --misses misses.txt --save-hints games/game.toml
+  build/nesrecomp game.nes --hints nes/games/game.toml --misses misses.txt --save-hints nes/games/game.toml
   cmake --build build --config Release
   ```
 
@@ -235,7 +237,7 @@ Paths and names:
   to the source folder), and are stored as absolute paths in the cache. On
   Windows with Git Bash, give Windows paths (`pwd -W`).
 - Target names drop "(...)"/"[...]" tags from the file name; hints live in
-  `games/<name>.toml` and record the PRG hash of the dump they were made for.
+  `nes/games/<name>.toml` and record the PRG hash of the dump they were made for.
 - The options were called `NES_GAMES`, `NES_EMBED_ROM`,
   `NES_AUTO_HINTS(_FRAMES)`, `NES_FRONTEND` and `NES_SDL3_PREFIX` before; a
   build folder configured with them keeps its values under the new names.
@@ -259,12 +261,12 @@ comments on first run:
 fullscreen = 0      # 1 = fullscreen at desktop resolution
 scale = fit         # fit (keep aspect), integer (sharp pixels), stretch
 tv_frame = 0        # 1 = picture inside a TV-like frame
+aspect = tv         # tv = pixels as on a TV (8:7 NTSC, 1.39:1 PAL), square = square pixels
+window_scale = 3    # starting window size
 overscan = 1        # 1 = hide the top/bottom 8 lines, as a TV did
 overscan_sides = 0  # 1 = hide the left/right 8 columns too
 sprite_limit = 1    # 0 = draw every sprite (less flicker; a few games glitch)
-aspect = tv         # tv = pixels as on a TV (8:7 NTSC, 1.39:1 PAL), square = square pixels
 region = auto       # auto (from the ROM header), ntsc, pal, dendy
-window_scale = 3    # starting window size
 fds_bios = disksys.rom  # FDS BIOS: next to the program or the disk image, or a full path
 fds_auto_disk = 1   # 1 = swap disk sides when a game asks
 ```

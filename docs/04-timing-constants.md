@@ -38,7 +38,7 @@ nesdev "Cycle reference chart", "APU Frame Counter", "APU Noise", "APU DMC".
 | APU tables | NTSC | PAL noise, DMC, frame counter | NTSC |
 | Emphasis bits 5, 6 | red, green | green, red | green, red |
 
-The bus clock (`runtime/nes.c`) counts master clocks: 12/16/15 a CPU
+The bus clock (`nes/runtime/nes.c`) counts master clocks: 12/16/15 a CPU
 cycle, 4/5/5 a dot. PAL frame counter steps, in CPU cycles after a $4017
 write as this runtime counts them: 8315, 16629, 24941, IRQ 33254-33256,
 mode 1's last step 41567 (the wiki's APU cycles x 2 + 3, as the NTSC

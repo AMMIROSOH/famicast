@@ -1,4 +1,4 @@
-"""MMC5 sound (runtime/apu.c): two pulses without sweep, envelope and length
+"""MMC5 sound (nes/runtime/apu.c): two pulses without sweep, envelope and length
 at ~240 Hz, the 8-bit PCM DAC and its $00 IRQ. Sound is read back from
 nes_headless --wav (after the NES's own high-pass filters), registers with
 --peek."""

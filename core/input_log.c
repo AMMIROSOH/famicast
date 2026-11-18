@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "nes.h"
-
 static const char MAGIC[5] = {'N', 'E', 'S', 'I', 1};
 
 FILE *input_log_create(const char *path) {

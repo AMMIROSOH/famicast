@@ -1,4 +1,4 @@
-"""Konami VRC7 sound (runtime/apu.c): the custom instrument set up as a pure
+"""Konami VRC7 sound (nes/runtime/apu.c): the custom instrument set up as a pure
 sine carrier (the modulator never attacks), then one feature changed at a
 time, read back from nes_headless --wav (after the NES's own high-pass
 filters). VRC7a: $9010 selects a register, $9030 writes it."""

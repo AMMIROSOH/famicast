@@ -6,7 +6,7 @@
    installed into the staged kit/sdl3.
 2. nes, nes_headless and nesrecomp, Release, linked against that SDL3.
 3. Stage: the programs, the recompile kit (this project's CMakeLists.txt, cmake/,
-   runtime/, recomp/, games/ and the prebuilt SDL3), README.txt, licenses.
+   core/, nes/ and the prebuilt SDL3), README.txt, licenses.
 4. Kit check: recompile a tiny generated ROM with the staged kit, as a user
    would, and run the result headless.
 5. Archive: NAME.zip on Windows, NAME.tar.gz elsewhere, in --out.
@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SDL_TAG = "release-3.4.20"  # as in CMakeLists.txt
 WIN = os.name == "nt"
 EXE = ".exe" if WIN else ""
-KIT_FILES = ["CMakeLists.txt", "cmake", "runtime", "recomp", "games"]
+KIT_FILES = ["CMakeLists.txt", "cmake", "core", "nes"]
 
 
 def run(*cmd, cwd=None):

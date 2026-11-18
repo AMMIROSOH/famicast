@@ -7,13 +7,9 @@
 #include "apu.h"
 #include "cart.h"
 #include "cpu.h"
+#include "input_log.h"  /* PAD_* */
 #include "ppu.h"
 #include "recomp_rt.h"
-
-enum {  /* controller bits, in the order the shift register reports them */
-    PAD_A = 0x01, PAD_B = 0x02, PAD_SELECT = 0x04, PAD_START = 0x08,
-    PAD_UP = 0x10, PAD_DOWN = 0x20, PAD_LEFT = 0x40, PAD_RIGHT = 0x80
-};
 
 typedef struct Nes {
     Cpu cpu;
