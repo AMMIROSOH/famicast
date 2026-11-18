@@ -347,10 +347,12 @@ void nes_set_region(Nes *n, int region) {
     cart.region = region;
     RecompFn (*recomp)(uint16_t, uint32_t) = n->recomp;
     uint32_t *misses = n->misses;
+    uint64_t *ram_code = n->ram_code;
     memset(n, 0, sizeof *n);
     n->cart = cart;
     n->recomp = recomp;
     n->misses = misses;
+    n->ram_code = ram_code;
     power_on(n);
 }
 
@@ -379,12 +381,46 @@ static void fds_disk_check(Nes *n) {
     cart_fds_check(&n->cart, id);
 }
 
+/* FDS disk files' code: the first block made from what RAM holds at pc */
+static RecompFn ram_lookup(const Cpu *c) {
+    const RecompProgram *p = recomp_program;
+    size_t lo = 0, hi = p->ram_entries_n;
+    while (lo < hi) {
+        size_t mid = (lo + hi) / 2;
+        if (p->ram_entries[mid].pc < c->pc) lo = mid + 1;
+        else hi = mid;
+    }
+    for (; lo < p->ram_entries_n && p->ram_entries[lo].pc == c->pc; lo++) {
+        const RecompRamBlock *b = &p->ram_blocks[p->ram_entries[lo].block];
+        if (recomp_ram_is(c, b->start, b->bytes, b->len)) return b->fn;
+    }
+    return NULL;
+}
+
+/* ram_code: an open-addressing set of keys; the last slot counts them */
+enum { RAM_CODE_SLOTS = 1 << 19 };
+
+static int note_ram_key(Nes *n, uint64_t key) {  /* 1 if new */
+    if (!n->ram_code && !(n->ram_code = calloc(RAM_CODE_SLOTS + 1, sizeof *n->ram_code))) return 0;
+    uint64_t *count = &n->ram_code[RAM_CODE_SLOTS];
+    for (uint32_t i = (uint32_t)((key * 0x9E3779B97F4A7C15ull) >> 45);; i = (i + 1) & (RAM_CODE_SLOTS - 1)) {
+        if (n->ram_code[i] == key) return 0;
+        if (n->ram_code[i]) continue;
+        if (*count >= RAM_CODE_SLOTS / 4 * 3) return 0;  /* full: the rest is not recorded */
+        n->ram_code[i] = key, ++*count;
+        return 1;
+    }
+}
+
+static uint64_t ram_key(uint16_t pc, uint32_t bytes) { return 1ull << 40 | (uint64_t)pc << 24 | bytes; }
+
 void nes_step(Nes *n) {
     Cpu *c = &n->cpu;
     uint64_t before = c->cycles;
     if (n->cart.mapper == 20 && c->pc == 0xE445 && !c->poll_prev) fds_disk_check(n);
     if (n->recomp && !c->poll_prev && !c->jammed) {
         RecompFn f = n->recomp(c->pc, nes_prg_bank(n, c->pc));
+        if (!f && recomp_program->ram_entries_n) f = ram_lookup(c);
         if (f) {
             f(c);
             n->steps_native++;
@@ -399,6 +435,10 @@ void nes_step(Nes *n) {
         n->steps_interp++;
         /* without recompiled code this traces every instruction (nesrecomp --misses) */
         if (n->misses && !c->jammed) n->misses[nes_miss_slot(n, c->pc)]++;
+        if (n->misses && !c->jammed && n->cart.mapper == 20 && c->pc < 0xE000)
+            note_ram_key(n, ram_key(c->pc, (uint32_t)nes_peek(n, c->pc) << 16 |
+                                               (uint32_t)nes_peek(n, (uint16_t)(c->pc + 1)) << 8 |
+                                               nes_peek(n, (uint16_t)(c->pc + 2))));
     }
     cpu_step(c);
     n->cycles_fallback[kind] += c->cycles - before;
@@ -466,6 +506,7 @@ int nes_state_load(Nes *n, const char *path, char *err, size_t errlen) {
         s->cart.disk = n->cart.disk;
         s->recomp = n->recomp;
         s->misses = n->misses;
+        s->ram_code = n->ram_code;
         s->steps_native = n->steps_native, s->steps_interp = n->steps_interp;
         s->steps_interrupt = n->steps_interrupt, s->cycles_native = n->cycles_native;
         memcpy(s->cycles_fallback, n->cycles_fallback, sizeof s->cycles_fallback);
@@ -498,8 +539,12 @@ uint32_t nes_prg_bank(Nes *n, uint16_t a) {
 size_t nes_miss_slots(Nes *n) { return 0x8000u + (size_t)n->cart.prg_size * 4; }
 
 void nes_misses_write(Nes *n, FILE *f) {
-    for (uint32_t a = 0; a < 0x8000; a++)
+    for (uint32_t a = 0; a < 0x8000 && n->cart.mapper != 20; a++)  /* FDS: ram_code instead */
         if (n->misses[a]) fprintf(f, "MISS $%04X %u (RAM)\n", a, n->misses[a]);
+    for (uint32_t i = 0; n->ram_code && i < RAM_CODE_SLOTS; i++)
+        if (n->ram_code[i])
+            fprintf(f, "MISS $%04X 1 (RAM %06X)\n", (unsigned)(n->ram_code[i] >> 24 & 0xFFFF),
+                    (unsigned)(n->ram_code[i] & 0xFFFFFF));
     for (size_t slot = 0x8000; slot < nes_miss_slots(n); slot++) {
         if (!n->misses[slot]) continue;
         size_t key = (slot - 0x8000) >> 13;  /* bank * 4 + window */
@@ -511,11 +556,17 @@ void nes_misses_write(Nes *n, FILE *f) {
 long nes_misses_merge(Nes *n, const char *path) {
     size_t slots = nes_miss_slots(n);
     uint8_t *listed = calloc(slots, 1);
+    uint64_t listed_ram = 0;
     FILE *f = fopen(path, "r");
     char line[96];
     while (f && fgets(line, sizeof line, f)) {
-        unsigned a, count, bank;
+        unsigned a, count, bank, bytes;
         size_t slot = SIZE_MAX;
+        if (sscanf(line, "MISS $%4x %u (RAM %6x)", &a, &count, &bytes) == 3) {
+            note_ram_key(n, ram_key((uint16_t)a, bytes));
+            listed_ram++;
+            continue;
+        }
         if (sscanf(line, "MISS $%4x %u bank %u", &a, &count, &bank) == 3 && a >= 0x8000)
             slot = 0x8000u + (((size_t)bank * 4 + ((a >> 13) & 3)) << 13 | (a & 0x1FFF));
         else if (sscanf(line, "MISS $%4x %u (RAM", &a, &count) == 2 && a < 0x8000)
@@ -526,6 +577,7 @@ long nes_misses_merge(Nes *n, const char *path) {
     }
     long fresh = 0;
     for (size_t slot = 0x8000; slot < slots; slot++) fresh += n->misses[slot] && !listed[slot];
+    if (n->ram_code) fresh += (long)(n->ram_code[RAM_CODE_SLOTS] - listed_ram);  /* the file's keys are distinct */
     free(listed);
     if (!f) return -1;
     fclose(f);

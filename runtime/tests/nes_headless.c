@@ -256,7 +256,7 @@ static void print_blargg_text(Nes *n) {
 
 int main(int argc, char **argv) {
     const char *rom_path = argc > 1 && argv[1][0] != '-' ? argv[1] : NULL;
-    if (!rom_path && !(recomp_program && recomp_program->rom && recomp_program->rom_size != 0x2000)) {
+    if (!rom_path && !(recomp_program && recomp_program->rom)) {
         fprintf(stderr, "usage: nes_headless ROM [--frames N] [--blargg] [--peek ADDR] [--ppm FILE] [--hash] ...\n");
         return 2;
     }
@@ -309,8 +309,8 @@ int main(int argc, char **argv) {
     uint8_t *rom_file = NULL;
     if (rom_path) rom = rom_file = read_file(rom_path, &size);
     else rom = recomp_program->rom, size = (long)recomp_program->rom_size, rom_path = recomp_program->rom_name;
-    if (!bios && recomp_program && recomp_program->rom && recomp_program->rom_size == 0x2000)
-        cart_fds_bios(recomp_program->rom);  /* -DFDS_BIOS build: the embedded BIOS */
+    if (!bios && recomp_program && recomp_program->bios)
+        cart_fds_bios(recomp_program->bios);  /* FDS builds: the embedded BIOS */
     if (bios) {
         long bios_size;
         uint8_t *b = read_file(bios, &bios_size);

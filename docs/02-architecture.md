@@ -7,7 +7,9 @@
    address (`blk_C070`), so the binary also decompiles cleanly in IDA/Ghidra.
 
 Non-goals for now: netplay. (PAL timing, expansion audio and the Famicom
-Disk System, once listed here, are done: 04, 05; FDS games are interpreted.)
+Disk System, once listed here, are done: 04, 05. FDS games are recompiled
+per disk file: their code runs from RAM, so a block runs only while RAM
+holds the bytes it was made from; `recomp/main.c`, `recomp_rt.h`.)
 
 ## Components
 ```
@@ -142,7 +144,7 @@ jumps, JMP through a RAM pointer, and runs code from RAM (see 06). Plan:
    them into the hints. Run without recompiled code, `--misses` lists every
    instruction executed, so one interpreter run is a complete trace of that
    session and no rebuild-and-retry rounds are needed. With
-   `NES_AUTO_HINTS` (on by default) the build does this itself with scripted input
+   `AUTO_HINTS` (on by default) the build does this itself with scripted input
    (`--play`) before recompiling (M8a). Coverage is limited to what the
    input reaches; your own play reaches further: recompiled games write
    `<program>.misses` next to themselves, and the next build reads it.

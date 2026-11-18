@@ -11,6 +11,7 @@ import tempfile
 import unittest
 import wave
 
+from tests.nesrecomp import NESRECOMP
 from tests.test_roms import RUNNER
 
 CPU_HZ = 1789773
@@ -29,12 +30,25 @@ def bios(code):
     return bytes(b)
 
 
-def disk():
+def disk(files=()):
+    """One side; files: (load address, data), PRG files."""
     side = bytearray(65500)
     info = b"\x01*NINTENDO-HVC*" + bytes(range(1, 42))  # 56 bytes: type, magic, the rest numbered
     side[:56] = info
-    side[56:58] = b"\x02\x00"  # file count 0
+    side[56:58] = bytes([2, len(files)])
+    j = 58
+    for i, (addr, data) in enumerate(files):
+        header = bytes([3, i, i]) + b"FILE%04d" % i + struct.pack("<HHB", addr, len(data), 0)
+        side[j:j + 17 + len(data)] = header + b"\x04" + data
+        j += 17 + len(data)
     return bytes(side)
+
+
+def fnv1a(data):
+    h = 2166136261
+    for b in data:
+        h = ((h ^ b) * 16777619) & 0xFFFFFFFF
+    return h
 
 
 def run(code, *args):
@@ -69,6 +83,39 @@ FDS_SQUARE = (sta(0x4089, 0x80) + sum((sta(0x4040 + i, 63 if i < 32 else 0) for 
               sta(0x4082, 0x00) + sta(0x4083, 0x04))   # F = $400: 436.9 Hz
 APU_SQUARE = (sta(0x4015, 0x01) + sta(0x4000, 0xBF) +  # duty 50%, constant volume 15
               sta(0x4002, 0xFF) + sta(0x4003, 0x00))   # t = 255: CPU / (16 * 256) = 436.9 Hz
+
+
+@unittest.skipUnless(os.path.exists(NESRECOMP), "build nesrecomp first (cmake --build build)")
+class TestFdsRecompile(unittest.TestCase):
+    def test_disk_files(self):
+        """Two files load different code at $6000. A RAM miss names its
+        bytes, which pick the file; each file's block checks RAM before
+        running, and the dispatcher table lists both at $6000."""
+        a = bytes([0xA9, 0x01, 0x8D, 0x00, 0x03, 0x4C, 0x00, 0x60])  # LDA #1 / STA $0300 / JMP $6000
+        b = bytes([0xA2, 0x02, 0x8E, 0x05, 0x60, 0x4C, 0x00, 0x60])  # LDX #2 / STX $6005 (itself) / JMP $6000
+        with tempfile.TemporaryDirectory() as tmp:
+            bi, d, m, h, out = (os.path.join(tmp, n) for n in ("bios.bin", "t.fds", "m.txt", "h.toml", "o.c"))
+            open(bi, "wb").write(bios([]))
+            open(d, "wb").write(disk([(0x6000, a), (0x6000, b), (0x0100, a)]))  # the stack page: never
+            open(m, "w").write("MISS $6000 1 (RAM A2028E)\n")  # file 1's bytes only
+            subprocess.run([NESRECOMP, d, "--bios", bi, "--misses", m, "--save-hints", h], check=True,
+                           capture_output=True)
+            hints = open(h).read()
+            self.assertIn("[0x%08X, 0x6000],  # runtime" % fnv1a(b), hints)
+            self.assertNotIn("0x%08X" % fnv1a(a), hints)
+            with open(h) as f:  # file 0's code by hand
+                text = f.read().replace("ram = [", "ram = [\n    [0x%08X, 0x6000]," % fnv1a(a))
+            open(h, "w").write(text)
+            subprocess.run([NESRECOMP, d, "--bios", bi, "--hints", h, "-o", out], check=True, capture_output=True)
+            c = open(out).read()
+        self.assertIn("if (!recomp_ram_is(c, 0x6000, k_f0_6000, 8)) return;", c)
+        self.assertIn("if (!recomp_ram_is(c, 0x6000, k_f1_6000, 8)) return;", c)
+        self.assertIn("{0x6000, 0},\n    {0x6000, 1},", c)
+        # STX $6005 changes the block's own operand: checked again before the JMP
+        self.assertIn("if (c->poll_prev || !recomp_ram_is(c, 0x6000, k_f1_6000, 8)) return;", c)
+        self.assertEqual(c.count("code changed"), 1)  # STA $0300 in file 0 does not reach it
+        self.assertIn(".bios = bios_image", c)
+        self.assertIn(".rom = rom_image", c)
 
 
 @unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")

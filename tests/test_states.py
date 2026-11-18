@@ -45,7 +45,7 @@ class TestStates(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("different game", out)
 
-    @unittest.skipUnless(os.path.exists(BC_HEADLESS), "build with -DNES_GAMES=<Battle City ROM>")
+    @unittest.skipUnless(os.path.exists(BC_HEADLESS), "build with -DROMS=<Battle City ROM>")
     def test_interpreter_state_resumes_recompiled_in_lockstep(self):
         with tempfile.TemporaryDirectory() as tmp:
             state, whole, rest = (os.path.join(tmp, n) for n in ("s.state", "whole.nesi", "rest.nesi"))

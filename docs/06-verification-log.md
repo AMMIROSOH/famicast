@@ -3,6 +3,23 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · M11: FDS games recompiled (per disk file)
+- **Build**: `-DROMS=<6 .fds>;Air Fortress -DFDS_BIOS=<Rev 1> -DFRONTEND=OFF`,
+  auto hints (6,000 frames, seed 1). Code found in 3-10 disk files per
+  game (2,445-7,686 instructions; Zelda 2,519 in 6 of 26 files).
+- **Lockstep** (`NAME_headless --play 7 --frames 6000 --diff --coverage`):
+  all identical. Recompiled share of CPU cycles: Zelda no Densetsu 99.44%,
+  Metroid (Rev 1) 99.77%, Akumajou Dracula 99.56%, Ai Senshi Nicol 98.73%,
+  Relics 99.04%, Link no Bouken (Rev 1) 99.75% (the rest is mostly
+  interrupt entry, always interpreted); with the BIOS alone it was 12-78%.
+  Air Fortress (NES) unchanged: identical, 99.97%.
+- **Other disks in a game's build** (Zelda's program, `--play 3`, 3,000
+  frames): Metroid and Relics identical, 24% / 51% recompiled (BIOS, and
+  blocks whose bytes happen to match). With the RAM checks removed
+  (dispatcher and block entry), the Metroid run did not finish in 590 s
+  (110 s with them). Removing only the entry checks changed nothing in
+  this run: chained entries into replaced code were not exercised.
+
 ## 2026-11-18 · M11: the FDS BIOS recompiled
 - **Build**: `-DFDS_BIOS` with the Rev 1 BIOS: 1,990 instructions found
   statically from the three vectors; 26 more entry points from tracing 25

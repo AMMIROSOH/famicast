@@ -112,14 +112,16 @@ F6 puts in the next side by hand. What a game writes to its disk is kept in
 `ROM.sav`. `nes_headless` takes `--bios FILE` and `--disk F:S` (swap to side
 S at frame F).
 
-The BIOS can be recompiled: `cmake -S . -B build -DFDS_BIOS=path/to/disksys.rom`
-builds `build/fds` and `build/fds_headless`, which carry the BIOS and play
-any `.fds` image (`build/fds game.fds`). The games' own code is loaded from
-disk into RAM and stays interpreted (12-78% of CPU time runs recompiled,
-depending on the game; docs/06); recompiling it per disk file is a later
-step. `games/fds.toml` holds BIOS entry points traced from 25 games (Rev 1
-BIOS; another revision only recompiles less). Do not share these builds:
-they contain the BIOS.
+Disk games are recompiled like cartridge games: put the `.fds` in `ROMS` and
+give the BIOS with `FDS_BIOS` (see [Recompiling a game](#recompiling-a-game)).
+The program carries the BIOS and the disk. A game's code is loaded from disk
+into RAM, so each file on the disk is recompiled on its own, and its code
+only runs while RAM holds it (other code is interpreted). In tests, 99-99.8%
+of CPU time ran recompiled (docs/06). `FDS_BIOS` alone also builds
+`build/fds`, which plays any `.fds` image with only the BIOS recompiled.
+`games/fds.toml` holds BIOS entry points traced from 25 games (Rev 1 BIOS;
+another revision only recompiles less). Do not share these builds: they
+contain the BIOS.
 
 ## Downloads
 [Releases](https://github.com/Viper-Bit/famicast/releases) have builds for
@@ -134,7 +136,7 @@ explains both. Archives are made by `tools/make_release.py`
 Needs CMake ≥ 3.20 and a C11 compiler (clang/gcc/MSVC); any CMake generator
 works (Visual Studio, Ninja, Makefiles). SDL3 is downloaded and built by
 CMake, unless a prebuilt static SDL3 is found in `sdl3/` (or
-`-DNES_SDL3_PREFIX=...`). Python ≥ 3.11 is only needed for the tests.
+`-DSDL3_PREFIX=...`). Python ≥ 3.11 is only needed for the tests.
 ```
 cmake -S . -B build
 cmake --build build --config Release
@@ -145,26 +147,29 @@ Builds are **Release**; tests, timings and full-speed play assume it. Keep
 without it `cmake --build` builds Debug, which is too slow to play.
 Ninja and Makefiles ignore the flag and build Release anyway. Programs are
 put in `build/` with every generator (no `Release/` or `Debug/` subfolder).
-Headless (no SDL3): add `-DNES_FRONTEND=OFF`. On Windows the game programs open no console window;
+Headless (no SDL3): add `-DFRONTEND=OFF`. On Windows the game programs open no console window;
 use the `_headless` programs for text output.
 
 ## Recompiling a game
 ```
-cmake -S . -B build -DNES_GAMES="path/to/Game One.nes;path/to/Game Two (E) [!].nes"
+cmake -S . -B build -DROMS="path/to/Game One.nes;path/to/Game Two (E) [!].nes"
 cmake --build build --config Release   # -> build/game_one, build/game_two (+ _headless)
 build/game_one                         # the ROM is embedded: no path needed
 ```
+Famicom Disk System games (`.fds`) go in `ROMS` too, with the BIOS:
+`-DROMS="Disk Game.fds" -DFDS_BIOS=path/to/disksys.rom`.
+
 The whole ROM is embedded in the executable (graphics and data are read
 through pointers no analysis can bound), so **do not share these builds**:
-they contain the game. With `-DNES_EMBED_ROM=OFF` the program asks for the
-ROM file instead; the generated code still contains the game's code bytes,
+they contain the game. With `-DEMBED_ROM=OFF` the program asks for the
+ROM file instead (FDS programs still carry the BIOS); the generated code still contains the game's code bytes,
 so those builds are not for sharing either.
 
 Code the static decoder cannot find (jump tables, RTS used as a jump) runs in
 the interpreter. Two ways to recompile it too:
-- Automatically (on by default; `-DNES_AUTO_HINTS=OFF` to skip): before
+- Automatically (on by default; `-DAUTO_HINTS=OFF` to skip): before
   recompiling, the build runs each game in the interpreter for
-  `NES_AUTO_HINTS_FRAMES` (default 6000, about 6 s) frames of scripted
+  `AUTO_HINTS_FRAMES` (default 6000, about 6 s) frames of scripted
   play (`nes_headless --play 1`) and passes every address it ran to the
   recompiler. Merged hints are written to `build/gen/<name>.toml`; copy them
   to `games/` to keep them without tracing.
@@ -182,11 +187,14 @@ the interpreter. Two ways to recompile it too:
   ```
 `build/game_one_headless --play 1 --diff --misses` runs the interpreter in
 lockstep and reports the first difference, then what was still interpreted.
-Relative `NES_GAMES` paths are relative to the folder cmake is run from
+Relative `ROMS` paths are relative to the folder cmake is run from
 (else to the source folder), and are stored as absolute paths in the cache.
 Target names drop "(...)"/"[...]" tags from the file name; hints live in
 `games/<name>.toml` and record the PRG hash of the dump they were made for.
-On Windows with Git Bash, give `NES_GAMES` Windows paths (`pwd -W`).
+On Windows with Git Bash, give `ROMS` Windows paths (`pwd -W`). The options
+were called `NES_GAMES`, `NES_EMBED_ROM`, `NES_AUTO_HINTS(_FRAMES)`,
+`NES_FRONTEND` and `NES_SDL3_PREFIX` before; a build folder configured with
+them keeps its values under the new names.
 
 ## Controls
 Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =

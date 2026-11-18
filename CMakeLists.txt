@@ -59,15 +59,29 @@ endif()
 add_executable(nes_headless runtime/tests/nes_headless.c)
 target_link_libraries(nes_headless PRIVATE nescore recomp_none)
 
+# Options were named NES_* before: a build folder configured then keeps its
+# values under the new names (unless given anew).
+foreach(old NES_GAMES NES_EMBED_ROM NES_AUTO_HINTS NES_AUTO_HINTS_FRAMES NES_FRONTEND NES_SDL3_PREFIX)
+    if(DEFINED CACHE{${old}})
+        string(REPLACE "NES_GAMES" "ROMS" new "${old}")
+        string(REPLACE "NES_" "" new "${new}")
+        if(NOT DEFINED CACHE{${new}})
+            set(${new} "${${old}}" CACHE STRING "")
+        endif()
+        unset(${old} CACHE)
+        message(STATUS "${old} is now ${new}")
+    endif()
+endforeach()
+
 # SDL3 frontend (zlib license), linked statically; turn off with
-# -DNES_FRONTEND=OFF for headless builds (CI, tests). A prebuilt SDL3 in
-# NES_SDL3_PREFIX (the release kit ships one in sdl3/) is used when present;
+# -DFRONTEND=OFF for headless builds (CI, tests). A prebuilt SDL3 in
+# SDL3_PREFIX (the release kit ships one in sdl3/) is used when present;
 # otherwise SDL3 is fetched and built (cmake/sdl3_options.cmake).
-option(NES_FRONTEND "Build the SDL3 frontend" ON)
-set(NES_SDL3_PREFIX "${CMAKE_SOURCE_DIR}/sdl3" CACHE PATH "Prebuilt static SDL3 (install prefix)")
-if(NES_FRONTEND)
+option(FRONTEND "Build the SDL3 frontend" ON)
+set(SDL3_PREFIX "${CMAKE_SOURCE_DIR}/sdl3" CACHE PATH "Prebuilt static SDL3 (install prefix)")
+if(FRONTEND)
     # only this prefix: a system SDL3 (often shared-only) is never picked up
-    find_package(SDL3 CONFIG QUIET COMPONENTS SDL3-static PATHS "${NES_SDL3_PREFIX}" NO_DEFAULT_PATH)
+    find_package(SDL3 CONFIG QUIET COMPONENTS SDL3-static PATHS "${SDL3_PREFIX}" NO_DEFAULT_PATH)
     if(NOT SDL3_FOUND)
         include(FetchContent)
         include(cmake/sdl3_options.cmake)
@@ -91,8 +105,10 @@ endif()
 # ---- Recompiled programs (M5) ----
 # nes_recompile(NAME ROM [HINTS]) generates ${GEN_DIR}/NAME.c with nesrecomp
 # (the ROM is embedded) and builds NAME_headless (and NAME with the frontend).
+# An .fds disk image also needs FDS_BIOS: the BIOS is recompiled and embedded
+# with it, and the code of the disk's files wherever it ran (nesrecomp --bios).
 #
-# NES_AUTO_HINTS (on by default): first run the game in the interpreter with
+# AUTO_HINTS (on by default): first run the game in the interpreter with
 # scripted input (nes_headless --play) and give every address it ran to
 # nesrecomp, so code reached in that session is recompiled without hand-made
 # hints (~6 s per game; coverage from as low as 0.3% static to 99.9%, docs/06).
@@ -103,11 +119,12 @@ endif()
 # interpret (the frontend writes it, setting record_misses); always passed to
 # nesrecomp, so playing and rebuilding recompiles what you reached.
 #
-# NES_EMBED_ROM=OFF: the program carries no ROM and needs the file at start
-# (the generated code still holds the game's code bytes: not for sharing either).
-option(NES_AUTO_HINTS "Trace each game in the interpreter before recompiling it" ON)
-option(NES_EMBED_ROM "Embed the ROM in recompiled programs" ON)
-set(NES_AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by NES_AUTO_HINTS")
+# EMBED_ROM=OFF: the program carries no ROM and needs the file at start
+# (the generated code still holds the game's code bytes: not for sharing
+# either). FDS programs always carry the BIOS.
+option(AUTO_HINTS "Trace each game in the interpreter before recompiling it" ON)
+option(EMBED_ROM "Embed the ROM in recompiled programs" ON)
+set(AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by AUTO_HINTS")
 function(nes_recompile name rom)
     set(out ${GEN_DIR}/${name}.c)
     set(hints "")
@@ -116,17 +133,28 @@ function(nes_recompile name rom)
         set(hints "${ARGV2}")
         set(hint_args --hints "${ARGV2}")
     endif()
+    set(bios_args "")
+    get_filename_component(ext "${rom}" LAST_EXT)
+    string(TOLOWER "${ext}" ext)
+    if(ext STREQUAL ".fds")
+        if(NOT FDS_BIOS)
+            message(FATAL_ERROR "${rom}: Famicom Disk System games need the BIOS: -DFDS_BIOS=path/to/disksys.rom")
+        endif()
+        set(bios_args --bios "${FDS_BIOS}")
+        list(APPEND hints "${FDS_BIOS}" ${CMAKE_SOURCE_DIR}/games/fds.toml)  # BIOS entries
+        list(APPEND hint_args --hints ${CMAKE_SOURCE_DIR}/games/fds.toml)
+    endif()
     set(trace "")
-    if(NES_AUTO_HINTS)
+    if(AUTO_HINTS)
         set(trace ${GEN_DIR}/${name}.trace)
         add_custom_command(
             OUTPUT ${trace}
-            COMMAND nes_headless "${rom}" --play 1 --frames ${NES_AUTO_HINTS_FRAMES} --misses --out ${trace}
+            COMMAND nes_headless "${rom}" ${bios_args} --play 1 --frames ${AUTO_HINTS_FRAMES} --misses --out ${trace}
             # nes_headless as COMMAND is built first (target-level dependency) but is
             # no file dependency: runtime changes do not re-trace every game
             DEPENDS "${rom}"
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-            COMMENT "Tracing ${name} in the interpreter (${NES_AUTO_HINTS_FRAMES} frames)")
+            COMMENT "Tracing ${name} in the interpreter (${AUTO_HINTS_FRAMES} frames)")
         list(APPEND hint_args --misses ${trace} --save-hints ${GEN_DIR}/${name}.toml)
     endif()
     set(played ${CMAKE_BINARY_DIR}/${name}.misses)
@@ -134,12 +162,12 @@ function(nes_recompile name rom)
         file(TOUCH ${played})
     endif()
     list(APPEND hint_args --misses ${played})
-    if(NOT NES_EMBED_ROM)
+    if(NOT EMBED_ROM)
         list(APPEND hint_args --no-rom)
     endif()
     add_custom_command(
         OUTPUT ${out}
-        COMMAND nesrecomp "${rom}" -o ${out} ${hint_args}
+        COMMAND nesrecomp "${rom}" -o ${out} ${hint_args} ${bios_args}
         DEPENDS "${rom}" ${hints} ${trace} ${played} nesrecomp
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Recompiling ${name}")
@@ -150,7 +178,7 @@ function(nes_recompile name rom)
     target_link_libraries(${name}_code PUBLIC nescpu)
     add_executable(${name}_headless runtime/tests/nes_headless.c)
     target_link_libraries(${name}_headless PRIVATE nescore ${name}_code)
-    if(NES_FRONTEND)
+    if(FRONTEND)
         nes_frontend(${name} ${name}_code)
     endif()
 endfunction()
@@ -160,31 +188,31 @@ endfunction()
 set(NESTEST_ROM ${CMAKE_SOURCE_DIR}/tests/roms/nestest.nes)
 if(EXISTS ${NESTEST_ROM})
     # hand-made hints only: tests/test_recomp.py compares its blocks with nestest.log
-    set(NES_AUTO_HINTS OFF)
+    set(AUTO_HINTS OFF)
     nes_recompile(nestest ${NESTEST_ROM} ${CMAKE_SOURCE_DIR}/tests/data/nestest.toml)
-    unset(NES_AUTO_HINTS)  # the cache value again, for the games below
+    unset(AUTO_HINTS)  # the cache value again, for the games below
     add_executable(nestest_recomp_tests runtime/tests/cpu_tests.c)
     target_link_libraries(nestest_recomp_tests PRIVATE nestest_code)
 endif()
 
-# Your own game ROMs (never committed): -DNES_GAMES="a.nes;b.nes".
+# Your own games (never committed): -DROMS="a.nes;b.fds" (.fds needs FDS_BIOS).
 # Target name = file name without "(...)"/"[...]" tags, lower case,
 # non-alphanumerics -> '_' (e.g. "Arkista's Ring (U) [!].nes" -> arkista_s_ring);
 # hints are read from games/<name>.toml when present.
-set(NES_GAMES "" CACHE STRING "ROM files to recompile (semicolon-separated)")
+set(ROMS "" CACHE STRING "ROM files (.nes, .fds) to recompile (semicolon-separated)")
 # Relative paths are relative to the folder cmake was run from (for the
 # release kit that is the archive folder, not kit/), else to this source
 # folder. CMake has no variable for the former, but a cmake -P child sees it
 # as CMAKE_SOURCE_DIR. The absolute paths go back into the cache, so later
 # re-configures (from cmake --build, an IDE) resolve nothing again.
 set(FDS_BIOS "" CACHE FILEPATH "FDS BIOS (8 KB) to recompile into fds and fds_headless")
-if(NES_GAMES OR FDS_BIOS)
+if(ROMS OR FDS_BIOS)
     file(WRITE ${CMAKE_BINARY_DIR}/print_cwd.cmake
         "execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E echo \"\${CMAKE_SOURCE_DIR}\")\n")
     execute_process(COMMAND ${CMAKE_COMMAND} -P ${CMAKE_BINARY_DIR}/print_cwd.cmake
         OUTPUT_VARIABLE cwd OUTPUT_STRIP_TRAILING_WHITESPACE)
 endif()
-if(FDS_BIOS)  # the same resolution as NES_GAMES below
+if(FDS_BIOS)  # the same resolution as ROMS below
     get_filename_component(from_cwd "${FDS_BIOS}" ABSOLUTE BASE_DIR "${cwd}")
     get_filename_component(from_src "${FDS_BIOS}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
     if(EXISTS "${from_cwd}")
@@ -195,9 +223,9 @@ if(FDS_BIOS)  # the same resolution as NES_GAMES below
         message(FATAL_ERROR "FDS_BIOS: not found: ${FDS_BIOS} (looked in ${cwd} and ${CMAKE_SOURCE_DIR})")
     endif()
 endif()
-if(NES_GAMES)
+if(ROMS)
     set(absolute_roms "")
-    foreach(rom IN LISTS NES_GAMES)
+    foreach(rom IN LISTS ROMS)
         get_filename_component(from_cwd "${rom}" ABSOLUTE BASE_DIR "${cwd}")
         get_filename_component(from_src "${rom}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
         if(EXISTS "${from_cwd}")
@@ -205,12 +233,12 @@ if(NES_GAMES)
         elseif(EXISTS "${from_src}")
             list(APPEND absolute_roms "${from_src}")
         else()
-            message(FATAL_ERROR "NES_GAMES: ROM not found: ${rom} (looked in ${cwd} and ${CMAKE_SOURCE_DIR})")
+            message(FATAL_ERROR "ROMS: not found: ${rom} (looked in ${cwd} and ${CMAKE_SOURCE_DIR})")
         endif()
     endforeach()
-    set(NES_GAMES "${absolute_roms}" CACHE STRING "ROM files to recompile (semicolon-separated)" FORCE)
+    set(ROMS "${absolute_roms}" CACHE STRING "ROM files (.nes, .fds) to recompile (semicolon-separated)" FORCE)
 endif()
-foreach(rom IN LISTS NES_GAMES)
+foreach(rom IN LISTS ROMS)
     get_filename_component(stem "${rom}" NAME_WLE)
     string(REGEX REPLACE "[ ]*[[(][^])]*[])]" "" stem "${stem}")  # drop (U), [!], ...
     string(TOLOWER "${stem}" name)
@@ -220,15 +248,15 @@ foreach(rom IN LISTS NES_GAMES)
     list(APPEND game_names ${name})
 endforeach()
 # Famicom Disk System: -DFDS_BIOS=disksys.rom (your 8 KB BIOS, never
-# committed) recompiles the BIOS into fds and fds_headless, which play .fds
-# disk images with it embedded (no fds_bios setting needed). The games' own
-# code is loaded from disk into RAM and stays interpreted. No tracing (it
-# would need a disk): hints come from games/fds.toml and fds.misses, which
-# the program writes as you play.
+# committed) also recompiles the BIOS alone into fds and fds_headless, which
+# play any .fds image with it embedded (no fds_bios setting needed); the
+# games' code stays interpreted there (.fds files in ROMS recompile it). No
+# tracing (it would need a disk): hints come from games/fds.toml and
+# fds.misses, which the program writes as you play.
 if(FDS_BIOS)
-    set(NES_AUTO_HINTS OFF)
+    set(AUTO_HINTS OFF)
     nes_recompile(fds "${FDS_BIOS}" ${CMAKE_SOURCE_DIR}/games/fds.toml)
-    unset(NES_AUTO_HINTS)  # the cache value again
+    unset(AUTO_HINTS)  # the cache value again
 endif()
 # for tests/test_regression.py: the games this build recompiles
 list(JOIN game_names "\n" game_lines)

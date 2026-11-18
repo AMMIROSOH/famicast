@@ -255,8 +255,15 @@ M11 (Famicom Disk System, interpreter):
   (explored from $E000 only, never chaining into the $E445 disk check
   the automatic swap hooks); hints in `games/fds.toml`. 11 games identical
   to the interpreter in `--diff` (06).
-- [ ] Recompiling FDS games (code is loaded from disk into RAM, in parts):
-  per disk file, keyed by content hash.
+- [x] Recompiling FDS games: `.fds` in `ROMS` (with `FDS_BIOS`). Each PRG
+  file on the disk loaded from $0200 is its own region; entries come from
+  traces, whose RAM misses carry the instruction's bytes to tell the file
+  (`ram` hints: [file FNV-1a, address]). A block runs only while RAM holds
+  its bytes: checked by the dispatcher (`ram_lookup`), on entry (chains),
+  and after stores that may hit the block. 6 games identical in `--diff`,
+  98.7-99.8% recompiled (06).
+- [x] CMake options renamed: `ROMS`, `EMBED_ROM`, `AUTO_HINTS(_FRAMES)`,
+  `FRONTEND`, `SDL3_PREFIX` (old `NES_*` cache values carry over).
 - [ ] Jingorou (unlicensed) stays black; Graphic Editor Hokusai jams.
 M7b (recompiler):
 - [x] Bank-aware regions (`recomp/analyze.c`): code compiled per (PRG bank,
