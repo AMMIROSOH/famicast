@@ -3,6 +3,23 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-19 · Game Boy G4: sound
+- **blargg dmg_sound**: the 12 singles pass (`tests/test_gb_roms.py`: 117
+  ROMs must pass, 20 are listed open; the "103" in the G3 entry
+  miscounted, the suite then had 105), and so does the combined
+  `dmg_sound.gb`. The wave tests (09, 10, 12) pass with the first sample
+  read 3 cycles (2 MHz) after the period, SameBoy's value; 1, 2, 4, 5
+  and 6 fail all three.
+- **Games**: 30 s with scripted input from three games, recorded with
+  `gb_headless --wav`: sound throughout (RMS 0.03-0.10 per 5 s), peak
+  0.64, nothing clipped, exactly 48,000 samples per emulated second. The
+  strongest pitch 24 s into one game's title music is 656 Hz, its first
+  note being E5 (659 Hz). Not listened to.
+- **Speed**: 60 emulated seconds in 5.3 s (11x real time) with sound.
+- **Window program**: `gb` with a game runs 200 frames with the audio
+  device open and exits 0; the GB suites (CPU, ROMs, dmg-acid2, states)
+  pass.
+
 ## 2026-11-19 · Game Boy G3: PPU and the window program
 - **dmg-acid2**: 0 of 23,040 pixels differ from the reference screenshot
   (`tests/test_gb_ppu.py`, a 2-bit PNG decoded in the test).

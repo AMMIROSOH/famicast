@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "apu.h"
 #include "cart.h"
 #include "cpu.h"
 
@@ -19,7 +20,8 @@ typedef struct Gb {
     GbCpu cpu;
     GbCart cart;
     uint8_t vram[0x2000], wram[0x2000], oam[0xA0], hram[0x7F];
-    uint8_t io[0x80];          /* registers without behaviour of their own (sound until G4, palettes) */
+    uint8_t io[0x80];          /* registers as written: sound ($10-$3F, apu.c), palettes */
+    GbApu apu;
     uint8_t ie, ifl;
     /* timer: DIV is the top byte of a 16-bit counter of clocks; TIMA counts
      * falling edges of the bit TAC selects. tima_reload: 1 = TIMA overflowed

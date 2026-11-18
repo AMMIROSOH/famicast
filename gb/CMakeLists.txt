@@ -19,8 +19,8 @@ target_include_directories(gbcpu PUBLIC runtime PRIVATE ${GEN_DIR})
 add_executable(gb_cpu_tests tests/cpu_tests.c)
 target_link_libraries(gb_cpu_tests PRIVATE gbcpu)
 
-# The Game Boy system (bus, timer, interrupts, cartridges).
-add_library(gbcore STATIC runtime/gb.c runtime/ppu.c runtime/cart.c)
+# The Game Boy system (bus, timer, interrupts, PPU, sound, cartridges).
+add_library(gbcore STATIC runtime/gb.c runtime/ppu.c runtime/apu.c runtime/cart.c)
 target_link_libraries(gbcore PUBLIC gbcpu core)
 
 # Test ROMs report on the serial port (tests/test_gb_roms.py)

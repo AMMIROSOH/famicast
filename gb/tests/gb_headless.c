@@ -1,6 +1,7 @@
 /* Game Boy without a window, for tests (tests/test_gb_roms.py).
- *   gb_headless ROM [--frames N] [--pgm FILE] [--play] [--state-at F FILE] [--load-state FILE]
+ *   gb_headless ROM [--frames N] [--pgm FILE] [--wav FILE] [--play] [--state-at F FILE] [--load-state FILE]
  *   --pgm         write the last whole frame as a grey image (shade 0 = white)
+ *   --wav         write the sound (48 kHz mono, 16-bit)
  *   --play        scripted input: Start and A taps, later walking right
  *   --state-at    save a state before frame F; --load-state: start from one
  * Runs up to N frames (default 3600), stopping early when a test ROM
@@ -46,11 +47,12 @@ int main(int argc, char **argv) {
         return 2;
     }
     long frames = 3600, state_at = -1;
-    const char *pgm = NULL, *state_out = NULL, *state_in = NULL;
+    const char *pgm = NULL, *wav = NULL, *state_out = NULL, *state_in = NULL;
     int play = 0;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]);
         else if (!strcmp(argv[i], "--pgm") && i + 1 < argc) pgm = argv[++i];
+        else if (!strcmp(argv[i], "--wav") && i + 1 < argc) wav = argv[++i];
         else if (!strcmp(argv[i], "--play")) play = 1;
         else if (!strcmp(argv[i], "--state-at") && i + 2 < argc) state_at = atol(argv[++i]), state_out = argv[++i];
         else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) state_in = argv[++i];
@@ -74,6 +76,13 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s: %s\n", state_in, err);
         return 2;
     }
+    FILE *w = wav ? fopen(wav, "wb") : NULL;
+    if (wav && !w) { perror(wav); return 2; }
+    static const uint8_t WAV[44] = {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ',
+                                    16, 0, 0, 0, 1, 0, 1, 0, 0x80, 0xBB, 0, 0, 0x00, 0x77, 1, 0,  /* PCM, mono, 48000 Hz, 96000 B/s */
+                                    2, 0, 16, 0, 'd', 'a', 't', 'a', 0, 0, 0, 0};
+    if (w) fwrite(WAV, 1, sizeof WAV, w);
+    long nsamples = 0;
     int r = 0;
     for (long i = 0; i < frames && !(r = result(&g)) && !g.cpu.jammed; i++) {
         if (i == state_at && gb_state_save(&g, state_out) != 0) { perror(state_out); return 2; }
@@ -82,6 +91,19 @@ int main(int argc, char **argv) {
             gb_set_pad(&g, k < 5 ? PAD_START : k >= 45 && k < 48 ? PAD_A : i > 900 && k >= 60 ? PAD_RIGHT : 0);
         }
         gb_run_frame(&g);
+        float buf[GB_APU_BUF];
+        int n = apu_take_samples(&g, buf, GB_APU_BUF);
+        for (int k = 0; w && k < n; k++) {
+            float x = buf[k] < -1 ? -1 : buf[k] > 1 ? 1 : buf[k];
+            int16_t v = (int16_t)(x * 32767);
+            fwrite(&v, 2, 1, w), nsamples++;
+        }
+    }
+    if (w) {  /* the sizes in the header */
+        uint32_t data = (uint32_t)nsamples * 2, riff = data + 36;
+        fseek(w, 4, SEEK_SET), fwrite(&riff, 4, 1, w);
+        fseek(w, 40, SEEK_SET), fwrite(&data, 4, 1, w);
+        fclose(w);
     }
     if (pgm) {  /* the last whole frame; shade 0 (light) = 255, as dmg-acid2's reference */
         FILE *o = fopen(pgm, "wb");

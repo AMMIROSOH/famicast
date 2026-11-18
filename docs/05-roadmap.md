@@ -24,7 +24,7 @@ only when that test passes in CI.
 | [G1](#g1--sm83-cpu) | Game Boy: SM83 CPU from templates, interpreter | done |
 | [G2](#g2--memory-timer-cartridges) | Game Boy: memory map, timer, interrupts, MBC1/2/3/5 | done (1 timer test open) |
 | [G3](#g3--ppu-and-frontend) | Game Boy: PPU, the window program (core/frontend) | done (8 PPU timing tests open) |
-| [G4](#g4--apu) | Game Boy: sound | open |
+| [G4](#g4--apu) | Game Boy: sound | done |
 | [G5](#g5--recompiler) | Game Boy: recompiler, lockstep diff | open |
 | [G6](#g6--game-boy-color) | Game Boy Color | open |
 
@@ -48,7 +48,7 @@ retrocast/
     frontend.c             the NES for core/frontend (system.h)
     tests/                 cpu_tests.c nes_headless.c
     games/<name>.toml      per-game hints (entry points, banked entries; fds.toml: the BIOS)
-  gb/                      the Game Boy (no sound yet, not recompiled yet)
+  gb/                      the Game Boy (not recompiled yet)
     CMakeLists.txt         gbrecomp, gbcpu, gb_cpu_tests
     recomp/                gbrecomp: sm83.c (C per opcode), main.c
     runtime/               cpu.h cpu_ops.h cpu.c, gb.c (bus, timer, interrupts, DMA, states), ppu.c, cart.c (MBCs)
@@ -381,8 +381,14 @@ to `core/` when the Game Boy is its second user (`docs/02` "Frontend").
   timing tests (mode 3 lengths, LCD-on timing, STAT details).
 
 ### G4 · APU
-- [ ] Two pulses, wave, noise; frame sequencer.
-- [ ] **Exit:** blargg `dmg_sound`.
+- [x] `gb/runtime/apu.c`: two pulses (sweep on the first), wave, noise;
+  the frame sequencer on DIV bit 12; the DMG details dmg_sound checks
+  (length clocking on enable and trigger, sweep negate, lengths kept and
+  writable while powered off, wave RAM reachable only in the cycle a
+  sample is read, the retrigger corruption). Mixed to 48 kHz mono
+  through the console's output capacitor.
+- [x] **Exit:** blargg `dmg_sound`, the 12 singles (in `tests/test_gb_roms.py`)
+  and the combined ROM.
 
 ### G5 · Recompiler
 - [ ] Decoding, banks (MBCs), blocks from the templates, auto hints,
