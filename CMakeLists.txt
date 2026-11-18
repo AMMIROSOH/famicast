@@ -177,11 +177,25 @@ set(NES_GAMES "" CACHE STRING "ROM files to recompile (semicolon-separated)")
 # folder. CMake has no variable for the former, but a cmake -P child sees it
 # as CMAKE_SOURCE_DIR. The absolute paths go back into the cache, so later
 # re-configures (from cmake --build, an IDE) resolve nothing again.
-if(NES_GAMES)
+set(FDS_BIOS "" CACHE FILEPATH "FDS BIOS (8 KB) to recompile into fds and fds_headless")
+if(NES_GAMES OR FDS_BIOS)
     file(WRITE ${CMAKE_BINARY_DIR}/print_cwd.cmake
         "execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E echo \"\${CMAKE_SOURCE_DIR}\")\n")
     execute_process(COMMAND ${CMAKE_COMMAND} -P ${CMAKE_BINARY_DIR}/print_cwd.cmake
         OUTPUT_VARIABLE cwd OUTPUT_STRIP_TRAILING_WHITESPACE)
+endif()
+if(FDS_BIOS)  # the same resolution as NES_GAMES below
+    get_filename_component(from_cwd "${FDS_BIOS}" ABSOLUTE BASE_DIR "${cwd}")
+    get_filename_component(from_src "${FDS_BIOS}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+    if(EXISTS "${from_cwd}")
+        set(FDS_BIOS "${from_cwd}" CACHE FILEPATH "FDS BIOS (8 KB) to recompile into fds and fds_headless" FORCE)
+    elseif(EXISTS "${from_src}")
+        set(FDS_BIOS "${from_src}" CACHE FILEPATH "FDS BIOS (8 KB) to recompile into fds and fds_headless" FORCE)
+    else()
+        message(FATAL_ERROR "FDS_BIOS: not found: ${FDS_BIOS} (looked in ${cwd} and ${CMAKE_SOURCE_DIR})")
+    endif()
+endif()
+if(NES_GAMES)
     set(absolute_roms "")
     foreach(rom IN LISTS NES_GAMES)
         get_filename_component(from_cwd "${rom}" ABSOLUTE BASE_DIR "${cwd}")
@@ -205,6 +219,17 @@ foreach(rom IN LISTS NES_GAMES)
     nes_recompile(${name} "${rom}" ${CMAKE_SOURCE_DIR}/games/${name}.toml)
     list(APPEND game_names ${name})
 endforeach()
+# Famicom Disk System: -DFDS_BIOS=disksys.rom (your 8 KB BIOS, never
+# committed) recompiles the BIOS into fds and fds_headless, which play .fds
+# disk images with it embedded (no fds_bios setting needed). The games' own
+# code is loaded from disk into RAM and stays interpreted. No tracing (it
+# would need a disk): hints come from games/fds.toml and fds.misses, which
+# the program writes as you play.
+if(FDS_BIOS)
+    set(NES_AUTO_HINTS OFF)
+    nes_recompile(fds "${FDS_BIOS}" ${CMAKE_SOURCE_DIR}/games/fds.toml)
+    unset(NES_AUTO_HINTS)  # the cache value again
+endif()
 # for tests/test_regression.py: the games this build recompiles
 list(JOIN game_names "\n" game_lines)
 file(WRITE ${CMAKE_BINARY_DIR}/nes_games.txt "${game_lines}\n")

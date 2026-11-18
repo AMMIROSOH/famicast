@@ -122,7 +122,8 @@ static int run_frame_diff(Nes *n, Nes *ref, long frame) {
         n->cpu.yield = 1;  /* one block per step: compare after each */
         Cpu before = n->cpu;
         nes_step(n);
-        while (ref->cpu.cycles < n->cpu.cycles && !ref->cpu.jammed) cpu_step(&ref->cpu);
+        /* nes_step (ref->recomp is NULL): the interpreter, with the hooks a real run has (FDS disk check) */
+        while (ref->cpu.cycles < n->cpu.cycles && !ref->cpu.jammed) nes_step(ref);
         const char *what = compare(n, ref);
         if (!what) continue;
         printf("DIVERGENCE (%s) in frame %ld, step starting at PC=%04X%s\n", what, frame, before.pc,
@@ -255,7 +256,7 @@ static void print_blargg_text(Nes *n) {
 
 int main(int argc, char **argv) {
     const char *rom_path = argc > 1 && argv[1][0] != '-' ? argv[1] : NULL;
-    if (!rom_path && !(recomp_program && recomp_program->rom)) {
+    if (!rom_path && !(recomp_program && recomp_program->rom && recomp_program->rom_size != 0x2000)) {
         fprintf(stderr, "usage: nes_headless ROM [--frames N] [--blargg] [--peek ADDR] [--ppm FILE] [--hash] ...\n");
         return 2;
     }
@@ -308,6 +309,8 @@ int main(int argc, char **argv) {
     uint8_t *rom_file = NULL;
     if (rom_path) rom = rom_file = read_file(rom_path, &size);
     else rom = recomp_program->rom, size = (long)recomp_program->rom_size, rom_path = recomp_program->rom_name;
+    if (!bios && recomp_program && recomp_program->rom && recomp_program->rom_size == 0x2000)
+        cart_fds_bios(recomp_program->rom);  /* -DFDS_BIOS build: the embedded BIOS */
     if (bios) {
         long bios_size;
         uint8_t *b = read_file(bios, &bios_size);

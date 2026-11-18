@@ -21,7 +21,8 @@ On macOS, remove the download quarantine once before the first run:
 PLAYING
 
 Keyboard: arrows, X = A, Z = B, Enter = Start, Right Shift = Select,
-F5 = reset, F2 / F4 = save / load state, F10 = TV frame,
+F5 = reset, F2 / F4 = save / load state, F6 = next disk side (FDS),
+F10 = TV frame,
 F11 or Alt+Enter = fullscreen, Esc = quit.
 Gamepads work too (first = player 1, second = player 2).
 Display settings are in nes.ini next to the program, created on first run.
@@ -54,6 +55,12 @@ things recompile more of it:
     "cmake --build build --config Release" recompiles it.
 
 DO NOT SHARE RECOMPILED PROGRAMS: they contain the game.
+
+Famicom Disk System: .fds images play in nes with the FDS BIOS (8 KB, not
+included) next to it as disksys.rom (or fds_bios in nes.ini). The kit can
+recompile the BIOS: add -DFDS_BIOS="/path/to/disksys.rom" to the first
+cmake line; build/fds then plays any .fds image with it built in. Do not
+share it either: it contains the BIOS.
 
 Supported mappers and more: see the project page above.
 

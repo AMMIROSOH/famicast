@@ -88,8 +88,10 @@ typedef struct {
     int banks[4];      /* window -> 8 KB bank, -1 if not part of the region */
 } Region;
 
+/* dispatch_at: an address recompiled code never chains to, so the runtime's
+ * dispatcher sees it (the FDS BIOS disk check at $E445, nes.c); 0: none */
 void emit_program(Buf *out, Region *regions, int nregions, const char *rom_name, uint32_t prg_hash,
-                  int nbanks, int bank_reg, const uint8_t *rom, size_t rom_size);
+                  int nbanks, int bank_reg, const uint8_t *rom, size_t rom_size, uint16_t dispatch_at);
 void emit_cpu_switch(Buf *out);
 
 #endif

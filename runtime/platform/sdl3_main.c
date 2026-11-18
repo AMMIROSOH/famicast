@@ -261,7 +261,10 @@ static void *load_fds_bios(const char *name, const char *image_path) {
 
 int main(int argc, char **argv) {
     const char *rom_path = argc > 1 && argv[1][0] != '-' ? argv[1] : NULL;
-    const int embedded = !rom_path && recomp_program && recomp_program->rom;
+    /* -DFDS_BIOS builds embed the FDS BIOS (8 KB; no iNES file is that size) */
+    const int bios_build = recomp_program && recomp_program->rom && recomp_program->rom_size == 0x2000;
+    const int embedded = !rom_path && recomp_program && recomp_program->rom && !bios_build;
+    if (!rom_path && bios_build) return fail("Give a Famicom Disk System disk image (.fds) to play.");
     if (!rom_path && !embedded) {
         SDL_Log("usage: nes ROM [--frames N] [--record FILE] [--replay FILE]");
         return 2;
@@ -286,10 +289,11 @@ int main(int argc, char **argv) {
     settings_load(&cfg, ini_path);
     const uint8_t *image = embedded ? recomp_program->rom : rom;
     void *bios = NULL;
-    if (cart_is_fds(image, size) && !(bios = load_fds_bios(cfg.fds_bios, rom_path)))
+    if (bios_build) cart_fds_bios(recomp_program->rom);
+    else if (cart_is_fds(image, size) && !(bios = load_fds_bios(cfg.fds_bios, rom_path)))
         return fail("Famicom Disk System games need the FDS BIOS (8 KB): put it next to the program as "
                     "disksys.rom, or set fds_bios in %s", ini_path);
-    cart_fds_bios(bios);
+    if (bios) cart_fds_bios(bios);
     static Nes nes;
     char err[128];
     if (nes_load(&nes, image, size, err, sizeof err) != 0)

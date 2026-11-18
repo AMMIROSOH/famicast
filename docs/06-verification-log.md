@@ -3,6 +3,26 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · M11: the FDS BIOS recompiled
+- **Build**: `-DFDS_BIOS` with the Rev 1 BIOS: 1,990 instructions found
+  statically from the three vectors; 26 more entry points from tracing 25
+  games in the interpreter (6,000 frames of `--play` each) went to
+  `games/fds.toml`.
+- **Lockstep** (`fds_headless GAME --play 7 --frames 6000 --diff`):
+  identical to the interpreter for Ai Senshi Nicol, Puyo Puyo (Disk
+  Writer), Exciting Billiard, Fuuun Shourin Ken, Zelda no Densetsu, Link
+  no Bouken, Santa Claus no Takarabako, Relics, Metroid (Rev 1); Akumajou
+  Dracula and Baseball for 3,000 frames. Recompiled share of CPU cycles
+  12-78% (the rest is the games' code in RAM); BIOS code still
+  interpreted 0-0.8% (Relics 0.80%, Dracula 0.12%, most 0).
+- **Found on the way**: the diff's reference machine stepped the CPU
+  directly, so it skipped the $E445 disk-check hook and never swapped
+  disks; every game that swaps "diverged" at $E451. It now steps through
+  nes_step with its recompiled code off (the same hooks as a real run).
+  Recompiled code also no longer chains into $E445, or the swap would be
+  skipped in recompiled builds. NES games unaffected: Air Fortress
+  identical (3,000 frames, 99.98% recompiled), test suite as before.
+
 ## 2026-11-18 · M11: Famicom Disk System
 - **Sources**: nesdev "Family Computer Disk System", "FDS disk format",
   "FDS audio" (read: the 2.4x level, polarity, 2 kHz low-pass, $408A =

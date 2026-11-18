@@ -6,6 +6,9 @@
  *   nesrecomp --ops                    the opcode table, one line per opcode (tests)
  *   nesrecomp --info ROM               iNES header summary (tests)
  *
+ * ROM may also be the Famicom Disk System BIOS (8 KB): its code at $E000 is
+ * recompiled, and the program it builds plays .fds disk images with it.
+ *
  * GAME.toml (all keys optional; only this subset of TOML is read):
  *   prg_fnv1a = "65D2E392"           # the dump the hints were made for
  *   entries   = [0xCE67, ...]        # extra entry points in assumed-bank windows
@@ -216,10 +219,19 @@ static int explore_regions(const Rom *r, const Hints *h, Region **out) {
         R->mem = malloc(0x10000);
         memcpy(R->banks, layout, sizeof layout);
         view(r, layout, R->mem);
-        for (int i = 0; i < 3; i++) R->prog->entries.b[vec[i]] |= vec[i] >= 0x8000;
-        for (size_t i = 0; i < h->entries.n; i++) R->prog->entries.b[h->entries.v[i] & 0xFFFF] = 1;
-        for (size_t i = 0; i < h->banked.n; i++) R->prog->entries.b[h->banked.v[i] & 0xFFFF] = 1;
-        explore(R->prog, R->mem, 0x8000, 0x10000, no_return);
+        /* from the first window with ROM (FDS: $E000; below it is RAM) */
+        uint32_t lo = 0x8000;
+        while (lo < 0x10000 && layout[window_of(lo)] < 0) lo += 0x2000;
+        for (int i = 0; i < 3; i++) R->prog->entries.b[vec[i]] |= vec[i] >= lo;
+        for (size_t i = 0; i < h->entries.n; i++) {
+            uint32_t a = h->entries.v[i] & 0xFFFF;
+            R->prog->entries.b[a] |= a >= lo;
+        }
+        for (size_t i = 0; i < h->banked.n; i++) {
+            uint32_t a = h->banked.v[i] & 0xFFFF;
+            R->prog->entries.b[a] |= a >= lo;
+        }
+        explore(R->prog, R->mem, lo, 0x10000, no_return);
         free(no_return);
         return 1;
     }
@@ -288,8 +300,18 @@ static int load_rom(const char *path, Cart *cart, uint8_t **file, size_t *size) 
     char err[128];
     *file = read_file(path, size);
     if (cart_is_fds(*file, *size)) {
-        fprintf(stderr, "%s: Famicom Disk System images are not recompiled yet (they play in the interpreter, nes)\n", path);
+        fprintf(stderr, "%s: Famicom Disk System games are not recompiled (their code is loaded into RAM); "
+                        "the BIOS can be: -DFDS_BIOS=disksys.rom\n", path);
         return 2;
+    }
+    if (*size == 0x2000) {  /* no iNES file is 8 KB: the FDS BIOS, at $E000 */
+        memset(cart, 0, sizeof *cart);
+        cart->prg = *file;
+        cart->prg_size = 0x2000;
+        cart->mapper = 20;
+        cart->chr_ram = 1;
+        cart->mirroring = MIRROR_VERTICAL;
+        return 0;
     }
     if (cart_load(cart, *file, *size, err, sizeof err) != 0) {
         fprintf(stderr, "%s: %s\n", path, err);
@@ -379,7 +401,7 @@ int main(int argc, char **argv) {
     int n = explore_regions(&rom, &hints, &regions);
     const char *name = basename_of(rom_path);
     emit_program(&o, regions, n, name, prg_hash, (int)(cart.prg_size / 0x2000), prg_bank_reg(&rom),
-                 embed ? file : NULL, embed ? size : 0);
+                 embed ? file : NULL, embed ? size : 0, cart.mapper == 20 ? 0xE445 : 0);
     write_file(output, &o);
     long ninstr = 0, nindirect = 0;
     for (int i = 0; i < n; i++)

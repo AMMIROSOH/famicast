@@ -165,6 +165,9 @@ int assumed_layout(const Rom *r, int layout[4]) {
     case 85:                     /* VRC7 */
         layout[3] = n8 - 1;
         return 0;
+    case 20:                     /* FDS BIOS at $E000; $6000-$DFFF is RAM */
+        layout[3] = 0;
+        return 0;
     }
     return -1;
 }
@@ -181,7 +184,7 @@ int unit_windows(const Rom *r) {
 
 int prg_bank_reg(const Rom *r) {
     switch (r->mapper) {
-    case 0: case 3: case 87: case 185: return 0;
+    case 0: case 3: case 20: case 87: case 185: return 0;
     case 79: return 0x4100;
     case 5: return 0x5100;
     case 16: return 0x6000;  /* FCG-1/2 registers at $6000-$7FFF */

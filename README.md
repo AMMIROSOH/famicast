@@ -105,13 +105,21 @@ Not yet: the long tail of rarer boards. Other mappers are refused at load
 
 ### Famicom Disk System
 `.fds` disk images (with or without the 16-byte header) play in the
-interpreter; they are not recompiled yet (`nesrecomp` refuses them). They
-need the FDS BIOS (8 KB, not included): put it next to the program as
-`disksys.rom`, or set `fds_bios` in the .ini. When a game asks for another
+interpreter. They need the FDS BIOS (8 KB, not included): put it next to
+the program as `disksys.rom`, or set `fds_bios` in the .ini. When a game asks for another
 disk side, it is swapped in by itself (`fds_auto_disk = 0` turns that off);
 F6 puts in the next side by hand. What a game writes to its disk is kept in
 `ROM.sav`. `nes_headless` takes `--bios FILE` and `--disk F:S` (swap to side
 S at frame F).
+
+The BIOS can be recompiled: `cmake -S . -B build -DFDS_BIOS=path/to/disksys.rom`
+builds `build/fds` and `build/fds_headless`, which carry the BIOS and play
+any `.fds` image (`build/fds game.fds`). The games' own code is loaded from
+disk into RAM and stays interpreted (12-78% of CPU time runs recompiled,
+depending on the game; docs/06); recompiling it per disk file is a later
+step. `games/fds.toml` holds BIOS entry points traced from 25 games (Rev 1
+BIOS; another revision only recompiles less). Do not share these builds:
+they contain the BIOS.
 
 ## Downloads
 [Releases](https://github.com/Viper-Bit/famicast/releases) have builds for

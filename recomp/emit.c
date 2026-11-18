@@ -166,7 +166,7 @@ static void c_string(Buf *o, const char *s) {
 }
 
 void emit_program(Buf *o, Region *regions, int nregions, const char *rom_name, uint32_t prg_hash,
-                  int nbanks, int bank_reg, const uint8_t *rom, size_t rom_size) {
+                  int nbanks, int bank_reg, const uint8_t *rom, size_t rom_size, uint16_t dispatch_at) {
     const int banked = bank_reg != 0;
     static AddrSet starts[1];
     static Instr ins[0x10000];
@@ -243,7 +243,7 @@ void emit_program(Buf *o, Region *regions, int nregions, const char *rom_name, u
             if ((banked && may_write_rom(end, bank_reg)) || R->prog->straddle.b[end->pc]) nnext = 0;
             int chained = 0;
             for (int k = 0; k < nnext; k++) {
-                if (!R->prog->instrs.b[next[k]] || !starts->b[next[k]]) continue;
+                if (!R->prog->instrs.b[next[k]] || !starts->b[next[k]] || (dispatch_at && next[k] == dispatch_at)) continue;
                 if (!chained++) bprintf(o, "    if (c->poll_prev | c->yield) return;\n    switch (c->pc) {\n");
                 bprintf(o, "    case 0x%04X: RECOMP_CHAIN(b_%02X_%04X);\n", next[k], R->banks[window_of(next[k])], next[k]);
             }
