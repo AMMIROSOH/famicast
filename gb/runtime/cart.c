@@ -1,0 +1,143 @@
+#include "cart.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int gb_cart_load(GbCart *c, const uint8_t *d, size_t size, char *err, size_t errlen) {
+    memset(c, 0, sizeof *c);
+    if (size < 0x8000 || size > 0x800000) return snprintf(err, errlen, "not a Game Boy ROM (%zu bytes)", size), -1;
+    static const struct { uint8_t type, mbc, battery, rtc; } TYPES[] = {
+        {0x00, MBC_NONE, 0, 0}, {0x08, MBC_NONE, 0, 0}, {0x09, MBC_NONE, 1, 0},
+        {0x01, MBC_1, 0, 0}, {0x02, MBC_1, 0, 0}, {0x03, MBC_1, 1, 0},
+        {0x05, MBC_2, 0, 0}, {0x06, MBC_2, 1, 0},
+        {0x0F, MBC_3, 1, 1}, {0x10, MBC_3, 1, 1}, {0x11, MBC_3, 0, 0}, {0x12, MBC_3, 0, 0}, {0x13, MBC_3, 1, 0},
+        {0x19, MBC_5, 0, 0}, {0x1A, MBC_5, 0, 0}, {0x1B, MBC_5, 1, 0},
+        {0x1C, MBC_5, 0, 0}, {0x1D, MBC_5, 0, 0}, {0x1E, MBC_5, 1, 0},  /* rumble: the motor is ignored */
+    };
+    uint8_t type = d[0x147];
+    int k = -1;
+    for (size_t i = 0; i < sizeof TYPES / sizeof *TYPES; i++)
+        if (TYPES[i].type == type) k = (int)i;
+    if (k < 0) return snprintf(err, errlen, "cartridge type $%02X not supported yet", type), -1;
+    /* the ROM size from the header, but never more than the file */
+    uint32_t rom = d[0x148] <= 8 ? 0x8000u << d[0x148] : 0;
+    while (rom > size) rom >>= 1;
+    if (!rom) rom = 0x8000;
+    static const uint32_t RAM[] = {0, 0x800, 0x2000, 0x8000, 0x20000, 0x10000};
+    c->rom = malloc(rom);
+    if (!c->rom) return snprintf(err, errlen, "out of memory"), -1;
+    memcpy(c->rom, d, rom);
+    c->rom_size = rom;
+    c->type = type;
+    c->mbc = TYPES[k].mbc, c->battery = TYPES[k].battery, c->has_rtc = TYPES[k].rtc;
+    c->ram_size = c->mbc == MBC_2 ? 0x200 : d[0x149] < 6 ? RAM[d[0x149]] : 0;
+    /* a type with RAM but size 0 in the header (some test ROMs): 8 KB */
+    static const uint8_t WITH_RAM[] = {0x02, 0x03, 0x08, 0x09, 0x10, 0x12, 0x13, 0x1A, 0x1B, 0x1D, 0x1E};
+    if (!c->ram_size && memchr(WITH_RAM, type, sizeof WITH_RAM)) c->ram_size = 0x2000;
+    c->rom_bank = 1;
+    memcpy(c->title, d + 0x134, 16);
+    for (int i = 0; i < 16; i++)
+        if ((unsigned char)c->title[i] < 0x20 || (unsigned char)c->title[i] > 0x7E) c->title[i] = 0;
+    return 0;
+}
+
+void gb_cart_free(GbCart *c) {
+    free(c->rom);
+    c->rom = NULL;
+}
+
+/* The ROM bank seen at $0000-$3FFF (zero = 0) and at $4000-$7FFF (high = 1). */
+static uint32_t rom_bank(const GbCart *c, int high) {
+    uint32_t b;
+    switch (c->mbc) {
+    case MBC_1: {  /* a 0 in the 5-bit register reads as 1; mode 1 also banks $0000 */
+        uint32_t low = c->rom_bank & 0x1F ? c->rom_bank & 0x1F : 1;
+        b = high ? (uint32_t)c->bank2 << 5 | low : c->mode ? (uint32_t)c->bank2 << 5 : 0;
+        break;
+    }
+    case MBC_2: case MBC_3: b = high ? (c->rom_bank ? c->rom_bank : 1) : 0; break;
+    case MBC_5: b = high ? c->rom_bank : 0; break;
+    default: b = (uint32_t)high;
+    }
+    return b & (c->rom_size / 0x4000 - 1);
+}
+
+static int ram_offset(const GbCart *c, uint16_t a) {  /* -1: no RAM there */
+    if (!c->ram_on || !c->ram_size) return -1;
+    uint32_t bank = c->mbc == MBC_1 ? (c->mode ? c->bank2 : 0) : c->mbc == MBC_3 || c->mbc == MBC_5 ? c->bank2 : 0;
+    return (int)((bank * 0x2000 + (a & 0x1FFF)) % c->ram_size);
+}
+
+uint8_t gb_cart_read(const GbCart *c, uint16_t a) {
+    if (a < 0x8000) return c->rom[rom_bank(c, a >= 0x4000) * 0x4000 + (a & 0x3FFF)];
+    if (c->mbc == MBC_2) return c->ram_on ? (uint8_t)(0xF0 | c->ram[a & 0x1FF]) : 0xFF;
+    if (c->mbc == MBC_3 && c->bank2 >= 0x08) {  /* the clock, as latched */
+        static const uint8_t MASK[5] = {0x3F, 0x3F, 0x1F, 0xFF, 0xC1};
+        return c->ram_on && c->bank2 <= 0x0C ? (uint8_t)(c->rtc_latched[c->bank2 - 8] & MASK[c->bank2 - 8]) : 0xFF;
+    }
+    int o = ram_offset(c, a);
+    return o < 0 ? 0xFF : c->ram[o];
+}
+
+void gb_cart_write(GbCart *c, uint16_t a, uint8_t v) {
+    if (a >= 0xA000) {
+        if (c->mbc == MBC_2) {
+            if (c->ram_on) c->ram[a & 0x1FF] = v & 0x0F;
+        } else if (c->mbc == MBC_3 && c->bank2 >= 0x08) {
+            if (c->ram_on && c->bank2 <= 0x0C) {
+                c->rtc[c->bank2 - 8] = v;
+                if (c->bank2 == 0x08) c->rtc_cycles = 0;  /* writing the seconds restarts the second */
+            }
+        } else {
+            int o = ram_offset(c, a);
+            if (o >= 0) c->ram[o] = v;
+        }
+        return;
+    }
+    switch (c->mbc) {
+    case MBC_1:
+        if (a < 0x2000) c->ram_on = (v & 0x0F) == 0x0A;
+        else if (a < 0x4000) c->rom_bank = v & 0x1F;
+        else if (a < 0x6000) c->bank2 = v & 3;
+        else c->mode = v & 1;
+        break;
+    case MBC_2:  /* address bit 8 picks the register */
+        if (a < 0x4000) {
+            if (a & 0x100) c->rom_bank = v & 0x0F;
+            else c->ram_on = (v & 0x0F) == 0x0A;
+        }
+        break;
+    case MBC_3:
+        if (a < 0x2000) c->ram_on = (v & 0x0F) == 0x0A;
+        else if (a < 0x4000) c->rom_bank = v & 0x7F;
+        else if (a < 0x6000) c->bank2 = v;
+        else {  /* $00 then $01: copy the clock into the readable registers */
+            if (c->latch_prev == 0 && v == 1) memcpy(c->rtc_latched, c->rtc, 5);
+            c->latch_prev = v;
+        }
+        break;
+    case MBC_5:
+        if (a < 0x2000) c->ram_on = (v & 0x0F) == 0x0A;
+        else if (a < 0x3000) c->rom_bank = (uint16_t)((c->rom_bank & 0x100) | v);
+        else if (a < 0x4000) c->rom_bank = (uint16_t)((c->rom_bank & 0xFF) | (v & 1) << 8);
+        else if (a < 0x6000) c->bank2 = v & 0x0F;
+        break;
+    }
+}
+
+void gb_cart_tick(GbCart *c) {
+    if (!c->has_rtc || (c->rtc[4] & 0x40)) return;  /* no clock, or halted */
+    if (++c->rtc_cycles < 1048576) return;          /* M-cycles per second */
+    c->rtc_cycles = 0;
+    if (++c->rtc[0] != 60) return;
+    c->rtc[0] = 0;
+    if (++c->rtc[1] != 60) return;
+    c->rtc[1] = 0;
+    if (++c->rtc[2] != 24) return;
+    c->rtc[2] = 0;
+    unsigned day = (c->rtc[3] | (c->rtc[4] & 1) << 8) + 1;
+    if (day == 512) day = 0, c->rtc[4] |= 0x80;  /* day counter carry */
+    c->rtc[3] = (uint8_t)day;
+    c->rtc[4] = (uint8_t)((c->rtc[4] & 0xFE) | (day >> 8));
+}

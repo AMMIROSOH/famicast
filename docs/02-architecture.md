@@ -37,7 +37,7 @@ trace: nes_headless --play --misses (interpreter) ┘                   ▼
 | `core/frontend/` | C11 + SDL3 (zlib) | shared by every system; SDL3 fetched by CMake or prebuilt; keyboard + gamepad |
 | `core/` | C11 | input recordings and pad bits |
 | `core/recomp/` | C11 | instruction templates and their PC markers, shared by nesrecomp and gbrecomp |
-| `gb/` | C11 | the Game Boy, so far the SM83 CPU (docs/05 "Game Boy") |
+| `gb/` | C11 | the Game Boy: SM83 CPU, memory map, timer, interrupts, cartridges; no PPU yet (docs/05 "Game Boy") |
 | `tests/` | Python `unittest` + C test runners | test ROMs downloaded by script, not committed; the build does not need Python |
 
 ## CPU state and memory

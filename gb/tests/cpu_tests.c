@@ -35,6 +35,7 @@ void gb_write(GbCpu *c, uint16_t a, uint8_t v) {
     log_n++;
     mem[a] = v;
 }
+uint16_t gb_irq_ack(GbCpu *c) { (void)c; return 0; }  /* no interrupts on the test bus */
 void gb_idle(GbCpu *c) {
     (void)c;
     if (log_n < MAX_LOG) log_[log_n] = (Access){0, 0, 0};

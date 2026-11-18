@@ -3,12 +3,15 @@
  * instruction templates (gb/recomp/sm83.c). */
 #include "cpu_ops.h"
 
-void gb_cpu_interrupt(GbCpu *c, uint16_t vector) {
+/* Two waits, PC pushed, the jump (Pan Docs "Interrupt Handling"). The
+ * vector is chosen between the pushes (gb_irq_ack). */
+void gb_cpu_interrupt(GbCpu *c) {
     c->ime = 0;
     c->halted = 0;
     idle(c);
     idle(c);
     wr(c, --c->sp, (uint8_t)(c->pc >> 8));
+    uint16_t vector = gb_irq_ack(c);
     wr(c, --c->sp, (uint8_t)c->pc);
     idle(c);
     c->pc = vector;
@@ -23,7 +26,10 @@ void gb_cpu_step(GbCpu *c) {
         c->ei = 0;
         c->ime = 1;
     }
-    switch (rd(c, c->pc++)) {
+    uint8_t op = rd(c, c->pc);
+    if (c->halt_bug) c->halt_bug = 0;
+    else c->pc++;
+    switch (op) {
 #include "gb_cpu_switch.inc"
     }
 }
