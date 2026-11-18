@@ -180,7 +180,8 @@ recompiled and interpreted runs matched in `--diff` (06).
   CHR shift, PRG swap mode, the VRC4 IRQ (scanline and cycle mode) in
   closed form. 89%.
 - [x] M7e: MMC5 (5) and Namco 163 (19): MMC5's four PRG modes with PRG RAM
-  in any window, CHR sets A/B, ExRAM, fill mode, scanline IRQ, multiplier;
+  in any window, CHR sets A/B, ExRAM, fill mode, scanline IRQ, multiplier,
+  vertical split (added later);
   Namco 163's 1 KB CHR, nametables from RAM or CHR ROM, cycle IRQ. 91%.
 - [x] M7f: MMC2 (9), MMC4 (10), Jaleco SS88006 (18), Sunsoft FME-7 (69),
   Namco 175/340 (210): CHR latches switched by the PPU's own pattern reads,
@@ -200,7 +201,7 @@ recompiled and interpreted runs matched in `--diff` (06).
   41, 113, 228, 232. CHR RAM beside CHR ROM (77, 119). 99.7%; 118 dumps
   boot; 39 games identical.
 - [ ] Left: 96 (Oeka Kids tablet), 105 and 555 (NWC timers), 547 (VRC5),
-  MMC5 split screen, the Datach barcode reader, and the long tail of
+  the Datach barcode reader, and the long tail of
   unlicensed boards.
 - **Exit:** met.
 

@@ -429,9 +429,8 @@ int64_t cart_cycles_to_irq(const Cart *c, uint64_t cycle) {
 /* ---- MMC5 (5) ----
  * PRG: $5100 mode 0-3 = one 32 KB, two 16 KB, 16+8+8 KB or four 8 KB banks
  * from $5114-$5117 (8 KB units; bit 7 clear on $5114-$5116 = PRG RAM there);
- * $5113 banks the PRG RAM at $6000. The vertical split ($5200-$5202) and
- * PRG RAM write protection ($5102/$5103) are not emulated (sound:
- * runtime/apu.c). */
+ * $5113 banks the PRG RAM at $6000. PRG RAM write protection ($5102/$5103)
+ * is not emulated (sound: runtime/apu.c). */
 
 /* PRG RAM bank -> offset: bit 2 selects the chip, bits 0-1 the 8 KB bank in
  * it. 16 KB boards are two 8 KB chips (banks 0 and 4 differ, 0 and 1 do not);
@@ -497,8 +496,11 @@ static int mmc5_write(Cart *c, uint16_t a, uint8_t v) {
     case 0x5203: c->mmc5_irq_compare = v; break;
     case 0x5204: c->mmc5_irq_enable = v >> 7; c->irq_line = c->mmc5_irq_pending && c->mmc5_irq_enable; break;
     case 0x5205: case 0x5206: c->mmc5_mul[a - 0x5205] = v; break;
+    case 0x5200: c->mmc5_split = v; return 1;
+    case 0x5201: c->mmc5_split_scroll = v; return 1;
+    case 0x5202: c->mmc5_split_bank = v; return 1;
     default:
-        if (a < 0x5120 || a > 0x512B) return 0;  /* RAM protect, split: ignored (sound: runtime/apu.c) */
+        if (a < 0x5120 || a > 0x512B) return 0;  /* RAM protect: ignored (sound: runtime/apu.c) */
         c->mmc5_chr[a - 0x5120] = (uint16_t)(v | c->mmc5_chr_upper << 8);
         c->mmc5_last_b = a >= 0x5128;
         break;
@@ -554,6 +556,26 @@ uint8_t cart_mmc5_bg_read(Cart *c, uint16_t a, uint16_t v) {
 
 int cart_mmc5_attr(const Cart *c, uint16_t v, int at_bits) {
     return c->mmc5_exram_mode == 1 ? c->exram[v & 0x3FF] >> 6 : at_bits;
+}
+
+/* Vertical split ($5200-$5202; timing as Mesen2): screen tile columns 0-32
+ * left of $5200 & 31 (bit 6: right of and at it) take ExRAM as their
+ * nametable, Y scroll $5201 + the scanline (mod 240) and CHR bank $5202 (4 KB),
+ * ignoring the PPU's scroll. Column: dots 321/329 fetch 0 and 1 of the next
+ * line, dots 1-256 columns 2-33. The MMC5 sees a new line late: the
+ * nametable fetch at dot 1 and the tile at dot 321 still use the line before,
+ * and on line 0 the tile at dot 1 is not in frame yet. */
+int cart_mmc5_split(const Cart *c, int dot, int phase, uint16_t a, uint8_t *out) {
+    if (!(c->mmc5_split & 0x80) || c->mmc5_exram_mode > 1 || !c->mmc5_in_frame) return 0;
+    if (c->mmc5_counter == 0 && dot < 9) return 0;
+    int col = dot <= 256 ? ((dot - 1) >> 3) + 2 : (dot - 321) >> 3, edge = c->mmc5_split & 31;
+    if (col > 32 || ((c->mmc5_split & 0x40) ? col < edge : col >= edge)) return 0;
+    int line = c->mmc5_counter + (dot >= 329) - (dot <= 8 && phase == 0);
+    unsigned y = (unsigned)(line + c->mmc5_split_scroll) % 240, tile = (y & 0xF8) << 2 | (unsigned)col;
+    if (phase == 0) *out = c->exram[tile];
+    else if (phase == 2) *out = (c->exram[0x3C0 | (tile & 0x380) >> 4 | (tile & 0x1F) >> 2] >> ((tile >> 4 & 4) | (tile & 2))) & 3;
+    else *out = c->chr[((uint32_t)c->mmc5_split_bank * 0x1000 + (((a & ~7u) | (y & 7)) & 0xFFF)) % c->chr_size];
+    return 1;
 }
 
 /* ---- Namco 163 (19): 1 KB CHR banks at $8000-$B800, nametables at

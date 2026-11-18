@@ -73,6 +73,7 @@ typedef struct Cart {
     uint8_t mmc5_chr_upper, mmc5_last_b, mmc5_sprite16;  /* sprite16: from $2000 writes */
     uint8_t mmc5_irq_compare, mmc5_irq_enable, mmc5_irq_pending, mmc5_in_frame, mmc5_counter;
     uint8_t mmc5_mul[2];
+    uint8_t mmc5_split, mmc5_split_scroll, mmc5_split_bank;  /* $5200-$5202 */
     uint8_t exram[0x400];
     uint32_t chr_off_bg[8];          /* background CHR pages (set B with 8x16 sprites) */
     /* Namco 163 */
@@ -209,6 +210,9 @@ void cart_nt_write(Cart *c, uint8_t *ciram, uint16_t a, uint8_t v);
 void cart_chr_latch(Cart *c, uint16_t a);
 uint8_t cart_mmc5_bg_read(Cart *c, uint16_t a, uint16_t v);
 int cart_mmc5_attr(const Cart *c, uint16_t v, int at_bits);
+/* Vertical split: 1 and *out = the byte for this background fetch (phase 0
+ * nametable, 2 attribute bits, 4/6 pattern at a) if dot's tile is in the split. */
+int cart_mmc5_split(const Cart *c, int dot, int phase, uint16_t a, uint8_t *out);
 void cart_mmc5_scanline(Cart *c, int line, int rendering);
 void cart_mmc5_ppuctrl(Cart *c, uint8_t ctrl);
 /* PPU $2000-$3EFF -> index into the PPU's 4 KB nametable RAM */

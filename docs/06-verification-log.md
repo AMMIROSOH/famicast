@@ -3,6 +3,18 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · MMC5 vertical split ($5200-$5202)
+- **What**: tile columns on one side of $5200 & 31 take ExRAM as their
+  nametable, their own Y scroll ($5201 + scanline, mod 240) and CHR bank
+  ($5202), as Mesen2's `MMC5.h` does it, including its late line change
+  (the nametable fetch at dot 1 and the tile at dot 321 use the line
+  before). `cart_mmc5_split`, called from the PPU's background fetches.
+- **Uchuu Keibitai SDF** (the only licensed game using it): the attract
+  ship descriptions now show the right-hand panel (F-ARMS, INTAKE-H,
+  MISSILE with specs) beside the grid, as in Mesen2 (screenshot compared
+  by eye, not pixel by pixel).
+- **Tests**: frame hashes unchanged; state version 17.
+
 ## 2026-11-18 · FDS: one RAM check per block, O(1) RAM lookup
 - **Profile** (recompiled Zelda no Densetsu): `ram_lookup` 12.7% (a binary
   search over ~10,000 entries on every dispatch; MSVC has no musttail, so
@@ -540,7 +552,8 @@ reproducible check is not "verified".
   reach a title, menu, map or play screen; IRQ status bars (Castlevania
   III, Rolling Thunder, Youkai Douchuuki) split where they should; Metal
   Slader Glory's ExRAM pictures and the Koei strategy maps are correct.
-  Uchuu Keibitai SDF runs without its split screen (not emulated).
+  Uchuu Keibitai SDF runs without its split screen (not emulated; added
+  2026-11-18, see above).
 - **Recompiled with `NES_AUTO_HINTS`, `--diff` 3,000 frames**: all identical.
 
   | Mapper | Game | Regions | Recompiled cycles |

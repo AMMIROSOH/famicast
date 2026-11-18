@@ -72,7 +72,7 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 2 | UxROM | Mega Man, Castlevania, Contra |
 | 3 | CNROM | Gradius, Paperboy, Solomon's Key |
 | 4 | MMC3 | Super Mario Bros. 3, Kirby's Adventure, Mega Man 3 |
-| 5 | MMC5 (with its sound; no split screen) | Castlevania III, Uncharted Waters, Metal Slader Glory |
+| 5 | MMC5 (with its sound and split screen) | Castlevania III, Uncharted Waters, Metal Slader Glory |
 | 7 | AxROM | Battletoads, Marble Madness, R.C. Pro-Am |
 | 9 | MMC2 | Mike Tyson's Punch-Out!!, Punch-Out!! |
 | 10 | MMC4 | Fire Emblem (Japan), Fire Emblem Gaiden, Famicom Wars |
@@ -143,8 +143,8 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 232 | Camerica Quattro | Quattro Adventure, Quattro Sports, Quattro Arcade |
 
 Not yet: the last licensed boards (Oeka Kids 96, the Nintendo World
-Championships carts 105 and 555, Konami VRC5 547), MMC5 split screen, the
-Datach barcode reader and the long tail of unlicensed and pirate boards.
+Championships carts 105 and 555, Konami VRC5 547), the Datach barcode
+reader and the long tail of unlicensed and pirate boards.
 Other mappers are refused at load ("mapper N not supported yet").
 
 ## Famicom Disk System
