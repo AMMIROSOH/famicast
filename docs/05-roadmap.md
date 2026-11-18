@@ -253,7 +253,7 @@ M11 (Famicom Disk System, interpreter):
 - [x] The BIOS recompiled: `-DFDS_BIOS=disksys.rom` builds `fds` /
   `fds_headless` with it embedded; nesrecomp takes the raw 8 KB BIOS
   (explored from $E000 only, never chaining into the $E445 disk check
-  the automatic swap hooks); hints in `games/fds.toml`. 10 games identical
+  the automatic swap hooks); hints in `games/fds.toml`. 11 games identical
   to the interpreter in `--diff` (06).
 - [ ] Recompiling FDS games (code is loaded from disk into RAM, in parts):
   per disk file, keyed by content hash.
