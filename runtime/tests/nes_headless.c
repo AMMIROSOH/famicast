@@ -35,6 +35,7 @@
  * --wav     write the audio output (48 kHz mono, 16-bit) to a WAV file.
  * --audio-hash  print an FNV-1a hash of the 16-bit audio (regression tests).
  * --region  ntsc, pal or dendy instead of what the header says.
+ * --all-sprites  draw every sprite on a line, not only 8 (the sprite_limit setting).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -278,6 +279,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--time")) timing = 1;
         else if (!strcmp(argv[i], "--wav") && i + 1 < argc) wav = argv[++i];
         else if (!strcmp(argv[i], "--audio-hash")) audio_hash = 1;
+        else if (!strcmp(argv[i], "--all-sprites")) ppu_all_sprites = 1;
         else if (!strcmp(argv[i], "--region") && i + 1 < argc) {
             const char *r = argv[++i];
             region = !strcmp(r, "ntsc") ? REGION_NTSC : !strcmp(r, "pal") ? REGION_PAL : !strcmp(r, "dendy") ? REGION_DENDY : -2;

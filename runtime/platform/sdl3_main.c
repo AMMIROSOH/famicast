@@ -255,6 +255,7 @@ int main(int argc, char **argv) {
     settings_load(&cfg, ini_path);
     const int forced = cfg.region >= 0 && cfg.region != nes.cart.region;
     if (forced) nes_set_region(&nes, cfg.region);
+    ppu_all_sprites = !cfg.sprite_limit;
     char misses_path[1024];
     SDL_snprintf(misses_path, sizeof misses_path, "%s%s.misses", SDL_GetBasePath(), NES_APP_NAME);
     if (nes.recomp && cfg.record_misses) nes.misses = SDL_calloc(nes_miss_slots(&nes), sizeof *nes.misses);
