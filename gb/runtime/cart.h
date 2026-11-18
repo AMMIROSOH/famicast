@@ -31,5 +31,6 @@ void gb_cart_free(GbCart *c);
 uint8_t gb_cart_read(const GbCart *c, uint16_t addr);    /* $0000-$7FFF, $A000-$BFFF */
 void gb_cart_write(GbCart *c, uint16_t addr, uint8_t v);
 void gb_cart_tick(GbCart *c);                            /* one M-cycle (the MBC3 clock) */
+void gb_cart_rtc_advance(GbCart *c, uint64_t seconds);  /* time that passed with the program closed */
 
 #endif

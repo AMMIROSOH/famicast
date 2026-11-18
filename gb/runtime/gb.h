@@ -2,9 +2,7 @@
  * joypad + OAM DMA + cartridge, and the CPU bus (Pan Docs "Memory Map",
  * "Timer and Divider Registers", "Interrupts", "OAM DMA Transfer").
  * Everything is stepped once per M-cycle, before the CPU's access in that
- * cycle (gb.c tick).
- * shortcut: the PPU is only its timing (LY, the STAT mode, LYC, the
- * vblank and STAT interrupts) until G3 draws the picture (docs/05). */
+ * cycle (gb.c tick); the PPU is in ppu.c. */
 #ifndef GB_GB_H
 #define GB_GB_H
 
@@ -36,9 +34,14 @@ typedef struct Gb {
     int serial_n;
     /* joypad: P1 select bits, buttons held (core/input_log.h PAD_* bits) */
     uint8_t p1, pad;
-    /* LCD timing */
+    /* PPU (ppu.c) */
     uint8_t lcdc, stat, scy, scx, ly, lyc, wy, wx, stat_line;
-    int line_cycle;            /* M-cycles into the line (114 per line) */
+    uint8_t mode;              /* STAT mode while the LCD is on */
+    uint8_t wy_hit, win_line;  /* LY reached WY this frame; the window's own line counter */
+    int dot, mode3_end;        /* dot in the line (0-455), where this line's mode 3 ends */
+    uint8_t fb[160 * 144];     /* the frame being drawn: shades 0 (light) - 3 (dark) */
+    uint8_t frame[160 * 144];  /* the last whole frame (copied at vblank; blank while the LCD is off) */
+    uint32_t frame_count;      /* frames completed into `frame` */
     /* OAM DMA: a byte per M-cycle for 160, starting a cycle after the write
      * to $FF46; meanwhile the CPU sees only HRAM */
     uint8_t dma_reg, dma_start, dma_on;
@@ -53,5 +56,16 @@ void gb_free(Gb *g);
 void gb_step(Gb *g);           /* one instruction, interrupt entry or halted cycle */
 void gb_run_frame(Gb *g);      /* GB_FRAME_CYCLES M-cycles */
 void gb_set_pad(Gb *g, uint8_t pad);  /* PAD_* bits; a new press raises the joypad interrupt */
+
+/* save states: the whole machine, for this ROM (by hash) and this build's layout */
+int gb_state_save(const Gb *g, const char *path);
+int gb_state_load(Gb *g, const char *path, char *err, size_t errlen);
+
+/* ppu.c */
+void ppu_tick(Gb *g);
+int ppu_mode(const Gb *g);
+void ppu_stat_update(Gb *g);
+void ppu_stat_write(Gb *g, uint8_t v);
+void ppu_lcdc_write(Gb *g, uint8_t v);
 
 #endif

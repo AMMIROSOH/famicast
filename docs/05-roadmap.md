@@ -23,7 +23,7 @@ only when that test passes in CI.
 | [Stretch](#stretch) | JIT, analysis build, native backend | open |
 | [G1](#g1--sm83-cpu) | Game Boy: SM83 CPU from templates, interpreter | done |
 | [G2](#g2--memory-timer-cartridges) | Game Boy: memory map, timer, interrupts, MBC1/2/3/5 | done (1 timer test open) |
-| [G3](#g3--ppu-and-frontend) | Game Boy: PPU, the window program (core/frontend) | open |
+| [G3](#g3--ppu-and-frontend) | Game Boy: PPU, the window program (core/frontend) | done (8 PPU timing tests open) |
 | [G4](#g4--apu) | Game Boy: sound | open |
 | [G5](#g5--recompiler) | Game Boy: recompiler, lockstep diff | open |
 | [G6](#g6--game-boy-color) | Game Boy Color | open |
@@ -48,10 +48,11 @@ retrocast/
     frontend.c             the NES for core/frontend (system.h)
     tests/                 cpu_tests.c nes_headless.c
     games/<name>.toml      per-game hints (entry points, banked entries; fds.toml: the BIOS)
-  gb/                      the Game Boy (CPU, memory map, timer, cartridges; no PPU yet)
+  gb/                      the Game Boy (no sound yet, not recompiled yet)
     CMakeLists.txt         gbrecomp, gbcpu, gb_cpu_tests
     recomp/                gbrecomp: sm83.c (C per opcode), main.c
-    runtime/               cpu.h cpu_ops.h cpu.c, gb.c (bus, timer, interrupts, DMA), cart.c (MBCs)
+    runtime/               cpu.h cpu_ops.h cpu.c, gb.c (bus, timer, interrupts, DMA, states), ppu.c, cart.c (MBCs)
+    frontend.c             the Game Boy for core/frontend (system.h)
     tests/                 cpu_tests.c (SingleStepTests sm83), gb_headless.c (test ROMs)
   tests/                   Python unittest suite, fetch_test_roms.py
   tools/                   bench.py, smoke_games.py, import_r2_6502.py, make_release.py
@@ -366,9 +367,18 @@ to `core/` when the Game Boy is its second user (`docs/02` "Frontend").
   belong to G3.
 
 ### G3 · PPU and frontend
-- [ ] Background, window, sprites, the mode timing and STAT interrupts; the
-  Game Boy behind `core/frontend/system.h` (160 x 144, 59.73 Hz).
-- [ ] **Exit:** dmg-acid2; games from the set boot to play.
+- [x] `gb/runtime/ppu.c`: background, window (its own line counter),
+  objects (10 per line, DMG priority, flips, 8x16), palettes; mode 3 as
+  long as SCX, the window and objects make it; VRAM/OAM closed to the CPU
+  while the PPU uses them; the DMG STAT-write interrupt. A line is drawn
+  when mode 3 starts (mid-line register writes show on the next line).
+- [x] `gb` (`gb/frontend.c` behind `core/frontend/system.h`): 160 x 144 at
+  59.73 Hz, battery saves (`ROM.sav`; MBC3's clock moves on while the
+  program is closed), save states (F2/F4), palette setting (green, gray).
+- [x] **Exit:** dmg-acid2 pixel for pixel (`tests/test_gb_ppu.py`, with a
+  save-state round trip); every 40th licensed title of a ~1,900-ROM set
+  (41 games) reaches a title, menu or play screen. Open: 8 mooneye PPU
+  timing tests (mode 3 lengths, LCD-on timing, STAT details).
 
 ### G4 · APU
 - [ ] Two pulses, wave, noise; frame sequencer.

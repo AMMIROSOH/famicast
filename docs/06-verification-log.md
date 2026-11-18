@@ -3,6 +3,24 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-19 · Game Boy G3: PPU and the window program
+- **dmg-acid2**: 0 of 23,040 pixels differ from the reference screenshot
+  (`tests/test_gb_ppu.py`, a 2-bit PNG decoded in the test).
+- **Games**: every 40th licensed title (no Proto/Beta/Demo/Unl/Pirate) of a
+  1,919-archive set, 30 s with scripted input: 41 of 41 load and show a
+  title, menu or play screen on a contact sheet (ROM only, MBC1, MBC2,
+  MBC3); the one near-white frame (Tokyo Disneyland) was a fade, frames
+  at 5-45 s show the welcome screen and the park map.
+- **Save states**: 600 frames straight equal 300, save, load, 300 more
+  (and differ from 300 alone). Battery: Pocket Monsters Pikachu (MBC3 +
+  RAM) writes a 32 KB `ROM.sav`. Not checked: the clock part of `.sav`
+  (no MBC3-clock game in the sample).
+- **mooneye**: `ppu/hblank_ly_scx_timing-GS` now passes (mode 3 grows with
+  SCX); the 102 earlier ROMs still pass; 8 PPU timing tests open.
+- **Window program**: `gb` with a game runs 200 frames and exits cleanly,
+  without one prints its usage and exits 2; a fresh `gb.ini` has the
+  frontend's keys and `palette`.
+
 ## 2026-11-19 · Game Boy G2: memory map, timer, interrupts, cartridges
 - **Test ROMs**: the c-sp/game-boy-test-roms v7.0 zip (SHA-256 pinned);
   `gb_headless` reads the result from the serial port (blargg text,

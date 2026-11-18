@@ -1,5 +1,7 @@
 #include "gb.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cpu_ops.h"    /* rd */
@@ -12,21 +14,6 @@ static int timer_bit(uint16_t div, uint8_t tac) {
 }
 static void timer_inc(Gb *g) {
     if (++g->tima == 0) g->tima_reload = 1;  /* TIMA reads 0 for a cycle, then TMA */
-}
-
-/* ---- LCD timing ---- */
-static int lcd_mode(const Gb *g) {
-    if (!(g->lcdc & 0x80)) return 0;
-    if (g->ly >= 144) return 1;
-    return g->line_cycle < 20 ? 2 : g->line_cycle < 63 ? 3 : 0;  /* 80 dots OAM scan, 172 drawing */
-}
-/* The STAT interrupt line is the OR of its enabled sources; it fires on a rising edge. */
-static void stat_update(Gb *g) {
-    int mode = lcd_mode(g), on = g->lcdc & 0x80;
-    uint8_t line = on && (((g->stat & 0x40) && g->ly == g->lyc) || ((g->stat & 0x20) && mode == 2) ||
-                          ((g->stat & 0x10) && mode == 1) || ((g->stat & 0x08) && mode == 0));
-    if (line && !g->stat_line) g->ifl |= INT_STAT;
-    g->stat_line = line;
 }
 
 /* A byte as the DMA unit reads it: no side effects; $E000-$FFFF reach WRAM. */
@@ -52,14 +39,7 @@ static void tick(Gb *g) {
         else g->oam[g->dma_pos] = dma_peek(g, (uint16_t)(g->dma_src + g->dma_pos)), g->dma_pos++;
     }
 
-    if (g->lcdc & 0x80) {
-        if (++g->line_cycle == 114) {
-            g->line_cycle = 0;
-            if (++g->ly == 154) g->ly = 0;
-            if (g->ly == 144) g->ifl |= INT_VBLANK;
-        }
-        stat_update(g);
-    }
+    ppu_tick(g);
     gb_cart_tick(&g->cart);
 }
 
@@ -86,7 +66,7 @@ static uint8_t io_read(Gb *g, uint16_t a) {
     case 0xFF07: return g->tac | 0xF8;
     case 0xFF0F: return g->ifl | 0xE0;
     case 0xFF40: return g->lcdc;
-    case 0xFF41: return (uint8_t)(0x80 | g->stat | ((g->lcdc & 0x80) && g->ly == g->lyc ? 4 : 0) | lcd_mode(g));
+    case 0xFF41: return (uint8_t)(0x80 | g->stat | ((g->lcdc & 0x80) && g->ly == g->lyc ? 4 : 0) | ppu_mode(g));
     case 0xFF42: return g->scy;
     case 0xFF43: return g->scx;
     case 0xFF44: return g->ly;
@@ -133,16 +113,12 @@ static void io_write(Gb *g, uint16_t a, uint8_t v) {
         return;
     }
     case 0xFF0F: g->ifl = v & 0x1F; return;
-    case 0xFF40:
-        if ((g->lcdc & 0x80) && !(v & 0x80)) g->ly = 0, g->line_cycle = 0;  /* LCD off */
-        g->lcdc = v;
-        stat_update(g);
-        return;
-    case 0xFF41: g->stat = v & 0x78; stat_update(g); return;
+    case 0xFF40: ppu_lcdc_write(g, v); return;
+    case 0xFF41: ppu_stat_write(g, v); return;
     case 0xFF42: g->scy = v; return;
     case 0xFF43: g->scx = v; return;
     case 0xFF44: return;  /* LY is read-only */
-    case 0xFF45: g->lyc = v; stat_update(g); return;
+    case 0xFF45: g->lyc = v; ppu_stat_update(g); return;
     case 0xFF46: g->dma_reg = v, g->dma_next = (uint16_t)(v << 8), g->dma_start = 2; return;  /* mooneye oam_dma_start: the next cycle still free */
     case 0xFF4A: g->wy = v; return;
     case 0xFF4B: g->wx = v; return;
@@ -184,16 +160,23 @@ static int video_bus(uint16_t a) { return a >= 0x8000 && a < 0xA000; }
 static int dma_conflict(const Gb *g, uint16_t a) {
     return g->dma_on && a < 0xFF00 && (a >= 0xFE00 || video_bus(a) == video_bus(g->dma_src));
 }
+/* The PPU owns VRAM in mode 3 and OAM in modes 2 and 3: the CPU reads $FF
+ * and its writes are lost (Pan Docs "Accessing VRAM and OAM"). */
+static int ppu_owns(const Gb *g, uint16_t a) {
+    int mode = ppu_mode(g);
+    return (video_bus(a) && mode == 3) || (a >= 0xFE00 && a < 0xFEA0 && mode >= 2);
+}
 uint8_t gb_read(GbCpu *c, uint16_t a) {
     Gb *g = c->bus;
     tick(g);
     if (dma_conflict(g, a)) return a >= 0xFE00 ? 0xFF : dma_peek(g, (uint16_t)(g->dma_src + g->dma_pos));
+    if (ppu_owns(g, a)) return 0xFF;
     return bus_read(g, a);
 }
 void gb_write(GbCpu *c, uint16_t a, uint8_t v) {
     Gb *g = c->bus;
     tick(g);
-    if (!dma_conflict(g, a)) bus_write(g, a, v);
+    if (!dma_conflict(g, a) && !ppu_owns(g, a)) bus_write(g, a, v);
 }
 void gb_idle(GbCpu *c) { tick(c->bus); }
 
@@ -257,6 +240,7 @@ int gb_load(Gb *g, const uint8_t *rom, size_t size, char *err, size_t errlen) {
     g->tac = 0x00;
     g->ifl = INT_VBLANK;
     g->lcdc = 0x91;
+    g->mode = 2;
     g->dma_reg = 0xFF;
     static const uint8_t SOUND[0x17] = {0x80, 0xBF, 0xF3, 0xFF, 0xBF, 0x00, 0x3F, 0x00, 0xFF, 0xBF, 0x7F, 0xFF,
                                         0x9F, 0xFF, 0xBF, 0x00, 0xFF, 0x00, 0x00, 0xBF, 0x77, 0xF3, 0xF1};
@@ -266,3 +250,46 @@ int gb_load(Gb *g, const uint8_t *rom, size_t size, char *err, size_t errlen) {
 }
 
 void gb_free(Gb *g) { gb_cart_free(&g->cart); }
+
+/* ---- save states: a header, then the Gb struct as it is in memory (the
+ * same build reads it back; a field-wise format when states must outlive
+ * program updates) ---- */
+enum { GB_STATE_VERSION = 1 };
+typedef struct { char magic[4]; uint32_t version, size, rom_hash; } GbStateHeader;
+
+static uint32_t rom_hash(const Gb *g) {  /* FNV-1a */
+    uint32_t h = 2166136261u;
+    for (uint32_t i = 0; i < g->cart.rom_size; i++) h = (h ^ g->cart.rom[i]) * 16777619u;
+    return h;
+}
+
+int gb_state_save(const Gb *g, const char *path) {
+    GbStateHeader h = {{'G', 'B', 'S', 'S'}, GB_STATE_VERSION, (uint32_t)sizeof *g, rom_hash(g)};
+    FILE *f = fopen(path, "wb");
+    if (!f) return -1;
+    int ok = fwrite(&h, sizeof h, 1, f) == 1 && fwrite(g, sizeof *g, 1, f) == 1;
+    return fclose(f) == 0 && ok ? 0 : -1;
+}
+
+int gb_state_load(Gb *g, const char *path, char *err, size_t errlen) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return snprintf(err, errlen, "cannot open"), -1;
+    GbStateHeader h;
+    Gb *s = malloc(sizeof *s);
+    int ok = s && fread(&h, sizeof h, 1, f) == 1 && !memcmp(h.magic, "GBSS", 4);
+    if (!ok) snprintf(err, errlen, "not a save state");
+    else if (h.version != GB_STATE_VERSION || h.size != sizeof *g)
+        ok = 0, snprintf(err, errlen, "saved by a different version of the program");
+    else if (h.rom_hash != rom_hash(g))
+        ok = 0, snprintf(err, errlen, "saved with a different game");
+    else if (fread(s, sizeof *s, 1, f) != 1)
+        ok = 0, snprintf(err, errlen, "file is truncated");
+    fclose(f);
+    if (ok) {  /* everything but what belongs to this process: the ROM copy and the CPU's link to its bus */
+        s->cart.rom = g->cart.rom;
+        *g = *s;
+        g->cpu.bus = g;
+    }
+    free(s);
+    return ok ? 0 : -1;
+}
