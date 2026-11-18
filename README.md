@@ -46,12 +46,14 @@ plans in [docs/05-roadmap.md](docs/05-roadmap.md).
   most of the time, so recompiling gains little over the interpreter here.
 - **Frontend**: save states, input recordings, fullscreen and scaling
   options, an optional TV frame.
-- **Game Boy**: in progress (no Game Boy Color yet). `build/gb game.gb`
-  plays games in the interpreter, with sound; `.gb` files in `ROMS` are
+- **Game Boy and Game Boy Color**: `build/gb game.gb` (or `.gbc`) plays
+  games in the interpreter, with sound; Color games run in CGB mode, the
+  others as on the original Game Boy. `.gb` and `.gbc` files in `ROMS` are
   recompiled like NES games. The CPU passes SingleStepTests sm83, the
-  system 117 blargg and mooneye test ROMs (dmg_sound among them), the PPU
-  dmg-acid2. 21 sampled games ran recompiled in lockstep with the
-  interpreter, most with 94.8-99.8% of their CPU cycles recompiled
+  system 129 blargg and mooneye test ROMs (dmg_sound and cgb_sound among
+  them), the PPU dmg-acid2 and cgb-acid2. 21 Game Boy and 18 Game Boy
+  Color sampled games ran recompiled in lockstep with the interpreter,
+  34 of the 39 with 94.8-99.97% of their CPU cycles recompiled
   ([roadmap](docs/05-roadmap.md#game-boy)).
 
 ## Mappers

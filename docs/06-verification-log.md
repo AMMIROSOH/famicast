@@ -3,6 +3,32 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-19 · Game Boy G6: Game Boy Color
+- **cgb-acid2**: 0 of 23,040 pixels differ from the reference
+  (`tests/test_gb_ppu.py`, the paletted PNG decoded there; 5-bit
+  components as `(c << 3) | (c >> 2)`, the test's own formula). dmg-acid2
+  still exact.
+- **blargg cgb_sound**: the 12 singles (now in `tests/test_gb_roms.py`: 129
+  ROMs must pass) and the combined ROM pass; the 117 earlier ones still
+  pass (cpu_instrs now runs in CGB mode: its header allows it).
+- **Games**: every 40th licensed title of the GBC set (36 games), 30 s of
+  scripted play, on a colour contact sheet: all 36 reach a title, menu or
+  play screen. Found on the way, each fixed and the game checked again:
+  the speed switch must skip the byte after STOP (a game has $E3 there and
+  locked up); CGB writes to STAT raise no interrupt (a STAT handler re-entered
+  itself until the stack ran into HRAM); a DMA from WRAM leaves the
+  cartridge bus free on the CGB (a STAT handler in ROM read the DMA's
+  bytes as its JP target). Black, white and faded tiles were transitions
+  (frames at 5-55 s show logos, credits and play).
+- **Lockstep**: every 80th licensed GBC title (18), traced and recompiled,
+  1,800 frames against the interpreter: 18 of 18 identical; coverage 83-99.97%,
+  Gex 40%; in the three lowest no ROM code was interpreted (code in RAM).
+  Three DMG games again in lockstep for 3,600 frames, with the coverage
+  they had before (the DMG paths unchanged).
+- **Speed**: a double-speed game, 3,600 frames in 2.6 s (Release, MSVC).
+- **Not checked**: the CGB boot DIV value (mooneye's CGB boot tests are DMG
+  games on a CGB, a mode not emulated), HDMA timing against a test ROM.
+
 ## 2026-11-19 · Game Boy G5: recompiler
 - **Lockstep**: every 80th licensed title of the GB set (21 games), each
   traced (6,000 frames of scripted play) and recompiled, then run 1,800

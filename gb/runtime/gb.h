@@ -1,6 +1,8 @@
-/* The Game Boy (DMG): CPU + memory map + timer + interrupts + serial +
- * joypad + OAM DMA + cartridge, and the CPU bus (Pan Docs "Memory Map",
- * "Timer and Divider Registers", "Interrupts", "OAM DMA Transfer").
+/* The Game Boy (DMG) and Game Boy Color (CGB mode): CPU + memory map +
+ * timer + interrupts + serial + joypad + OAM DMA + cartridge, the Color's
+ * banks, palettes, HDMA and double speed, and the CPU bus (Pan Docs
+ * "Memory Map", "Timer and Divider Registers", "Interrupts", "OAM DMA
+ * Transfer", "CGB Registers").
  * Everything is stepped once per M-cycle, before the CPU's access in that
  * cycle (gb.c tick); the PPU is in ppu.c. */
 #ifndef GB_GB_H
@@ -16,11 +18,12 @@
 
 enum { GB_FRAME_CYCLES = 17556 };  /* M-cycles per frame: 154 lines x 114 */
 enum { INT_VBLANK = 1, INT_STAT = 2, INT_TIMER = 4, INT_SERIAL = 8, INT_JOYPAD = 16 };
+enum { GB_MODEL_AUTO = -1, GB_MODEL_DMG, GB_MODEL_CGB };  /* AUTO: CGB when the header asks for it ($0143 bit 7) */
 
 typedef struct Gb {
     GbCpu cpu;
     GbCart cart;
-    uint8_t vram[0x2000], wram[0x2000], oam[0xA0], hram[0x7F];
+    uint8_t vram[0x4000], wram[0x8000], oam[0xA0], hram[0x7F];  /* VRAM: 2 banks, WRAM: 8 (DMG: 1 and 2) */
     uint8_t io[0x80];          /* registers as written: sound ($10-$3F, apu.c), palettes */
     GbApu apu;
     uint8_t ie, ifl;
@@ -42,8 +45,8 @@ typedef struct Gb {
     uint8_t mode;              /* STAT mode while the LCD is on */
     uint8_t wy_hit, win_line;  /* LY reached WY this frame; the window's own line counter */
     int dot, mode3_end;        /* dot in the line (0-455), where this line's mode 3 ends */
-    uint8_t fb[160 * 144];     /* the frame being drawn: shades 0 (light) - 3 (dark) */
-    uint8_t frame[160 * 144];  /* the last whole frame (copied at vblank; blank while the LCD is off) */
+    uint16_t fb[160 * 144];    /* the frame being drawn: DMG shades 0 (light) - 3 (dark); CGB: RGB555 */
+    uint16_t frame[160 * 144]; /* the last whole frame (copied at vblank; blank while the LCD is off) */
     uint32_t frame_count;      /* frames completed into `frame` */
     /* OAM DMA: a byte per M-cycle for 160, starting a cycle after the write
      * to $FF46; meanwhile the CPU sees only HRAM */
@@ -51,6 +54,14 @@ typedef struct Gb {
     int dma_pos;
     uint16_t dma_src, dma_next;
     uint64_t frame_end;        /* cpu.cycles where the current frame ends */
+    /* Game Boy Color (cgb: the game runs in CGB mode; DMG games run as on a DMG) */
+    uint8_t cgb, vbk, svbk, opri;       /* VRAM bank, WRAM bank at $D000 (0 = 1), object priority (0: OAM order) */
+    uint8_t key1, double_speed, half;   /* speed switch armed; double speed; which half of the slow clock this is */
+    uint8_t bcps, ocps, bg_pal[64], obj_pal[64];  /* palette RAM: 8 palettes x 4 colours, RGB555 little endian */
+    /* HDMA: source, destination (VRAM offset), blocks left - 1 ($7F: none);
+     * hdma_on: an HBlank transfer runs; hdma_due: hblank began, a block is due */
+    uint16_t hdma_src, hdma_dst;
+    uint8_t hdma_left, hdma_on, hdma_due;
     uint8_t recomp_on;         /* recompiled code (recomp_rt.h) made from this ROM is linked in */
     uint64_t cycles_native, cycles_interp;  /* where the CPU's cycles went (--coverage) */
     /* ROM code the interpreter ran, by gb_miss_slot (gb_headless --misses
@@ -58,8 +69,12 @@ typedef struct Gb {
     uint8_t *misses;
 } Gb;
 
-/* Load a ROM (copied) and set the state the boot ROM leaves (DMG). */
+/* Load a ROM (copied) and set the state the boot ROM leaves; model:
+ * GB_MODEL_* (gb_load: AUTO). */
 int gb_load(Gb *g, const uint8_t *rom, size_t size, char *err, size_t errlen);
+int gb_load_model(Gb *g, const uint8_t *rom, size_t size, int model, char *err, size_t errlen);
+/* CPU M-cycles in a frame: twice as many in double speed */
+static inline uint64_t gb_frame_cycles(const Gb *g) { return (uint64_t)GB_FRAME_CYCLES << g->double_speed; }
 void gb_free(Gb *g);
 void gb_step(Gb *g);           /* one instruction, interrupt entry or halted cycle */
 void gb_run_frame(Gb *g);      /* GB_FRAME_CYCLES M-cycles */

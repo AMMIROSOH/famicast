@@ -1,7 +1,8 @@
 """Game Boy PPU and save states: dmg-acid2 (background, window, objects, priorities, flips,
-8x16, the 10-per-line limit) must match its reference screenshot pixel for
-pixel. ROM and screenshot from the c-sp/game-boy-test-roms zip
-(tests/fetch_test_roms.py fetch_gb_test_roms)."""
+8x16, the 10-per-line limit) and cgb-acid2 (the same in CGB mode: map
+attributes, palettes, VRAM bank 1, OAM-order priority) must match their
+reference screenshots pixel for pixel. ROMs and screenshots from the
+c-sp/game-boy-test-roms zip (tests/fetch_test_roms.py fetch_gb_test_roms)."""
 import os
 import struct
 import subprocess
@@ -14,7 +15,8 @@ from tests.test_gb_roms import RUNNER
 
 
 def png_gray(path):
-    """Rows of pixel values of a non-interlaced greyscale PNG (any bit depth up to 8)."""
+    """Rows of pixel values of a non-interlaced greyscale or paletted PNG
+    (any bit depth up to 8): grey levels, or palette indices."""
     with open(path, "rb") as f:
         d = f.read()
     i, idat = 8, b""
@@ -22,7 +24,7 @@ def png_gray(path):
         n, t = struct.unpack(">I4s", d[i:i + 8])
         if t == b"IHDR":
             w, h, depth, ctype = struct.unpack(">IIBB", d[i + 8:i + 18])
-            assert ctype == 0 and depth <= 8, "greyscale only"
+            assert ctype in (0, 3) and depth <= 8, "greyscale or paletted only"
         elif t == b"IDAT":
             idat += d[i + 8:i + 8 + n]
         i += 12 + n
@@ -44,6 +46,16 @@ def png_gray(path):
     return rows
 
 
+def png_rgb(path):
+    """Rows of (r, g, b) of a paletted PNG."""
+    with open(path, "rb") as f:
+        d = f.read()
+    i = d.index(b"PLTE") - 4
+    n = struct.unpack(">I", d[i:i + 4])[0]
+    pal = [tuple(d[i + 8 + k:i + 11 + k]) for k in range(0, n, 3)]
+    return [[pal[v] for v in row] for row in png_gray(path)]
+
+
 @unittest.skipUnless(os.path.exists(RUNNER), "build gb_headless first")
 class TestDmgAcid2(unittest.TestCase):
     def test_matches_reference(self):
@@ -57,6 +69,22 @@ class TestDmgAcid2(unittest.TestCase):
                 pix = f.read().split(b"\n", 3)[3]
         ours = [[pix[y * 160 + x] // 85 for x in range(160)] for y in range(144)]
         bad = [(x, y) for y in range(144) for x in range(160) if ours[y][x] != ref[y][x]]
+        self.assertEqual(len(bad), 0, f"{len(bad)} pixels differ, first at {bad[:5]}")
+
+
+@unittest.skipUnless(os.path.exists(RUNNER), "build gb_headless first")
+class TestCgbAcid2(unittest.TestCase):
+    def test_matches_reference(self):
+        base = os.path.join(fetch_gb_test_roms(), "cgb-acid2")
+        ref = png_rgb(os.path.join(base, "cgb-acid2.png"))
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "frame.ppm")
+            subprocess.run([RUNNER, os.path.join(base, "cgb-acid2.gbc"), "--frames", "120", "--ppm", out],
+                           capture_output=True, check=False)
+            with open(out, "rb") as f:
+                pix = f.read().split(b"\n", 3)[3]
+        bad = [(x, y) for y in range(144) for x in range(160)
+               if tuple(pix[(y * 160 + x) * 3:(y * 160 + x) * 3 + 3]) != ref[y][x]]
         self.assertEqual(len(bad), 0, f"{len(bad)} pixels differ, first at {bad[:5]}")
 
 
