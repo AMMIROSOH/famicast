@@ -9,31 +9,14 @@
  * cycle against SingleStepTests). The opcode fetch is done by the caller.
  * Helpers (rd, wr, push, pull, op_*) live in runtime/cpu_ops.h.
  *
- * Every use of the PC is a marker, never C text, so a consumer that knows
- * the instruction's address can make it a constant (emit.c expand):
- *   @F  operand fetch        rd(c, c->pc++)
- *   @R  read at the PC       rd(c, c->pc)
- *   @P  the PC's value       c->pc
- *   @I  step the PC          c->pc++
- *   @J  jump                 c->pc =   (from the next line on the PC is a run-time value)
- *   @B  taken branch         c->pc =   (the target, known from the offset) */
+ * Every use of the PC is a marker, never C text (core/recomp/template.h),
+ * so the emitter can make it a constant. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "recomp.h"
 
-static void add(Lines *o, const char *fmt, ...) {
-    if (o->n == MAX_LINES) { fprintf(stderr, "c6502: too many lines\n"); exit(1); }
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(o->s[o->n], LINE_LEN, fmt, ap);
-    va_end(ap);
-    if (strstr(o->s[o->n++], "c->pc")) {  /* emit.c could not make it a constant */
-        fprintf(stderr, "c6502: c->pc in a template, use a marker: %s\n", o->s[o->n - 1]);
-        exit(1);
-    }
-}
 
 static int is(const char *mn, const char *list) {
     size_t n = strlen(mn);
@@ -112,31 +95,31 @@ static void ea(Lines *o, const char *mode, int read) {
     const char *fix = read ? "if ((ea ^ base) & 0xFF00) rd(c, (base & 0xFF00) | (ea & 0xFF));"
                            : "rd(c, (base & 0xFF00) | (ea & 0xFF));";
     if (!strcmp(mode, "ZP")) {
-        add(o, "uint16_t ea = @F;");
+        lines_add(o, "uint16_t ea = @F;");
     } else if (!strcmp(mode, "ZPX") || !strcmp(mode, "ZPY")) {
-        add(o, "uint8_t zp = @F;");
-        add(o, "rd(c, zp);");
-        add(o, "uint16_t ea = (uint8_t)(zp + c->%c);", mode[2] == 'X' ? 'x' : 'y');
+        lines_add(o, "uint8_t zp = @F;");
+        lines_add(o, "rd(c, zp);");
+        lines_add(o, "uint16_t ea = (uint8_t)(zp + c->%c);", mode[2] == 'X' ? 'x' : 'y');
     } else if (!strcmp(mode, "ABS")) {
-        add(o, "uint16_t ea = @F;");
-        add(o, "ea |= @F << 8;");
+        lines_add(o, "uint16_t ea = @F;");
+        lines_add(o, "ea |= @F << 8;");
     } else if (!strcmp(mode, "ABX") || !strcmp(mode, "ABY")) {
-        add(o, "uint16_t base = @F;");
-        add(o, "base |= @F << 8;");
-        add(o, "uint16_t ea = base + c->%c;", mode[2] == 'X' ? 'x' : 'y');
-        add(o, "%s", fix);
+        lines_add(o, "uint16_t base = @F;");
+        lines_add(o, "base |= @F << 8;");
+        lines_add(o, "uint16_t ea = base + c->%c;", mode[2] == 'X' ? 'x' : 'y');
+        lines_add(o, "%s", fix);
     } else if (!strcmp(mode, "IZX")) {
-        add(o, "uint8_t zp = @F;");
-        add(o, "rd(c, zp);");
-        add(o, "zp += c->x;");
-        add(o, "uint16_t ea = rd(c, zp);");
-        add(o, "ea |= rd(c, (uint8_t)(zp + 1)) << 8;");
+        lines_add(o, "uint8_t zp = @F;");
+        lines_add(o, "rd(c, zp);");
+        lines_add(o, "zp += c->x;");
+        lines_add(o, "uint16_t ea = rd(c, zp);");
+        lines_add(o, "ea |= rd(c, (uint8_t)(zp + 1)) << 8;");
     } else if (!strcmp(mode, "IZY")) {
-        add(o, "uint8_t zp = @F;");
-        add(o, "uint16_t base = rd(c, zp);");
-        add(o, "base |= rd(c, (uint8_t)(zp + 1)) << 8;");
-        add(o, "uint16_t ea = base + c->y;");
-        add(o, "%s", fix);
+        lines_add(o, "uint8_t zp = @F;");
+        lines_add(o, "uint16_t base = rd(c, zp);");
+        lines_add(o, "base |= rd(c, (uint8_t)(zp + 1)) << 8;");
+        lines_add(o, "uint16_t ea = base + c->y;");
+        lines_add(o, "%s", fix);
     } else {
         fprintf(stderr, "c6502: no addressing for %s\n", mode);
         exit(1);
@@ -148,7 +131,7 @@ void body(const Op *op, Lines *o) {
     const char *const *row;
     o->n = 0;
     if ((row = FIND(SPECIAL, mn))) {
-        for (int i = 1; i < 12 && row[i]; i++) add(o, "%s", row[i]);
+        for (int i = 1; i < 12 && row[i]; i++) lines_add(o, "%s", row[i]);
         return;
     }
     if ((row = FIND(BRANCH_COND, mn))) {
@@ -156,52 +139,52 @@ void body(const Op *op, Lines *o) {
          * page fix-up cycle; a taken branch with no page cross ignores
          * interrupts that arrive during its last cycle (nesdev "CPU
          * interrupts", blargg cpu_interrupts_v2 5-branch_delays_irq). */
-        add(o, "uint8_t poll1 = c->poll;");
-        add(o, "int8_t off = (int8_t)@F;");
-        add(o, "if (%s) {", row[1]);
-        add(o, "    @R;");
-        add(o, "    uint16_t t = @P + off;");
-        add(o, "    if ((t ^ @P) & 0xFF00) rd(c, (@P & 0xFF00) | (t & 0xFF));");
-        add(o, "    else c->poll_prev = poll1;");
-        add(o, "    @B t;");
-        add(o, "}");
+        lines_add(o, "uint8_t poll1 = c->poll;");
+        lines_add(o, "int8_t off = (int8_t)@F;");
+        lines_add(o, "if (%s) {", row[1]);
+        lines_add(o, "    @R;");
+        lines_add(o, "    uint16_t t = @P + off;");
+        lines_add(o, "    if ((t ^ @P) & 0xFF00) rd(c, (@P & 0xFF00) | (t & 0xFF));");
+        lines_add(o, "    else c->poll_prev = poll1;");
+        lines_add(o, "    @B t;");
+        lines_add(o, "}");
         return;
     }
     if (!strcmp(mn, "JMP")) {
         if (!strcmp(mode, "ABS")) {
-            add(o, "uint16_t lo = @F;");
-            add(o, "@J lo | @R << 8;");
+            lines_add(o, "uint16_t lo = @F;");
+            lines_add(o, "@J lo | @R << 8;");
         } else {
-            add(o, "uint16_t ptr = @F;");
-            add(o, "ptr |= @F << 8;");
-            add(o, "uint16_t lo = rd(c, ptr);");
-            add(o, "@J lo | rd(c, (ptr & 0xFF00) | ((ptr + 1) & 0xFF)) << 8;");  /* page-wrap bug */
+            lines_add(o, "uint16_t ptr = @F;");
+            lines_add(o, "ptr |= @F << 8;");
+            lines_add(o, "uint16_t lo = rd(c, ptr);");
+            lines_add(o, "@J lo | rd(c, (ptr & 0xFF00) | ((ptr + 1) & 0xFF)) << 8;");  /* page-wrap bug */
         }
         return;
     }
     if (!strcmp(mode, "IMP")) {
-        add(o, "@R;");
-        add(o, "%s", FIND(IMPLIED, mn)[1]);
+        lines_add(o, "@R;");
+        lines_add(o, "%s", FIND(IMPLIED, mn)[1]);
         return;
     }
     if (!strcmp(mode, "ACC")) {
-        add(o, "@R;");
-        add(o, "c->a = op_%s(c, c->a);", mn);
+        lines_add(o, "@R;");
+        lines_add(o, "c->a = op_%s(c, c->a);", mn);
         return;
     }
     if (is(mn, READ)) {
         const char *fn = !strcmp(mn, "LAX") && !strcmp(mode, "IMM") ? "LXA" : mn;
         if (!strcmp(mode, "IMM")) {
-            add(o, "op_%s(c, @F);", fn);
+            lines_add(o, "op_%s(c, @F);", fn);
             return;
         }
         ea(o, mode, 1);
-        add(o, "op_%s(c, rd(c, ea));", fn);
+        lines_add(o, "op_%s(c, rd(c, ea));", fn);
         return;
     }
     if ((row = FIND(STORE, mn))) {
         ea(o, mode, 0);
-        add(o, "wr(c, ea, %s);", row[1]);
+        lines_add(o, "wr(c, ea, %s);", row[1]);
         return;
     }
     if ((row = FIND(UNSTABLE, mn))) {
@@ -209,18 +192,18 @@ void body(const Op *op, Lines *o) {
          * cross that value also replaces the address high byte (nesdev "CPU
          * unofficial opcodes"; verified by SingleStepTests). */
         ea(o, mode, 0);
-        if (!strcmp(mn, "TAS")) add(o, "c->s = c->a & c->x;");
-        add(o, "uint8_t v = %s & (uint8_t)((base >> 8) + 1);", row[1]);
-        add(o, "if ((ea ^ base) & 0xFF00) ea = (ea & 0xFF) | (v << 8);");
-        add(o, "wr(c, ea, v);");
+        if (!strcmp(mn, "TAS")) lines_add(o, "c->s = c->a & c->x;");
+        lines_add(o, "uint8_t v = %s & (uint8_t)((base >> 8) + 1);", row[1]);
+        lines_add(o, "if ((ea ^ base) & 0xFF00) ea = (ea & 0xFF) | (v << 8);");
+        lines_add(o, "wr(c, ea, v);");
         return;
     }
     if (is(mn, RMW)) {
         ea(o, mode, 0);
-        add(o, "uint8_t v = rd(c, ea);");
-        add(o, "wr(c, ea, v);");
-        add(o, "v = op_%s(c, v);", mn);
-        add(o, "wr(c, ea, v);");
+        lines_add(o, "uint8_t v = rd(c, ea);");
+        lines_add(o, "wr(c, ea, v);");
+        lines_add(o, "v = op_%s(c, v);", mn);
+        lines_add(o, "wr(c, ea, v);");
         return;
     }
     fprintf(stderr, "c6502: no C template for $%02X %s %s\n", op->code, mn, mode);

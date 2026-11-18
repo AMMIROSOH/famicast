@@ -78,6 +78,45 @@ def fetch_sst(opcode):
     return path
 
 
+# SingleStepTests sm83 (MIT): 1,000 single-instruction tests per Game Boy
+# opcode ("cb 46" for the CB table), with the bus state of every M-cycle.
+# Pinned to a commit.
+SM83_COMMIT = "f9c30210245dd691661db39f5ace022c465ecc2f"
+SM83_URL = "https://raw.githubusercontent.com/SingleStepTests/sm83/%s/v1/%s.json"
+
+
+def _pack_sm83(st):
+    regs = [st[k] for k in ("a", "f", "b", "c", "d", "e", "h", "l")] + [st.get("ime", 0), st.get("ei", 0)]
+    out = struct.pack("<HH10BH", st["pc"], st["sp"], *regs, len(st["ram"]))
+    return out + b"".join(struct.pack("<HB", a, v) for a, v in st["ram"])
+
+
+def fetch_sst_sm83(name):
+    """Return the path of the binary form of one sm83 file ("00".."ff",
+    "cb 00".."cb ff"; format: see gb/tests/cpu_tests.c), downloading it."""
+    path = os.path.join(ROMS, "sst_sm83", name.replace(" ", "_") + ".bin")
+    if os.path.exists(path):
+        return path
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    req = urllib.request.Request(SM83_URL % (SM83_COMMIT, name.replace(" ", "%20")),
+                                 headers={"User-Agent": "retrocast-tests"})
+    tests = json.loads(urllib.request.urlopen(req, timeout=120).read())
+    kinds = {"---": 0, "r-m": 1, "-wm": 2}
+    out = [struct.pack("<I", len(tests))]
+    for t in tests:
+        out.append(_pack_sm83(t["initial"]) + _pack_sm83(t["final"]))
+        out.append(struct.pack("<H", len(t["cycles"])))
+        out += [struct.pack("<HBB", a or 0, v or 0, kinds[k]) for a, v, k in t["cycles"]]
+    with open(path + ".tmp", "wb") as f:
+        f.write(b"".join(out))
+    os.replace(path + ".tmp", path)
+    return path
+
+
+SM83_UNUSED = {0xCB, 0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD}  # no file
+SM83_FILES = ["%02x" % i for i in range(256) if i not in SM83_UNUSED] + ["cb %02x" % i for i in range(256)]
+
+
 # blargg and other test ROMs from the christopherpow/nes-test-roms mirror,
 # pinned to a commit (raw files at a commit cannot change).
 NTR_COMMIT = "95d8f621ae55cee0d09b91519a8989ae0e64753b"
@@ -158,4 +197,9 @@ if __name__ == "__main__":
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(8) as ex:
             for p in ex.map(fetch_sst, range(256)):
+                print(p)
+    if "--sst-sm83" in sys.argv:  # Game Boy CPU: ~150 MB download, ~20 MB on disk
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(8) as ex:
+            for p in ex.map(fetch_sst_sm83, SM83_FILES):
                 print(p)

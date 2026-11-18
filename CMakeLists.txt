@@ -25,6 +25,9 @@ set(NES_DIR ${CMAKE_SOURCE_DIR}/nes)
 # Shared by every system: input recordings and the pad bits (core/).
 add_library(core STATIC core/input_log.c)
 target_include_directories(core PUBLIC core)
+# Instruction templates for the recompilers (build-time tools).
+add_library(recomp_template STATIC core/recomp/template.c)
+target_include_directories(recomp_template PUBLIC core/recomp)
 
 # Options were named NES_* before: a build folder configured then keeps its
 # values under the new names (unless given anew).
@@ -123,6 +126,7 @@ if(ROMS)
 endif()
 
 add_subdirectory(nes)
+add_subdirectory(gb)
 
 foreach(rom IN LISTS ROMS)
     get_filename_component(stem "${rom}" NAME_WLE)

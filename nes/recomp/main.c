@@ -98,11 +98,6 @@ static uint8_t *read_file(const char *path, size_t *size) {
     return buf;
 }
 
-static void write_file(const char *path, const Buf *b) {
-    FILE *f = fopen(path, "wb");
-    if (!f || fwrite(b->s, 1, b->len, f) != b->len || fclose(f)) { perror(path); exit(2); }
-}
-
 static int cmp_u32(const void *a, const void *b) {
     uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
     return (x > y) - (x < y);
@@ -426,7 +421,7 @@ int main(int argc, char **argv) {
     Buf o = {0};
     if (argc == 3 && !strcmp(argv[1], "--cpu-switch")) {
         emit_cpu_switch(&o);
-        write_file(argv[2], &o);
+        buf_write_file(argv[2], &o);
         return 0;
     }
     if (argc == 2 && !strcmp(argv[1], "--ops")) {
@@ -489,7 +484,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < nmisses; i++) add_misses(misses[i], &rom, &hints, &found, files, nfiles, &ram_found);
     if (save_hints) {
         render_hints(&o, &hints, &found, &ram_found, prg_hash);
-        write_file(save_hints, &o);
+        buf_write_file(save_hints, &o);
         o.len = 0;
     }
     if (!output) return 0;
@@ -519,7 +514,7 @@ int main(int argc, char **argv) {
     emit_program(&o, regions, n, name, prg_hash, (int)(cart.prg_size / 0x2000), prg_bank_reg(&rom),
                  embed ? image : NULL, embed && image ? image_size : 0, cart.mapper == 20 ? 0xE445 : 0,
                  cart.mapper == 20 ? cart.prg : NULL);
-    write_file(output, &o);
+    buf_write_file(output, &o);
     long ninstr = 0, nindirect = 0, nram = 0;
     for (int i = 0; i < n; i++)
         for (uint32_t a = 0; a < 0x10000; a++) {
