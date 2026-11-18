@@ -24,7 +24,7 @@ only when that test passes in CI.
 
 ## Layout
 ```
-famicast/
+retrocast/
   CMakeLists.txt           nes_recompile(), ROMS / FDS_BIOS / AUTO_HINTS ...
   cmake/                   SDL3 build options
   recomp/                  nesrecomp: ops.c (opcode table), c6502.c (C per opcode),

@@ -1,6 +1,6 @@
-# famicast
+# retrocast
 
-[![ci](https://github.com/Viper-Bit/famicast/actions/workflows/ci.yml/badge.svg)](https://github.com/Viper-Bit/famicast/actions/workflows/ci.yml)
+[![ci](https://github.com/Viper-Bit/retrocast/actions/workflows/ci.yml/badge.svg)](https://github.com/Viper-Bit/retrocast/actions/workflows/ci.yml)
 
 A hobby, open-source **static recompiler for NES and Famicom Disk System
 games**: it translates a game's 6502 code into C, compiles it into a native
@@ -162,7 +162,7 @@ program as `disksys.rom`, or set `fds_bios` in the .ini.
 - **Not yet**: two unlicensed disks (one stays black, one jams).
 
 ## Downloads
-[Releases](https://github.com/Viper-Bit/famicast/releases) have builds for
+[Releases](https://github.com/Viper-Bit/retrocast/releases) have builds for
 Windows (x64, arm64), Linux (x64, arm64; glibc 2.35+) and macOS (arm64):
 `nes` (plays a game in the interpreter), `nes_headless`, `nesrecomp`, and a
 **kit** that recompiles your games into native programs with only CMake and
