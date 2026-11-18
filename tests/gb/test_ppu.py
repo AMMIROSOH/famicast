@@ -11,7 +11,8 @@ import unittest
 import zlib
 
 from tests.fetch_test_roms import fetch_gb_test_roms
-from tests.test_gb_roms import RUNNER
+from tests.gb.test_roms import RUNNER
+from tests.games import built
 
 
 def png_gray(path):
@@ -56,7 +57,7 @@ def png_rgb(path):
     return [[pal[v] for v in row] for row in png_gray(path)]
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build gb_headless first")
+@built(RUNNER, "build gb_headless first")
 class TestDmgAcid2(unittest.TestCase):
     def test_matches_reference(self):
         base = os.path.join(fetch_gb_test_roms(), "dmg-acid2")
@@ -72,7 +73,7 @@ class TestDmgAcid2(unittest.TestCase):
         self.assertEqual(len(bad), 0, f"{len(bad)} pixels differ, first at {bad[:5]}")
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build gb_headless first")
+@built(RUNNER, "build gb_headless first")
 class TestCgbAcid2(unittest.TestCase):
     def test_matches_reference(self):
         base = os.path.join(fetch_gb_test_roms(), "cgb-acid2")
@@ -88,7 +89,7 @@ class TestCgbAcid2(unittest.TestCase):
         self.assertEqual(len(bad), 0, f"{len(bad)} pixels differ, first at {bad[:5]}")
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build gb_headless first")
+@built(RUNNER, "build gb_headless first")
 class TestGbStates(unittest.TestCase):
     def test_save_load_continues_identically(self):
         """Running 600 frames straight, or saving at 300, loading and running

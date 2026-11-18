@@ -2,7 +2,8 @@ import json
 import os
 import unittest
 
-from tests.nesrecomp import BUILT, ops
+from tests.nes.nesrecomp import BUILT, ops
+from tests.games import built
 
 DATA = os.path.join(os.path.dirname(__file__), "data", "r2_6502.json")
 
@@ -20,7 +21,7 @@ R2_KNOWN_WRONG = {
 }
 
 
-@unittest.skipUnless(BUILT, "build nesrecomp first (cmake --build build)")
+@built(BUILT, "build nesrecomp first (cmake --build build)")
 class TestOps(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

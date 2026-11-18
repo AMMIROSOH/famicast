@@ -133,9 +133,9 @@ endfunction()
 # against nestest.log through the CPU test runner.
 set(NESTEST_ROM ${CMAKE_SOURCE_DIR}/tests/roms/nestest.nes)
 if(EXISTS ${NESTEST_ROM})
-    # hand-made hints only: tests/test_recomp.py compares its blocks with nestest.log
+    # hand-made hints only: tests/nes/test_recomp.py compares its blocks with nestest.log
     set(AUTO_HINTS OFF)
-    nes_recompile(nestest ${NESTEST_ROM} ${CMAKE_SOURCE_DIR}/tests/data/nestest.toml)
+    nes_recompile(nestest ${NESTEST_ROM} ${CMAKE_SOURCE_DIR}/tests/nes/data/nestest.toml)
     unset(AUTO_HINTS)  # the cache value again, for the games
     add_executable(nestest_recomp_tests tests/cpu_tests.c)
     target_link_libraries(nestest_recomp_tests PRIVATE nestest_code)

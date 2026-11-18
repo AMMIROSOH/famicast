@@ -8,8 +8,9 @@ import subprocess
 import tempfile
 import unittest
 
-from tests import test_mappers  # not its TestMappers by name: unittest would run that class here too
-from tests.test_mappers import RUNNER, lda_sta
+from tests.nes import test_mappers  # not its TestMappers by name: unittest would run that class here too
+from tests.nes.test_mappers import RUNNER, lda_sta
+from tests.games import built
 
 CPU_HZ = 1789773
 WAIT_ONE = bytes([0x2C, 0x02, 0x20, 0x10, 0xFB])  # BIT $2002 / BPL: the next vblank
@@ -51,7 +52,7 @@ def tone_a(volume, period=254):  # channel A's tone only (mixer $FE: noise off, 
     return reg(0, period & 0xFF) + reg(1, period >> 8) + reg(7, 0xFE) + reg(8, volume)
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class Test5bAudio(unittest.TestCase):
     def test_tone(self):
         """Clock / (32 * period): period 254 is 220 Hz. The first swing is

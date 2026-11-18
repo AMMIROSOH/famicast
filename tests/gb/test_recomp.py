@@ -8,7 +8,8 @@ import tempfile
 import unittest
 
 from tests.fetch_test_roms import fetch_gb_test_roms
-from tests.test_gb_roms import BUILD
+from tests.gb.test_roms import BUILD
+from tests.games import built
 
 EXE = ".exe" if os.name == "nt" else ""
 GBRECOMP = os.path.join(BUILD, "gbrecomp" + EXE)
@@ -34,7 +35,7 @@ def blocks(c_source):
     return {parts[i]: parts[i + 1].split("\n}\n", 1)[0] for i in range(1, len(parts), 2)}
 
 
-@unittest.skipUnless(os.path.exists(GBRECOMP), "build gbrecomp first")
+@built(GBRECOMP, "build gbrecomp first")
 class TestBlocks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -69,7 +70,7 @@ class TestBlocks(unittest.TestCase):
         self.assertNotIn("[1][0]", self.c)
 
 
-@unittest.skipUnless(os.path.exists(CPU_INSTRS), "fetch the test ROMs, configure CMake, then build")
+@built(CPU_INSTRS, "fetch the test ROMs, configure CMake, then build")
 class TestCpuInstrsRecompiled(unittest.TestCase):
     ROM = os.path.join(fetch_gb_test_roms(), "blargg", "cpu_instrs", "cpu_instrs.gb") if os.path.exists(CPU_INSTRS) else ""
 

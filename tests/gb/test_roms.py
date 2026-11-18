@@ -12,7 +12,8 @@ import unittest
 
 from tests.fetch_test_roms import fetch_gb_test_roms
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from tests.games import ROOT  # noqa: E402
+from tests.games import built
 BUILD = os.environ.get("NES_BUILD", os.path.join(ROOT, "build"))
 RUNNER = os.path.join(BUILD, "gb_headless" + (".exe" if os.name == "nt" else ""))
 
@@ -59,7 +60,7 @@ def roms(base):
     return sorted(out)
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build gb_headless first")
+@built(RUNNER, "build gb_headless first")
 class TestGbRoms(unittest.TestCase):
     def test_roms(self):
         base = fetch_gb_test_roms()

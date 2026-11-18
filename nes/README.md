@@ -189,8 +189,8 @@ fds_auto_disk = 1   # 1 = swap disk sides when a game asks
 ## Tests
 nestest is downloaded on first run (hash-checked). Recompiled games of the
 build get lockstep, save-state and frame-hash tests
-(`tests/data/frame_hashes.json`); after an intended output change:
-`NES_UPDATE_HASHES=1 python -m unittest tests.test_regression`.
+(`tests/nes/data/frame_hashes.json`); after an intended output change:
+`NES_UPDATE_HASHES=1 python -m unittest tests.nes.test_regression`.
 
 ## Docs
 | File | Content |

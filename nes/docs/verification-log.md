@@ -112,7 +112,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   "FDS audio" (read: the 2.4x level, polarity, 2 kHz low-pass, $408A =
   $E8); Mesen2's FDS code (GPL-3) for the drive timing, gap detection,
   the automatic swap and the sound's rounding ([sources](../../docs/sources.md)).
-- **Unit checks without the BIOS** (`tests/test_fds.py`): a stand-in BIOS
+- **Unit checks without the BIOS** (`tests/nes/test_fds.py`): a stand-in BIOS
   reads the first 8 bytes off a minimal disk after spin-up and the lead-in
   gap ($80 start mark, then the disk info block); an FDS square at F =
   $400 plays at CPU * F / 65536 / 64 (436.9 Hz); its fundamental is 2.4 /
@@ -134,13 +134,13 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
 - **Survey** (the local No-Intro set, 4,031 ROMs): 701 were refused before,
   583 now. Licensed (no Unl/Pirate tag): 2,785 of 2,793 load (99.7%); the
   rest are 96, 105, 547 and 555 (not done).
-- **Unit ROMs** (`tests/test_mappers.py`, `TestMoreBoards`): a PRG switch
+- **Unit ROMs** (`tests/nes/test_mappers.py`, `TestMoreBoards`): a PRG switch
   per board (33 cases, from code copied into every bank so any switch keeps
   it running), CHR ROM + RAM (77, 119; ROM writes ignored) and CPROM's
   16 KB, the Sunsoft-4 CHR ROM nametable and Namco 3425's CIRAM lines, and
   the CPU-cycle IRQs of 65, 67, 73 and RAMBO-1 at 1,000 cycles (125 loop
   turns, +-2). Mutation caught: mapper 232's submapper bit swap removed.
-  `tests/test_ines.py` now names mapper 100 as the unsupported example
+  `tests/nes/test_ines.py` now names mapper 100 as the unsupported example
   (65 is supported).
 - **Boot smoke** (`nes_headless`, 1,500 frames with Start presses): all 118
   dumps on these mappers load, none jams, all reach a title, menu or play
@@ -162,13 +162,13 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   tables; the Dendy uses NTSC's), read this session; table in 04. The
   NES 2.0 region field is set in every dump of the local collection
   (No-Intro): 429 PAL, 263 Dendy.
-- **Unit ROMs** (`tests/test_region.py`): CPU cycles per frame with
+- **Unit ROMs** (`tests/nes/test_region.py`): CPU cycles per frame with
   rendering on (NTSC 29780.5, multi-region as NTSC, PAL 33247.5, Dendy
   35464) and the first vblank (Dendy at line 291); pulse pitch at each
   region's clock; DMC rate 0 and periodic noise at the PAL periods (Dendy:
   NTSC's); a length-254 note lasting 254 half frames of each frame counter
   (PAL 2.54 s); `--region` overriding the header both ways.
-  `tests/test_emphasis.py`: PAL and Dendy bit 5 green, 6 red. Mutations
+  `tests/nes/test_emphasis.py`: PAL and Dendy bit 5 green, 6 red. Mutations
   caught (17 of 17): region ignored, multi-region not mapped to NTSC, PAL
   CPU 15 clocks, PAL dot 4 clocks, clock remainder dropped, fast path at
   NTSC's step, Dendy vblank at 241, PAL 262 lines, PAL odd-frame skip,
@@ -207,8 +207,8 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   (which matches the wiki's feedback table), KSL from the OPL table,
   tremolo 4.8 dB at 3.7 Hz, vibrato about 13 cents at 6.4 Hz. The level
   (a channel ~11 dB over an APU square) is a forum estimate.
-- **Unit ROMs** (`tests/test_mappers.py`): PRG, CHR, mirroring and the
-  VRC IRQ on VRC7a (A4) and VRC7b (A3). (`tests/test_vrc7_audio.py`) with
+- **Unit ROMs** (`tests/nes/test_mappers.py`): PRG, CHR, mirroring and the
+  VRC IRQ on VRC7a (A4) and VRC7b (A3). (`tests/nes/test_vrc7_audio.py`) with
   the custom instrument as a pure sine: pitch 49716 * fnum * 2^block /
   2^19 within 1% and the multiplier; volume 3 dB a step; the half-wave
   sine's level; a full modulator multiplying the zero crossings; feedback
@@ -241,11 +241,11 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   ($0E, $0F; the games do not write them).
 
 ## 2026-11-17 · M9d: Konami VRC6 (24, 26) and its sound
-- **Unit ROMs** (`tests/test_mappers.py`): on 24 and 26, a 16 KB bank at
+- **Unit ROMs** (`tests/nes/test_mappers.py`): on 24 and 26, a 16 KB bank at
   $8000 (8 KB banks 6 and 7), $C000, the last bank at $E000, CHR R1 and
   R6, $B003 mirroring against the header's; the VRC IRQ in cycle mode
   (116 a frame with latch 0), control and acknowledge swapped on 26.
-  (`tests/test_vrc6_audio.py`): pulse pitch Clock / (16 * (t + 1)) at
+  (`tests/nes/test_vrc6_audio.py`): pulse pitch Clock / (16 * (t + 1)) at
   t = 31 (within 1%: the + 1 is 3% there) and 253, on 24 and 26; the AC
   level rising with duty (D = 0 about half of D = 7: 0.56 after the NES
   filters, 0.48 ideally; an exact-ratio check first failed on that); the
@@ -269,7 +269,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   inverted here) and the level against hardware recordings.
 
 ## 2026-11-17 · M9c: Sunsoft 5B sound
-- **Unit ROMs** (`tests/test_5b_audio.py`): tone pitch Clock / (32 *
+- **Unit ROMs** (`tests/nes/test_5b_audio.py`): tone pitch Clock / (32 *
   period) within 2%; the first swing negative; volume 13 half the
   amplitude of 15 (two 3 dB steps); tone and noise both disabled is a
   constant (filtered away); noise alone sounds; a select with the high
@@ -295,7 +295,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   on the APU (not modelled).
 
 ## 2026-11-17 · M9b: MMC5 sound
-- **Unit ROMs** (`tests/test_mmc5_audio.py`): pulse pitch as the APU's
+- **Unit ROMs** (`tests/nes/test_mmc5_audio.py`): pulse pitch as the APU's
   (440 Hz within 2%); $5015 = 0 silences; the first swing of a note is
   negative where the APU's is positive (inverted); length 10 runs out
   after 9-10 clocks of 7,424 cycles, counted by a polling loop (a first
@@ -318,7 +318,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   against hardware recordings.
 
 ## 2026-11-17 · M9a: Namco 163 wavetable sound
-- **Unit ROMs** (`tests/test_n163_audio.py`): one channel set up through
+- **Unit ROMs** (`tests/nes/test_n163_audio.py`): one channel set up through
   the RAM port, read back from `--wav`. Pitch matches the wiki's formula
   within 2% (440 Hz with one channel, 220 Hz with two); `$E000` bit 6
   silences it; an asymmetric 8-sample wave steps up twice a period, as
@@ -339,7 +339,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   level is the middle of each submapper's dB range from the wiki.
 
 ## 2026-11-17 · M7k: Taito TC0190 (33), TC0690 (48), X1-005 (80, 207)
-- **Unit ROMs** (`tests/test_mappers.py`): 33 and 48 PRG banks at
+- **Unit ROMs** (`tests/nes/test_mappers.py`): 33 and 48 PRG banks at
   $8000/$A000 (second-to-last at $C000), a 2 KB CHR bank numbered in 2 KB
   units, a 1 KB bank, and mirroring from $8000 (33) or $E000 (48) against
   the header's; the 48 IRQ against MMC3's with the same code: the latch
@@ -408,7 +408,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   phase 0, 4 or 8 is high, except in columns $xE/$xF. Grey $10 comes out
   (167,144,139) with red, (136,161,130) green, (147,146,182) blue,
   (126,126,126) with all three (from (174,174,174)); $0F stays black.
-- **Unit ROM** (`tests/test_emphasis.py`): a white backdrop read from the
+- **Unit ROM** (`tests/nes/test_emphasis.py`): a white backdrop read from the
   PPM: each bit makes its colour the strongest channel, all three dim it
   evenly. Mutation caught: emphasis left out of the frame buffer.
 - **Games**: of the 25 commercial games on nesdev's "Colour-emphasis games"
@@ -420,7 +420,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   (the frame buffer is 16-bit now; its values are the same).
 
 ## 2026-11-17 · M7j: Irem G-101 (32)
-- **Unit ROM** (`tests/test_mappers.py`): PRG mode 1 puts the $8000
+- **Unit ROM** (`tests/nes/test_mappers.py`): PRG mode 1 puts the $8000
   register at $C000 and the second-to-last bank at $8000; a CHR bank at
   $1400; submapper 1 ignores $9000 and is one-screen page 1 (not the
   header's mirroring). Mutation caught: $9000 honoured on submapper 1.
@@ -436,7 +436,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   | Ai Sensei no Oshiete: Watashi no Hoshi (Japan) | 99.98% |
 
 ## 2026-11-17 · M7i: Konami VRC1 (75)
-- **Unit ROM** (`tests/test_mappers.py`): PRG at $A000; CHR banks 17 and 2
+- **Unit ROM** (`tests/nes/test_mappers.py`): PRG at $A000; CHR banks 17 and 2
   from the low bits at $E000/$F000 and $9000 bit 1 (the $0000 bank's bit 4
   only). Mutation caught: the two high bits swapped (the first version set
   both, which could not tell them apart).
@@ -454,7 +454,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   | Ninja JaJaMaru: The Ninja Skill Book (Switch) | 99.98% |
 
 ## 2026-11-17 · M7h: TxSROM (118)
-- **Unit ROM** (`tests/test_mappers.py`): R0 = R1 = $80 makes all four
+- **Unit ROM** (`tests/nes/test_mappers.py`): R0 = R1 = $80 makes all four
   nametables CIRAM page 1 ($2C00 shows a $2000 write; the mirroring
   register is ignored); with CHR A12 inversion R2-R5 = 0, 1, 0, 1 is
   vertical. Neither fits the header's mirroring. Mutation caught: R0/R1
@@ -471,7 +471,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   | Armadillo (Japan) | 99.94% |
 
 ## 2026-11-16 · M7g: Bandai FCG (16, 153, 157, 159)
-- **Unit ROMs** (`tests/test_mappers.py`): PRG register and IRQ on time
+- **Unit ROMs** (`tests/nes/test_mappers.py`): PRG register and IRQ on time
   (counter 1000: 125 turns of a RAM loop) for the FCG-1/2 (registers at
   $6000, counter loaded directly) and the LZ93D50 ($8000, latch copied by
   the enable write); a byte written to a 24C02 (device $A0, address,
@@ -499,14 +499,14 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   | 159 | Magical Taruruuto-kun 2 (Japan) | 99.95% |
 
 ## 2026-11-16 · M7f: MMC2 (9), MMC4 (10), SS88006 (18), FME-7 (69), Namco 175/340 (210)
-- **Unit ROMs** (`tests/test_mappers.py`): MMC2/MMC4 PRG and CHR latches
+- **Unit ROMs** (`tests/nes/test_mappers.py`): MMC2/MMC4 PRG and CHR latches
   (reading $0FD8 selects the $FD bank; $0FE9 switches the MMC4 only, as
   MMC2's left table triggers on $0FE8 exactly); SS88006 PRG from two
   nibbles and its IRQ in 12-bit mode on time (125 turns of a RAM loop;
   16 bits would be ~7,800); FME-7 PRG, ROM and then RAM at $6000, IRQ on
   time (125 turns); Namco 340 PRG and vertical mirroring from $E000.
   Mutations caught: MMC2 left latch on any row, 12-bit mode counting 16 bits.
-- **Missed NMIs** (fixed separately, `tests/test_bus.py`): Plasma Ball,
+- **Missed NMIs** (fixed separately, `tests/nes/test_bus.py`): Plasma Ball,
   Top Striker and Chibi Maruko-chan hung on a black screen after one NMI.
   They enable NMI inside vblank and wait in a RAM loop, so one lazy batch
   ran from that vblank to the next and the NMI line went low and high
@@ -528,7 +528,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   | 210 | Top Striker (Japan, Namco 340) | 3,000 | 99.98% |
 
 ## 2026-11-16 · M7e: MMC5 (5) and Namco 163 (19)
-- **Unit ROMs** (`tests/test_mappers.py`): MMC5 PRG mode 3, PRG RAM in a
+- **Unit ROMs** (`tests/nes/test_mappers.py`): MMC5 PRG mode 3, PRG RAM in a
   ROM window (written at $8005, read back through $6000 with the same
   bank), multiplier, fill-mode and ExRAM nametables, scanline IRQ at line
   100 arriving on time with no slow access (1,713 turns of a RAM loop,
@@ -570,7 +570,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   | 19 | King of Kings (Japan) | 6 | 99.98% |
 
 ## 2026-11-16 · M7d: Konami VRC2/VRC4 (21, 22, 23, 25)
-- **Unit ROMs** (`tests/test_mappers.py`): VRC4e PRG swap (with submapper
+- **Unit ROMs** (`tests/nes/test_mappers.py`): VRC4e PRG swap (with submapper
   and with an old header, both wirings decoded), VRC2a CHR shift, VRC4b IRQ
   count over one frame (scanline mode, 20 lines: 13; cycle mode, 256
   cycles: 116), and IRQ arrival with no slow bus access in between (a RAM
@@ -601,10 +601,10 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
 - **Header survey** of a full ~4,000-ROM set (first 16 bytes of each dump):
   all iNES; 18 NES 2.0 dumps on mappers 256-519 loaded as mapper 0-7
   because byte 8 was ignored (515 ran as CNROM). Fixed, test in
-  `tests/test_ines.py`. The table of unsupported mappers by licensed count
+  `tests/nes/test_ines.py`. The table of unsupported mappers by licensed count
   chose these five (206, 87, 185 among the most common; 79, 71 the most
   common unlicensed).
-- **Unit ROMs** (`tests/test_mappers.py`): each switches a bank and stores
+- **Unit ROMs** (`tests/nes/test_mappers.py`): each switches a bank and stores
   the marker it reads. Mutation check: dropping mapper 87's swapped CHR bits
   or decoding mapper 79 at $4000 (A8 clear) fails the tests.
 - **Boot smoke** (interpreter, 1,500 frames with Start presses): 15 of 15
@@ -680,7 +680,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
 
   Interrupt entries (7 cycles each) always run in the interpreter, which is
   the floor here.
-- **Save states** (`tests/test_states.py`): 250 frames + save, then load +
+- **Save states** (`tests/nes/test_states.py`): 250 frames + save, then load +
   150 frames gives the same frame and CPU cycle count as 400 frames in one
   go (vbl_nmi_timing/2, CHR RAM). The test's strength was checked by
   breaking the CHR RAM restore: a first version (instr_test-v5, CHR ROM; then
@@ -689,8 +689,8 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   the interpreter (`--interp`) resumes in the recompiled build in lockstep
   (`--diff`, 600 frames) and ends on the uninterrupted run's frame. A state
   of another game is refused.
-- **Frame hashes** (`tests/test_regression.py`): 8 games, 3,000 frames each,
-  frame + cycles + audio recorded in `tests/data/frame_hashes.json`; 18 s.
+- **Frame hashes** (`tests/nes/test_regression.py`): 8 games, 3,000 frames each,
+  frame + cycles + audio recorded in `tests/nes/data/frame_hashes.json`; 18 s.
 - **Frontend**: game programs built as GUI programs on Windows (PE
   subsystem checked: 2 for the games and `nes`, 3 for `_headless`). Ran with
   TV frame + integer scale + fullscreen, and with bad `.ini` lines (reported,
@@ -705,7 +705,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   interpreter switch (`nesrecomp --cpu-switch`) identical too. Kirby:
   0.15 s (C) vs 0.23 s (Python).
 - **Tests**: those that imported `recomp/` now drive `nesrecomp` and read the
-  generated C back (`tests/nesrecomp.py`); same assertions, 26/26 pass.
+  generated C back (`tests/nes/nesrecomp.py`); same assertions, 26/26 pass.
   A helper bug showed on the way: writing the IRQ vector with
   `data[-2:0] = ...` inserted bytes instead of replacing them.
 - **Scripted input** moved from `tests/play_script.py` to
@@ -792,7 +792,7 @@ Findings on the way:
 
 ## 2026-11-15 · M6: APU, audio, interrupt details
 First run of the APU: 9/40 of the new ROMs passed. Final: all fetched ROM
-tests pass except 7 listed as pending in `tests/test_roms.py`.
+tests pass except 7 listed as pending in `tests/nes/test_roms.py`.
 
 | Suite | Result |
 |---|---|
@@ -802,7 +802,7 @@ tests pass except 7 listed as pending in `tests/test_roms.py`.
 | cpu_interrupts_v2 1-5 | 4/5 (4-irq_and_dma pending) |
 | cpu_dummy_writes oam, ppumem | 2/2 |
 | sprdma_and_dmc_dma, _512 | pending |
-| pitch (tests/test_apu.py): pulse and triangle 440.4 Hz | within 2 Hz |
+| pitch (tests/nes/test_apu.py): pulse and triangle 440.4 Hz | within 2 Hz |
 
 What it took, in order:
 - **Result protocol**: blargg_apu_2005 keeps its result at $F0 (screen
@@ -873,7 +873,7 @@ is run at once.
 
 ## 2026-11-15 · M5: recompiler v1
 - **nestest, recompiled** (`nestest_recomp_tests`, hints in
-  `tests/data/nestest.toml`): 7,404 instructions in 2,653 blocks. The CPU
+  `tests/nes/data/nestest.toml`): 7,404 instructions in 2,653 blocks. The CPU
   state after each of the 3,752 block steps equals the nestest.log line with
   the same cycle count; the run reaches the end of the log. Code at $0300
   (RAM) runs in the interpreter, as planned. First build had only 478
@@ -908,7 +908,7 @@ is run at once.
   player 1, plays).
 
 ## 2026-11-15 · M3: PPU, bus, NROM
-Run: `python -m unittest tests.test_roms` (ROMs from the nes-test-roms mirror,
+Run: `python -m unittest tests.nes.test_roms` (ROMs from the nes-test-roms mirror,
 commit `95d8f621`). First run of the new PPU: 33/50 passed. After the fixes
 below: **52/52**, and the CPU suites are still green.
 
@@ -974,7 +974,7 @@ per-opcode C code is generated from `recomp/ops.py` by `recomp/c6502.py`
 
 ## 2026-11-15 · M1: opcode table, iNES parser, decoder
 Run: `python -m unittest discover -s tests -t .` → 10 tests OK.
-- **Opcode table vs radare2** (`tests/test_ops.py`): 254/256 identical in
+- **Opcode table vs radare2** (`tests/nes/test_ops.py`): 254/256 identical in
   mnemonic, mode and size. The two differences are radare2 errors, kept as a
   named list in the test so it fails if either side changes:
   - `$93` SHA/AHX: radare2 says `abs,X`, 3 bytes; it is `(zp),Y`, 2 bytes.
@@ -984,7 +984,7 @@ Run: `python -m unittest discover -s tests -t .` → 10 tests OK.
 - **iNES**: the prototype parser read the wrong header bytes (byte 5 as flags,
   mapper from the wrong bits) and only worked on Battle City by chance.
   Rewritten from the nesdev spec, tested with synthetic headers.
-- **Decoder vs nestest.log** (`tests/test_decoder.py`): 7,045 instructions
+- **Decoder vs nestest.log** (`tests/nes/test_decoder.py`): 7,045 instructions
   decoded. Transfers the decoder cannot predict, found by comparing the log
   with static successors: 600 RTS (all normal returns except one, PHA/PHA/RTS
   to $CE67), 2 RTI used as jumps ($CEAD→$CEAE, $CECD→$CECE), 2 JMP (ind)

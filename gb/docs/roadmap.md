@@ -37,7 +37,7 @@ Exit tests and results: [verification-log.md](verification-log.md).
 - [x] **Exit:** blargg `cpu_instrs` (all 11 and combined), `instr_timing`,
   `mem_timing`, `mem_timing-2`, `halt_bug`; mooneye acceptance (timer,
   interrupts, OAM DMA, instruction timing, DMG boot state) and MBC1/2/5:
-  102 ROMs pass (`tests/test_gb_roms.py`). Open: `timer/rapid_toggle`
+  102 ROMs pass (`tests/gb/test_roms.py`). Open: `timer/rapid_toggle`
   (the interrupt one loop late), the MBC1 multicart wiring, the serial
   clock's boot phase, and boot tests of other models; 9 PPU timing tests
   belong to G3.
@@ -51,7 +51,7 @@ Exit tests and results: [verification-log.md](verification-log.md).
 - [x] `gb` (`gb/frontend.c` behind `core/frontend/system.h`): 160 x 144 at
   59.73 Hz, battery saves (`ROM.sav`; MBC3's clock moves on while the
   program is closed), save states (F2/F4), palette setting (green, gray).
-- [x] **Exit:** dmg-acid2 pixel for pixel (`tests/test_gb_ppu.py`, with a
+- [x] **Exit:** dmg-acid2 pixel for pixel (`tests/gb/test_ppu.py`, with a
   save-state round trip); every 40th licensed title of a ~1,900-ROM set
   (41 games) reaches a title, menu or play screen. Open: 8 mooneye PPU
   timing tests (mode 3 lengths, LCD-on timing, STAT details).
@@ -63,7 +63,7 @@ Exit tests and results: [verification-log.md](verification-log.md).
   writable while powered off, wave RAM reachable only in the cycle a
   sample is read, the retrigger corruption). Mixed to 48 kHz mono
   through the console's output capacitor.
-- [x] **Exit:** blargg `dmg_sound`, the 12 singles (in `tests/test_gb_roms.py`)
+- [x] **Exit:** blargg `dmg_sound`, the 12 singles (in `tests/gb/test_roms.py`)
   and the combined ROM.
 
 ## G5 · Recompiler

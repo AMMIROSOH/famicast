@@ -1,4 +1,4 @@
-/* SM83 test runner on a flat 64 KB bus (driven by tests/test_gb_cpu.py).
+/* SM83 test runner on a flat 64 KB bus (driven by tests/gb/test_cpu.py).
  *
  *   gb_cpu_tests sst FILE...      run SingleStepTests sm83 files converted by
  *                                 tests/fetch_test_roms.py: registers, RAM

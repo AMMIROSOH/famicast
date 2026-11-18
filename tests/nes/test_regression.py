@@ -1,10 +1,10 @@
 """Frame-hash regression suite: each recompiled game built here (-DROMS,
 ROM embedded) plays the same scripted session; the last frame, CPU cycle
-count and audio must hash to the recorded values (tests/data/frame_hashes.json).
+count and audio must hash to the recorded values (tests/nes/data/frame_hashes.json).
 
 Hashes are kept per game name and PRG hash, so a different dump of a game is
 skipped, not failed. After an intended change in output (a PPU or APU fix):
-    NES_UPDATE_HASHES=1 python -m unittest tests.test_regression
+    NES_UPDATE_HASHES=1 python -m unittest tests.nes.test_regression
 and say in nes/docs/verification-log.md why the hashes changed.
 """
 import json
@@ -14,9 +14,9 @@ import subprocess
 import unittest
 
 from tests.games import ROOT
-from tests.nesrecomp import BUILD, EXE
+from tests.nes.nesrecomp import BUILD, EXE
 
-DATA = os.path.join(ROOT, "tests", "data", "frame_hashes.json")
+DATA = os.path.join(ROOT, "tests", "nes", "data", "frame_hashes.json")
 FRAMES = 3000
 
 

@@ -10,7 +10,7 @@ recompiles one (through `-DROMS`, see the [root README](../README.md#recompiling
 - **System**: 129 blargg and mooneye test ROMs pass (cpu_instrs,
   instr_timing, mem_timing, halt_bug, dmg_sound, cgb_sound, mooneye's
   timer, interrupt, DMA and MBC tests); 20 are listed open in
-  `tests/test_gb_roms.py`: 9 check another model's boot state, 8 PPU
+  `tests/gb/test_roms.py`: 9 check another model's boot state, 8 PPU
   timing, 3 more (below).
 - **Picture**: dmg-acid2 and cgb-acid2 match their reference screenshots
   pixel for pixel.

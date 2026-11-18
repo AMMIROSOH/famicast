@@ -9,8 +9,9 @@ import unittest
 import struct
 import wave
 
-from tests.test_apu import make_rom, sta
-from tests.test_roms import RUNNER
+from tests.nes.test_apu import make_rom, sta
+from tests.nes.test_roms import RUNNER
+from tests.games import built
 
 NTSC, PAL, DENDY = 0, 1, 3
 CPU_HZ = {NTSC: 1789773, PAL: 1662607, DENDY: 1773448}
@@ -52,7 +53,7 @@ def cycles(code, region, frames, *args):
     return int(out.split("cycles=")[1].split()[0])
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestRegion(unittest.TestCase):
     def test_frame_timing(self):
         """CPU cycles per frame with rendering on: NTSC 29780.5 (the odd frame

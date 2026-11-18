@@ -17,7 +17,7 @@ add_custom_command(
 add_library(gbcpu STATIC runtime/cpu.c ${GEN_DIR}/gb_cpu_switch.inc)
 target_include_directories(gbcpu PUBLIC runtime PRIVATE ${GEN_DIR})
 
-# SingleStepTests sm83 on a flat bus (tests/test_gb_cpu.py)
+# SingleStepTests sm83 on a flat bus (tests/gb/test_cpu.py)
 add_executable(gb_cpu_tests tests/cpu_tests.c)
 target_link_libraries(gb_cpu_tests PRIVATE gbcpu)
 
@@ -28,7 +28,7 @@ target_link_libraries(gbcore PUBLIC gbcpu core)
 add_library(gb_recomp_none STATIC runtime/recomp_none.c)
 target_include_directories(gb_recomp_none PUBLIC runtime)
 
-# Test ROMs report on the serial port (tests/test_gb_roms.py)
+# Test ROMs report on the serial port (tests/gb/test_roms.py)
 add_executable(gb_headless tests/gb_headless.c)
 target_link_libraries(gb_headless PRIVATE gbcore gb_recomp_none)
 
@@ -78,7 +78,7 @@ function(gb_recompile name rom)
 endfunction()
 
 # blargg's cpu_instrs (public, tests/fetch_test_roms.py), recompiled with a
-# trace: tests/test_gb_recomp.py runs it and diffs it against the interpreter.
+# trace: tests/gb/test_recomp.py runs it and diffs it against the interpreter.
 set(GB_TEST_ROM ${CMAKE_SOURCE_DIR}/tests/roms/gb/blargg/cpu_instrs/cpu_instrs.gb)
 if(EXISTS ${GB_TEST_ROM})
     set(AUTO_HINTS ON)

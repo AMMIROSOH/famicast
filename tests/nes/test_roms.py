@@ -1,7 +1,7 @@
 """Whole-system test ROMs (CPU, PPU, APU, interrupts) on the interpreter
 (docs/architecture.md, verification ladder 6).
 
-Needs the C build (see tests/test_cpu.py). ROMs come from the pinned
+Needs the C build (see tests/nes/test_cpu.py). ROMs come from the pinned
 nes-test-roms mirror (tests/fetch_test_roms.py).
 """
 import os
@@ -9,7 +9,8 @@ import subprocess
 import unittest
 
 from tests.fetch_test_roms import NTR_FILES, fetch_ntr
-from tests.test_cpu import BUILD
+from tests.nes.test_cpu import BUILD
+from tests.games import built
 
 RUNNER = os.path.join(BUILD, "nes_headless.exe" if os.name == "nt" else "nes_headless")
 PENDING = {  # path -> why it is not expected to pass yet
@@ -22,7 +23,7 @@ PENDING = {  # path -> why it is not expected to pass yet
 }
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestRoms(unittest.TestCase):
     def test_rom_suites(self):
         for path, kind in NTR_FILES.items():

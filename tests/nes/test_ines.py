@@ -3,7 +3,8 @@ import os
 import tempfile
 import unittest
 
-from tests.nesrecomp import BUILT, make_rom, run
+from tests.nes.nesrecomp import BUILT, make_rom, run
+from tests.games import built
 
 
 def info(rom):
@@ -15,7 +16,7 @@ def info(rom):
         return r.returncode, (r.stdout + r.stderr).strip()
 
 
-@unittest.skipUnless(BUILT, "build nesrecomp first (cmake --build build)")
+@built(BUILT, "build nesrecomp first (cmake --build build)")
 class TestInes(unittest.TestCase):
     def test_nrom128(self):
         self.assertEqual(info(make_rom(f6=0x01)), (0, "mapper 0, PRG 16 KB, CHR 8 KB, vertical mirroring, "

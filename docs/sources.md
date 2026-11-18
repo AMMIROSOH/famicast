@@ -66,7 +66,7 @@ detail yet.
 | [N64Recomp](https://github.com/N64Recomp/N64Recomp) | Emit-C recompiler design on another system | check | listed |
 | [FOSDEM 2026 talk, "The joys and horrors of NES dynamic recompilation"](https://fosdem.org/schedule/event/ETLVUA-the_joys_and_horrors_of_nes_dynamic_recompilation) | Context on dynarec pitfalls | — | listed |
 | [RustyNES](https://github.com/doublegate/RustyNES): [testing-strategy.md](https://github.com/doublegate/RustyNES/blob/main/docs/testing-strategy.md), [scheduler.md](https://github.com/doublegate/RustyNES/blob/main/docs/scheduler.md) | Test harness protocol (nestest, blargg $6000), timing model | GPL-3.0-or-later | summary read |
-| radare2 6502 + 65816 tables (`libr/arch/p/6502/6502dis.inc.c`, `libr/arch/p/snes/optable.h`) | Independent opcode table; extracted to `tests/data/r2_6502.json` | LGPL-3.0 | read |
+| radare2 6502 + 65816 tables (`libr/arch/p/6502/6502dis.inc.c`, `libr/arch/p/snes/optable.h`) | Independent opcode table; extracted to `tests/nes/data/r2_6502.json` | LGPL-3.0 | read |
 | [Mesen2](https://github.com/SourMesen/Mesen2) (the program) | Second opinion when a game looks wrong (its Lua scripting, state for state against ours) and the speed comparison in 06 | GPL-3.0 | used |
 | Mesen2 `Core/NES/Mappers/FDS` (Fds.cpp, FdsAudio.cpp, ModChannel.h, BaseFdsChannel.h) and `Core/NES/Loaders/FdsLoader.cpp` | The drive model followed in `nes/runtime/fds.c` (gaps and fake CRCs, 50000-cycle spin-up, a byte every 149 cycles, gap detection, $4030-$4032 bits), the automatic disk swap ($4032 polls, $E445 header match), the FDS sound details in `nes/runtime/apu.c` | GPL-3.0 (same as this program) | read |
 | FCEUX | Second reference | GPL (check version) | listed |

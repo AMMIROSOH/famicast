@@ -12,7 +12,8 @@ import unittest
 
 from tests.fetch_test_roms import ROMS, SM83_FILES
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from tests.games import ROOT  # noqa: E402
+from tests.games import built
 BUILD = os.environ.get("NES_BUILD", os.path.join(ROOT, "build"))
 EXE = ".exe" if os.name == "nt" else ""
 RUNNER = os.path.join(BUILD, "gb_cpu_tests" + EXE)
@@ -20,7 +21,7 @@ GBRECOMP = os.path.join(BUILD, "gbrecomp" + EXE)
 END_ONLY = {"76", "10"}  # HALT, STOP
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first")
+@built(RUNNER, "build the C runtime first")
 class TestSingleStepSm83(unittest.TestCase):
     def test_every_opcode(self):
         required = os.environ.get("GB_SST_REQUIRED") == "1"
@@ -36,7 +37,7 @@ class TestSingleStepSm83(unittest.TestCase):
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
-@unittest.skipUnless(os.path.exists(GBRECOMP), "build gbrecomp first")
+@built(GBRECOMP, "build gbrecomp first")
 class TestOpcodeTable(unittest.TestCase):
     def test_sizes_and_names(self):
         lines = subprocess.run([GBRECOMP, "--ops"], capture_output=True, text=True, check=True).stdout.splitlines()
