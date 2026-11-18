@@ -2,60 +2,66 @@
 
 [![ci](https://github.com/Viper-Bit/famicast/actions/workflows/ci.yml/badge.svg)](https://github.com/Viper-Bit/famicast/actions/workflows/ci.yml)
 
-A hobby, open-source **static recompiler for NES games**: it translates the
-6502 code in a ROM into C, compiles it to a native executable, and runs it on a
-small runtime (PPU, APU, mappers, SDL3 window/audio/gamepad).
+A hobby, open-source **static recompiler for NES and Famicom Disk System
+games**: it translates a game's 6502 code into C, compiles it into a native
+executable, and runs it on a small runtime (PPU, APU, mappers, SDL3 window,
+sound and gamepads). A recompiled game can be run cycle by cycle against a
+reference interpreter (`--diff`); every game tested that way so far
+matches. Built for the challenge. No games included: bring your own.
 
-Built for the challenge. Runs games on 74 mappers (see [Mappers](#mappers)).
-A recompiled game can be run cycle by cycle against a reference interpreter
-(`--diff`); every game tested that way so far matches (see
-[docs/06](docs/06-verification-log.md)). No ROMs included: bring your own.
-
-## How it works (short version)
-1. `recomp/` (`nesrecomp`, C, built and run by CMake) finds all reachable
+## How it works
+1. `recomp/` (`nesrecomp`, C, built and run by CMake) finds the reachable
    6502 code and emits one C function per basic block, plus the ROM itself.
-2. `runtime/` (C11) provides the hardware: CPU bus, PPU, APU, mappers, input.
-3. Any address the recompiler did not see (jump tables, code in RAM) falls back
-   to a **reference 6502 interpreter**, which is validated against public test
-   suites and also serves as the oracle the recompiled code is diffed against.
+   Before that, the build plays the game for a few seconds in the
+   interpreter to find code static analysis cannot.
+2. `runtime/` (C11) provides the hardware: CPU bus, PPU, APU, mappers, the
+   disk drive, input.
+3. Anything the recompiler did not see (jump tables, code in RAM) falls back
+   to a **reference 6502 interpreter**, which is validated against public
+   test suites and is also the oracle the recompiled code is diffed against.
+4. Famicom Disk System games load their code from disk into RAM, so each
+   file on the disk is recompiled on its own, and its code only runs while
+   RAM holds it.
 
-See [docs/02-architecture.md](docs/02-architecture.md) and the plan in
-[docs/05-roadmap.md](docs/05-roadmap.md).
+Details in [docs/02-architecture.md](docs/02-architecture.md); history and
+plans in [docs/05-roadmap.md](docs/05-roadmap.md).
 
 ## Status
-M0-M3 done: verified opcode table and decoder, a reference interpreter (nestest,
-SingleStepTests) and a PPU passing 52 blargg-style test ROMs. A first example
-game runs on the interpreter and recompiled (M5: lockstep-identical to the
-interpreter over 10 minutes of play, no interpreted code left), about 30x
-faster than a real NES in both modes (M5b), with sound (M6). All supported
-mappers run in the interpreter and recompile with bank-aware code (M7); one
-game per mapper is verified identical to the interpreter. The recompiler is plain C and runs
-inside the CMake build; it can trace a game first to find code by itself
-(M8a). Save states, a coverage report, frame-hash regression tests and
-display settings (fullscreen, scaling, TV frame) came with M8b. Recompiled
-example games run at about 33-38x real time. PAL and Dendy games run at
-their own timing (50 Hz, the PAL APU tables), chosen from the ROM header
-(M10). Famicom Disk System games run in the interpreter, with their sound
-and automatic disk-side swaps (M11). See
-[docs/05-roadmap.md](docs/05-roadmap.md). The first prototype (hand-written
-x86-64 output, in `legacy/`) was retired after it turned out to be incorrect;
-see [docs/06-verification-log.md](docs/06-verification-log.md).
+- **CPU**: the interpreter matches nestest and the SingleStepTests (every
+  opcode, unofficial ones included, cycle by cycle); recompiled code is
+  the same C per instruction.
+- **Picture and sound**: the PPU, APU and DMA pass the blargg-style test
+  ROMs listed in [docs/06](docs/06-verification-log.md) (a few
+  timing tests open). Expansion sound: VRC6, VRC7, Sunsoft 5B, Namco 163, MMC5 and
+  FDS.
+- **Games**: 74 mappers (99.7% of licensed releases load) and the Famicom
+  Disk System; NTSC, PAL and Dendy timing.
+- **Recompiled**: most games run above 99.5% of their CPU time as
+  recompiled code (less for games that run code from RAM), identical to
+  the interpreter in lockstep.
+- **Speed**: about 33x real time interpreted and 35x recompiled on one
+  desktop core (a test game, MSVC build). The picture and sound chips take
+  most of the time, so recompiling gains little over the interpreter here.
+- **Frontend**: save states, input recordings, fullscreen and scaling
+  options, an optional TV frame.
 
 ## Mappers
 The mapper is the cartridge's banking hardware; the iNES header names it.
 What the numbers mean, from weakest to strongest:
 
-- **Loads**: the mapper is supported. That is about 99.7% of licensed releases
-  in a ~4,000-ROM survey (85% of the whole set, with unlicensed and pirate
-  carts). A game that loads may still hit something not emulated (see below).
+- **Loads**: the mapper is supported. That is about 99.7% of licensed
+  releases in a ~4,000-ROM survey (85% of the whole set, with unlicensed and
+  pirate carts). A game that loads may still hit something not emulated
+  (see below).
 - **Boots**: for each mapper, one dump of every licensed title was run with
   scripted input and reached a title, menu or play screen.
-- **Lockstep-tested**: one to seven games per mapper ran recompiled and
-  interpreted side by side (`--diff`, 3,000 frames or more) with identical
-  CPU, RAM, PPU state and frames.
-- **Recompiled share**: in those runs 99.8-99.98% of CPU cycles ran as
-  recompiled code; the rest is interrupt entry, which always goes through
-  the interpreter, and code the scripted play found that the build had not.
+- **Lockstep-tested**: one or more games per mapper (per board family for
+  the newest) ran recompiled and interpreted side by side (`--diff`, 3,000
+  frames or more) with identical CPU, RAM, PPU state and frames.
+- **Recompiled share**: in those runs above 99.5% of CPU cycles ran as
+  recompiled code for most games (up to 99.98%); the rest is interrupt entry, which always
+  goes through the interpreter, code in RAM, and code the scripted play
+  found that the build had not.
 
 Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 
@@ -136,39 +142,31 @@ Each is listed per mapper in [docs/06](docs/06-verification-log.md).
 | 228 | Active Enterprises | Action 52, Cheetahmen II |
 | 232 | Camerica Quattro | Quattro Adventure, Quattro Sports, Quattro Arcade |
 
-Not yet: the long tail of rarer boards. Other mappers are refused at load
-("mapper N not supported yet").
+Not yet: the last licensed boards (Oeka Kids 96, the Nintendo World
+Championships carts 105 and 555, Konami VRC5 547), MMC5 split screen, the
+Datach barcode reader and the long tail of unlicensed and pirate boards.
+Other mappers are refused at load ("mapper N not supported yet").
 
-### Famicom Disk System
-`.fds` disk images (with or without the 16-byte header) play in the
-interpreter. They need the FDS BIOS (8 KB, not included): put it next to
-the program as `disksys.rom`, or set `fds_bios` in the .ini. When a game asks for another
-disk side, it is swapped in by itself (`fds_auto_disk = 0` turns that off);
-F6 puts in the next side by hand. What a game writes to its disk is kept in
-`ROM.sav`. `nes_headless` takes `--bios FILE` and `--disk F:S` (swap to side
-S at frame F).
-
-Disk games are recompiled like cartridge games: put the `.fds` in `ROMS` and
-give the BIOS with `FDS_BIOS` (see [Recompiling a game](#recompiling-a-game)).
-The program carries the BIOS and the disk. A game's code is loaded from disk
-into RAM, so each file on the disk is recompiled on its own, and its code
-only runs while RAM holds it (other code is interpreted). In tests, 99-99.8%
-of CPU time ran recompiled (docs/06). `FDS_BIOS` alone also builds
-`build/fds`, which plays any `.fds` image with only the BIOS recompiled.
-`games/fds.toml` holds BIOS entry points traced from 25 games (Rev 1 BIOS;
-another revision only recompiles less). Do not share these builds: they
-contain the BIOS.
-Not yet: the Famicom Disk System (and its sound), the last licensed boards
-(Oeka Kids 96, the Nintendo World Championships carts 105 and 555, Konami
-VRC5 547) and the long tail of unlicensed and pirate boards. Other mappers are refused at load ("mapper N
-not supported yet").
+## Famicom Disk System
+`.fds` disk images (with or without the 16-byte header) play like
+cartridges. They need the FDS BIOS (8 KB, not included): put it next to the
+program as `disksys.rom`, or set `fds_bios` in the .ini.
+- **Disk sides**: when a game asks for another side, it is swapped in by
+  itself (`fds_auto_disk = 0` turns that off); F6 puts in the next side by
+  hand.
+- **Saves**: what a game writes to its disk is kept in `ROM.sav`.
+- **Recompiling**: see [Recompiling a game](#recompiling-a-game). In tests, about
+  99% of CPU time ran recompiled.
+- **Headless**: `nes_headless` takes `--bios FILE` and `--disk F:S` (swap to
+  side S at frame F).
+- **Not yet**: two unlicensed disks (one stays black, one jams).
 
 ## Downloads
 [Releases](https://github.com/Viper-Bit/famicast/releases) have builds for
 Windows (x64, arm64), Linux (x64, arm64; glibc 2.35+) and macOS (arm64):
-`nes` (plays a ROM in the interpreter), `nes_headless`, `nesrecomp`, and a
-**kit** that recompiles your ROMs into native programs with only CMake and a
-C compiler installed (SDL3 comes prebuilt). `README.txt` in the archive
+`nes` (plays a game in the interpreter), `nes_headless`, `nesrecomp`, and a
+**kit** that recompiles your games into native programs with only CMake and
+a C compiler installed (SDL3 comes prebuilt). `README.txt` in the archive
 explains both. Archives are made by `tools/make_release.py`
 (`.github/workflows/release.yml`: push a tag `v*` for a draft release).
 
@@ -187,8 +185,8 @@ Builds are **Release**; tests, timings and full-speed play assume it. Keep
 without it `cmake --build` builds Debug, which is too slow to play.
 Ninja and Makefiles ignore the flag and build Release anyway. Programs are
 put in `build/` with every generator (no `Release/` or `Debug/` subfolder).
-Headless (no SDL3): add `-DFRONTEND=OFF`. On Windows the game programs open no console window;
-use the `_headless` programs for text output.
+Headless (no SDL3): add `-DFRONTEND=OFF`. On Windows the game programs open
+no console window; use the `_headless` programs for text output.
 
 ## Recompiling a game
 ```
@@ -196,47 +194,53 @@ cmake -S . -B build -DROMS="path/to/Game One.nes;path/to/Game Two (E) [!].nes"
 cmake --build build --config Release   # -> build/game_one, build/game_two (+ _headless)
 build/game_one                         # the ROM is embedded: no path needed
 ```
-Famicom Disk System games (`.fds`) go in `ROMS` too, with the BIOS:
-`-DROMS="Disk Game.fds" -DFDS_BIOS=path/to/disksys.rom`.
+Disk games (`.fds`) go in `ROMS` too, with the BIOS:
+`-DROMS="Disk Game.fds" -DFDS_BIOS=path/to/disksys.rom`. The program then
+carries the BIOS as well. `FDS_BIOS` alone also builds `build/fds`, which
+plays any `.fds` image with only the BIOS recompiled; `games/fds.toml` holds
+BIOS entry points (Rev 1 BIOS; another revision only recompiles less).
 
 The whole ROM is embedded in the executable (graphics and data are read
 through pointers no analysis can bound), so **do not share these builds**:
-they contain the game. With `-DEMBED_ROM=OFF` the program asks for the
-ROM file instead (FDS programs still carry the BIOS); the generated code still contains the game's code bytes,
-so those builds are not for sharing either.
+they contain the game (and the BIOS). With `-DEMBED_ROM=OFF` the program
+asks for the ROM file instead; the generated code still contains the
+game's code bytes, so those builds are not for sharing either.
 
 Code the static decoder cannot find (jump tables, RTS used as a jump) runs in
-the interpreter. Two ways to recompile it too:
-- Automatically (on by default; `-DAUTO_HINTS=OFF` to skip): before
+the interpreter. Three ways to recompile it too:
+- **Automatically** (on by default; `-DAUTO_HINTS=OFF` to skip): before
   recompiling, the build runs each game in the interpreter for
   `AUTO_HINTS_FRAMES` (default 6000, about 6 s) frames of scripted
   play (`nes_headless --play 1`) and passes every address it ran to the
   recompiler. Merged hints are written to `build/gen/<name>.toml`; copy them
   to `games/` to keep them without tracing.
-- By playing: a recompiled game notes ROM code it had to interpret in
+- **By playing**: a recompiled game notes code it had to interpret in
   `build/<name>.misses` (setting `record_misses` in its `.ini`); the next
   `cmake --build build --config Release` sees the file changed and
-  recompiles the game with those addresses (the build always passes
-  `build/<name>.misses` to `nesrecomp`).
-- By hand, from a recording (reaches what the script cannot):
+  recompiles the game with those addresses.
+- **By hand**, from a recording (reaches what the script cannot):
   ```
   build/nes game.nes --record run.nesi
   build/nes_headless game.nes --replay run.nesi --misses --out misses.txt
   build/nesrecomp game.nes --hints games/game.toml --misses misses.txt --save-hints games/game.toml
   cmake --build build --config Release
   ```
-`build/game_one_headless --play 1 --diff --misses` runs the interpreter in
-lockstep and reports the first difference, then what was still interpreted.
-Relative `ROMS` paths are relative to the folder cmake is run from
-(else to the source folder), and are stored as absolute paths in the cache.
-Target names drop "(...)"/"[...]" tags from the file name; hints live in
-`games/<name>.toml` and record the PRG hash of the dump they were made for.
-On Windows with Git Bash, give `ROMS` Windows paths (`pwd -W`). The options
-were called `NES_GAMES`, `NES_EMBED_ROM`, `NES_AUTO_HINTS(_FRAMES)`,
-`NES_FRONTEND` and `NES_SDL3_PREFIX` before; a build folder configured with
-them keeps its values under the new names.
 
-## Controls
+`build/game_one_headless --play 1 --diff --misses` runs the interpreter in
+lockstep and reports the first difference, then what was still interpreted;
+`--coverage` gives the share of CPU cycles in recompiled code.
+
+Paths and names:
+- Relative `ROMS` paths are relative to the folder cmake is run from (else
+  to the source folder), and are stored as absolute paths in the cache. On
+  Windows with Git Bash, give Windows paths (`pwd -W`).
+- Target names drop "(...)"/"[...]" tags from the file name; hints live in
+  `games/<name>.toml` and record the PRG hash of the dump they were made for.
+- The options were called `NES_GAMES`, `NES_EMBED_ROM`,
+  `NES_AUTO_HINTS(_FRAMES)`, `NES_FRONTEND` and `NES_SDL3_PREFIX` before; a
+  build folder configured with them keeps its values under the new names.
+
+## Controls and settings
 Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =
 Select, F5 = reset, Esc = quit. Gamepads: first = player 1, second = player 2,
 hot-plug; D-pad or left stick, East = A, South = B, Back = Select, Start.
@@ -264,15 +268,15 @@ window_scale = 3    # starting window size
 fds_bios = disksys.rom  # FDS BIOS: next to the program or the disk image, or a full path
 fds_auto_disk = 1   # 1 = swap disk sides when a game asks
 ```
-Forcing `region`: NTSC games on `pal` run slower but usually work;
-PAL-only games on `ntsc` often freeze or jam, as on a real NTSC console.
-A jammed CPU (a crash on hardware too) leaves the last picture on screen
-with a message; F5 resets, F4 loads a state.
-Save states work across builds of the same version: a state saved by the
-interpreter (`build/nes`) loads in the recompiled program and the reverse.
-
-Record and replay input: `build/nes game.nes --record run.nesi`, then
-`build/nes game.nes --replay run.nesi` (live input resumes at the end).
+- **Region**: NTSC games forced to `pal` run slower but usually work;
+  PAL-only games on `ntsc` often freeze or jam, as on a real NTSC console.
+  A jammed CPU (a crash on hardware too) leaves the last picture on screen
+  with a message; F5 resets, F4 loads a state.
+- **Save states** work across builds of the same version: a state saved by
+  the interpreter (`build/nes`) loads in the recompiled program and the
+  reverse.
+- **Recordings**: `build/nes game.nes --record run.nesi`, then
+  `build/nes game.nes --replay run.nesi` (live input resumes at the end).
 
 ## Tests
 ```
@@ -286,29 +290,26 @@ hashes in `tests/data/frame_hashes.json`) run for the games the build was
 configured with and are skipped otherwise. After an intended output change:
 `NES_UPDATE_HASHES=1 python -m unittest tests.test_regression`.
 
-Coverage of a recompiled game: `build/game_one_headless --play 1 --coverage`
-(share of CPU cycles in recompiled code; `--misses` also lists the
-addresses that were interpreted).
+## Docs
+| File | Content |
+|------|---------|
+| [01-prior-art.md](docs/01-prior-art.md) | Other recompilers and emulators, and what we take from them |
+| [02-architecture.md](docs/02-architecture.md) | Components, data flow, design decisions |
+| [03-6502-traps.md](docs/03-6502-traps.md) | 6502/2A03 details that are easy to get wrong |
+| [04-timing-constants.md](docs/04-timing-constants.md) | NTSC, PAL and Dendy clock and frame timing |
+| [05-roadmap.md](docs/05-roadmap.md) | Milestones, what is done and what is open |
+| [06-verification-log.md](docs/06-verification-log.md) | What was checked, how, and the result |
+| [07-sources.md](docs/07-sources.md) | Every external source we used, with license notes |
+| [08-first-prototype.md](docs/08-first-prototype.md) | The retired first prototype and why it failed |
+
+## ROMs
+No ROMs, disk images or BIOS files are included or will ever be committed.
+Bring your own legally dumped games. `roms/` is git-ignored.
 
 ## Credits
 Written by the project author together with Claude (Anthropic) as a coding
 partner; commits carry `Co-Authored-By` lines. Outside knowledge used along
 the way is listed in [docs/07-sources.md](docs/07-sources.md).
-
-## ROMs
-No ROMs are included or will ever be committed. Bring your own legally dumped
-cartridges. `roms/` is git-ignored.
-
-## Docs
-| File | Content |
-|------|---------|
-| [01-prior-art.md](docs/01-prior-art.md) | Other recompilers/emulators and what we take from them |
-| [02-architecture.md](docs/02-architecture.md) | Components, data flow, design decisions |
-| [03-6502-traps.md](docs/03-6502-traps.md) | 6502/2A03 details that are easy to get wrong |
-| [04-timing-constants.md](docs/04-timing-constants.md) | NTSC, PAL and Dendy clock and frame timing |
-| [05-roadmap.md](docs/05-roadmap.md) | Milestones and exit criteria |
-| [06-verification-log.md](docs/06-verification-log.md) | What was checked, how, and the result |
-| [07-sources.md](docs/07-sources.md) | Every external source we used, with license notes |
 
 ## License
 GPL-3.0-or-later (see [LICENSE](LICENSE)). Chosen so we can reuse code from

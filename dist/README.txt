@@ -1,13 +1,13 @@
-famicast - static recompiler for NES games
+famicast - static recompiler for NES and Famicom Disk System games
 https://github.com/Viper-Bit/famicast
 
-No games are included. Use your own legally dumped ROMs (.nes files).
+No games are included. Use your own legally dumped games (.nes, .fds).
 
 
 WHAT IS IN HERE
 
-  nes             Plays a ROM in the built-in 6502 interpreter.
-                  Usage: nes path/to/game.nes
+  nes             Plays a game in the built-in 6502 interpreter.
+                  Usage: nes path/to/game.nes (or .fds, see below)
   nes_headless    The same without a window, for scripts and checks
                   (--frames N, --record/--replay, --diff, --coverage, ...).
   nesrecomp       The recompiler: turns a ROM into C source.
@@ -22,10 +22,9 @@ PLAYING
 
 Keyboard: arrows, X = A, Z = B, Enter = Start, Right Shift = Select,
 F5 = reset, F2 / F4 = save / load state, F6 = next disk side (FDS),
-F10 = TV frame,
-F11 or Alt+Enter = fullscreen, Esc = quit.
+F10 = TV frame, F11 or Alt+Enter = fullscreen, Esc = quit.
 Gamepads work too (first = player 1, second = player 2).
-Display settings are in nes.ini next to the program, created on first run.
+Settings are in nes.ini next to the program, created on first run.
 
 
 RECOMPILING A GAME (the kit)
@@ -56,9 +55,10 @@ things recompile more of it:
 
 DO NOT SHARE RECOMPILED PROGRAMS: they contain the game.
 
-Famicom Disk System: .fds images play in nes with the FDS BIOS (8 KB, not
-included) next to it as disksys.rom (or fds_bios in nes.ini). The kit
-recompiles them like the others, given the BIOS:
+Famicom Disk System: .fds images need the FDS BIOS (8 KB, not included):
+put it next to nes as disksys.rom, or set fds_bios in nes.ini. Disk sides
+are swapped by themselves when a game asks (F6 by hand). The kit
+recompiles disk games like the others, given the BIOS:
   cmake -S kit -B build -DROMS="/path/to/Disk Game.fds" -DFDS_BIOS="/path/to/disksys.rom"
 The program carries the BIOS too (and build/fds, which plays any .fds
 image with only the BIOS recompiled). Do not share them either.

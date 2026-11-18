@@ -36,11 +36,11 @@ first-hand yet; check them before relying on the detail.
   (Retrocomputing track; speaker listed as Alex Andreba, author of the toy
   dynarec *emunes*). Abstract not read yet.
 - **Mesen2** (GPL-3.0). Accurate, readable emulator. → Reference for PPU, APU
-  and mapper behavior; under our GPL-3.0 license we may adapt its code, with
-  attribution.
+  and mapper behavior, and the model for our FDS drive; under our GPL-3.0
+  license we may adapt its code, with attribution. Also our second opinion
+  when a game looks wrong.
 - **FCEUX** (GPL). Second reference; check its exact GPL version before
   copying any code (GPL-2.0-only code cannot be combined with GPL-3.0).
-
 - **RustyNES** (doublegate, GPL-3.0-or-later). Accurate interpreter in Rust,
   no JIT or recompiler; says it derives from Mesen2 and others. Read via a
   summary of its README and docs. Worth taking: the test harness design
