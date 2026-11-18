@@ -18,7 +18,7 @@ RUNNER = os.path.join(BUILD, "gb_headless" + (".exe" if os.name == "nt" else "")
 
 SUITES = [
     "blargg/cpu_instrs", "blargg/instr_timing", "blargg/mem_timing", "blargg/mem_timing-2",
-    "blargg/halt_bug.gb", "blargg/dmg_sound/rom_singles", "mooneye-test-suite/acceptance", "mooneye-test-suite/emulator-only",
+    "blargg/halt_bug.gb", "blargg/dmg_sound/rom_singles", "blargg/cgb_sound/rom_singles", "mooneye-test-suite/acceptance", "mooneye-test-suite/emulator-only",
 ]
 OTHER_MODEL = "boot state of another model (we are a DMG ABC)"
 PPU = "PPU timing (G3)"

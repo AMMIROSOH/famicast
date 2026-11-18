@@ -90,11 +90,11 @@ int sys_open(const char *path, const Settings *settings, SysInfo *info, char *er
     SDL_snprintf(info->state_path, sizeof info->state_path, "%s.state", sav_path);
     SDL_strlcat(sav_path, ".sav", sizeof sav_path);
     if (gb.cart.battery) load_sav();
-    const char *name = path;
+    const char *name = path;  /* the settings' palette is for DMG games; CGB games bring their own colours */
     for (const char *p = path; *p; p++)
         if (*p == '/' || *p == '\\') name = p + 1;
     SDL_strlcpy(info->name, name, sizeof info->name);
-    SDL_strlcpy(info->tag, "Game Boy", sizeof info->tag);
+    SDL_strlcpy(info->tag, gb.cgb ? "Game Boy Color" : "Game Boy", sizeof info->tag);
     info->width = info->cols = 160;
     info->height = info->lines = 144;
     info->fps = 4194304.0 / 70224;  /* 59.73 Hz */
@@ -120,7 +120,13 @@ int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
     const uint32_t *pal = gray ? GRAY : GREEN;
     gb_set_pad(&gb, in->pad[0]);
     gb_run_frame(&gb);
-    for (int i = 0; i < 160 * 144; i++) rgb[i] = pal[gb.frame[i] & 3];
+    if (gb.cgb)  /* RGB555; 5 bits to 8 as (c << 3) | (c >> 2) */
+        for (int i = 0; i < 160 * 144; i++) {
+            uint32_t c = gb.frame[i], r = c & 31, gr = c >> 5 & 31, b = c >> 10 & 31;
+            rgb[i] = (r << 3 | r >> 2) << 16 | (gr << 3 | gr >> 2) << 8 | (b << 3 | b >> 2);
+        }
+    else
+        for (int i = 0; i < 160 * 144; i++) rgb[i] = pal[gb.frame[i] & 3];
     return apu_take_samples(&gb, samples, max);
 }
 

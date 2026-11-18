@@ -26,7 +26,7 @@ only when that test passes in CI.
 | [G3](#g3--ppu-and-frontend) | Game Boy: PPU, the window program (core/frontend) | done (8 PPU timing tests open) |
 | [G4](#g4--apu) | Game Boy: sound | done |
 | [G5](#g5--recompiler) | Game Boy: recompiler, lockstep diff | done (code in RAM interpreted) |
-| [G6](#g6--game-boy-color) | Game Boy Color | open |
+| [G6](#g6--game-boy-color) | Game Boy Color | done |
 
 ## Layout
 ```
@@ -407,7 +407,21 @@ to `core/` when the Game Boy is its second user (`docs/02` "Frontend").
   catch-up scheme, as the NES's, would be the next step).
 
 ### G6 · Game Boy Color
-- [ ] Double speed, VRAM/WRAM banks, palettes, HDMA.
+- [x] CGB mode for games whose header asks for it (`gb_headless --model`
+  to force one): double speed (the PPU and sound keep their pace), VRAM
+  bank 1, WRAM banks 1-7, palette RAM, map attributes (palette, bank,
+  flips, priority), OAM-order object priority, general and HBlank HDMA
+  (in the bus cycle, so recompiled code waits where the interpreter
+  does), the CGB's separate WRAM bus during OAM DMA, no STAT-write
+  interrupt, the APU's CGB details; the speed switch skips the byte after
+  STOP.
+- [x] **Exit:** cgb-acid2 pixel for pixel, blargg cgb_sound (12 singles
+  and the combined ROM); 36 sampled Color games reach title, menu or
+  play screens; 18 recompiled in lockstep.
+- [ ] Open: DMG games are not run in the CGB's compatibility mode (its
+  palettes; mooneye's CGB boot tests are of that mode), the speed switch
+  takes no time, the CGB boot DIV value is unchecked, palette RAM is not
+  closed during mode 3, cgb-acid-hell (needs mid-line rendering).
 
 ## Stretch
 - JIT for code in RAM or found at run time. With play-to-recompile and auto

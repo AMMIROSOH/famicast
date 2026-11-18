@@ -1,8 +1,10 @@
 /* Game Boy without a window, for tests (tests/test_gb_roms.py, test_gb_recomp.py).
  *   gb_headless ROM [--frames N] [--pgm FILE] [--wav FILE] [--play] [--state-at F FILE] [--load-state FILE]
- *               [--misses FILE] [--diff] [--coverage]
+ *               [--misses FILE] [--diff] [--coverage] [--ppm FILE] [--model dmg|cgb]
  *   --pgm         write the last whole frame as a grey image (shade 0 = white)
  *   --wav         write the sound (48 kHz mono, 16-bit)
+ *   --ppm         write the last whole frame in colour (CGB: 5-bit components as (c << 3) | (c >> 2))
+ *   --model       run as a DMG or a CGB (default: what the header asks for)
  *   --play        scripted input: Start and A taps, later walking right
  *   --state-at    save a state before frame F; --load-state: start from one
  *   --misses      write the ROM code the interpreter ran ("MISS $PC bank B",
@@ -66,7 +68,8 @@ static const struct { const char *name; size_t off, len; } FIELDS[] = {
     F(tima_reload), F(sb), F(sc), F(serial_left), F(serial_out), F(serial_n), F(p1), F(pad), F(lcdc), F(stat),
     F(scy), F(scx), F(ly), F(lyc), F(wy), F(wx), F(stat_line), F(mode), F(wy_hit), F(win_line), F(dot),
     F(mode3_end), F(fb), F(frame), F(frame_count), F(dma_reg), F(dma_start), F(dma_on), F(dma_pos), F(dma_src),
-    F(dma_next), F(frame_end),
+    F(dma_next), F(frame_end), F(cgb), F(vbk), F(svbk), F(opri), F(key1), F(double_speed), F(half), F(bcps),
+    F(ocps), F(bg_pal), F(obj_pal), F(hdma_src), F(hdma_dst), F(hdma_left), F(hdma_on), F(hdma_due),
 };
 static const char *differs(const Gb *a, const Gb *b) {
     if (!same_cpu(&a->cpu, &b->cpu)) return "cpu";
@@ -87,7 +90,7 @@ static void print_cpu(const char *who, const GbCpu *c) {
 
 /* One frame of both; 0, or -1 after printing the first difference. */
 static int frame_diff(Gb *g, Gb *ref, long frame) {
-    g->frame_end += GB_FRAME_CYCLES;
+    g->frame_end += gb_frame_cycles(g);
     ref->frame_end = g->frame_end;
     while (g->cpu.cycles < g->frame_end) {
         GbCpu before = g->cpu;
@@ -114,8 +117,8 @@ int main(int argc, char **argv) {
     }
     long frames = 3600, state_at = -1;
     const char *pgm = NULL, *wav = NULL, *state_out = NULL, *state_in = NULL;
-    const char *misses = NULL;
-    int play = 0, diff = 0, coverage = 0;
+    const char *misses = NULL, *ppm = NULL;
+    int play = 0, diff = 0, coverage = 0, model = GB_MODEL_AUTO;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]);
         else if (!strcmp(argv[i], "--pgm") && i + 1 < argc) pgm = argv[++i];
@@ -126,6 +129,12 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--misses") && i + 1 < argc) misses = argv[++i];
         else if (!strcmp(argv[i], "--diff")) diff = 1;
         else if (!strcmp(argv[i], "--coverage")) coverage = 1;
+        else if (!strcmp(argv[i], "--ppm") && i + 1 < argc) ppm = argv[++i];
+        else if (!strcmp(argv[i], "--model") && i + 1 < argc) {
+            const char *m = argv[++i];
+            model = !strcmp(m, "dmg") ? GB_MODEL_DMG : !strcmp(m, "cgb") ? GB_MODEL_CGB : -2;
+            if (model == -2) { fprintf(stderr, "gb_headless: --model dmg or cgb\n"); return 2; }
+        }
         else { fprintf(stderr, "gb_headless: unknown option %s\n", argv[i]); return 2; }
     }
     FILE *f = fopen(argv[1], "rb");
@@ -138,7 +147,8 @@ int main(int argc, char **argv) {
     fclose(f);
     static Gb g, ref;
     char err[128];
-    if (gb_load(&g, rom, (size_t)size, err, sizeof err) != 0 || (diff && gb_load(&ref, rom, (size_t)size, err, sizeof err) != 0)) {
+    if (gb_load_model(&g, rom, (size_t)size, model, err, sizeof err) != 0 ||
+        (diff && gb_load_model(&ref, rom, (size_t)size, model, err, sizeof err) != 0)) {
         fprintf(stderr, "%s: %s\n", argv[1], err);
         return 2;
     }
@@ -191,6 +201,19 @@ int main(int argc, char **argv) {
         if (!o) { perror(pgm); return 2; }
         fprintf(o, "P5\n160 144\n255\n");
         for (int i = 0; i < 160 * 144; i++) fputc((3 - g.frame[i]) * 85, o);
+        fclose(o);
+    }
+    if (ppm) {
+        FILE *o = fopen(ppm, "wb");
+        if (!o) { perror(ppm); return 2; }
+        fprintf(o, "P6\n160 144\n255\n");
+        for (int i = 0; i < 160 * 144; i++) {
+            uint16_t c = g.frame[i];
+            for (int k = 0; k < 3; k++) {
+                int v = g.cgb ? (c >> (5 * k) & 31) << 3 | (c >> (5 * k) & 31) >> 2 : (3 - (c & 3)) * 85;
+                fputc(v, o);
+            }
+        }
         fclose(o);
     }
     for (int i = 0; i < g.serial_n; i++) {

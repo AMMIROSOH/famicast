@@ -1,7 +1,7 @@
-retrocast - static recompiler for NES and Famicom Disk System games (Game Boy in progress)
+retrocast - static recompiler for NES, Famicom Disk System, Game Boy and Game Boy Color games
 https://github.com/Viper-Bit/retrocast
 
-No games are included. Use your own legally dumped games (.nes, .fds, .gb).
+No games are included. Use your own legally dumped games (.nes, .fds, .gb, .gbc).
 
 
 WHAT IS IN HERE
@@ -11,8 +11,8 @@ WHAT IS IN HERE
   nes_headless    The same without a window, for scripts and checks
                   (--frames N, --record/--replay, --diff, --coverage, ...).
   nesrecomp       The recompiler: turns a ROM into C source.
-  gb              Plays a Game Boy game in the built-in interpreter.
-                  Usage: gb path/to/game.gb
+  gb              Plays a Game Boy or Game Boy Color game in the built-in
+                  interpreter. Usage: gb path/to/game.gb (or .gbc)
   gb_headless     The same without a window, for test ROMs (--frames N,
                   --wav FILE to record the sound).
   gbrecomp        The Game Boy recompiler: turns a ROM into C source.
@@ -48,7 +48,7 @@ From the folder this file is in:
 
 The program is build/my_game (build/my_game.exe on Windows), plus
 build/my_game_headless. Several games: separate the paths with ";".
-Game Boy games (.gb) are recompiled the same way (the notes from your own
+Game Boy games (.gb, .gbc) are recompiled the same way (the notes from your own
 play below are NES-only so far).
 A relative path is relative to the folder you run cmake from.
 

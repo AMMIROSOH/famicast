@@ -1,5 +1,8 @@
 /* The Game Boy's sound (apu.h). Channel i's registers are NRi0-NRi4 at
- * $FF10 + 5i: 0, 1 pulses, 2 wave, 3 noise. */
+ * $FF10 + 5i: 0, 1 pulses, 2 wave, 3 noise. CGB mode differs in a few
+ * details (blargg cgb_sound): wave RAM while playing is the byte being
+ * played at any time, no retrigger corruption, and powering off clears
+ * the length counters too. */
 #include <string.h>
 
 #include "gb.h"
@@ -69,7 +72,7 @@ static void trigger(Gb *g, int ch) {
     if (ch == 2) {
         /* DMG: retriggering in the cycle before a sample is read corrupts
          * wave RAM's first bytes with the ones about to be read */
-        if (was_on && p->timer[2] == 1) {
+        if (!g->cgb && was_on && p->timer[2] == 1) {
             int k = ((p->wave_pos + 1) >> 1) & 15;
             if (k < 4) IO(0x30) = IO(0x30 + k);
             else memcpy(g->io + 0x30, g->io + 0x30 + (k & ~3), 4);
@@ -101,7 +104,7 @@ uint8_t apu_read(Gb *g, uint16_t a) {
     GbApu *p = &g->apu;
     if (a >= 0xFF30) {  /* wave RAM; while playing (DMG) only in the cycle a sample is read, and then that byte */
         if (!p->on[2]) return IO(a & 0x7F);
-        return p->wave_just_read ? IO(0x30 + p->wave_pos / 2) : 0xFF;
+        return p->wave_just_read || g->cgb ? IO(0x30 + p->wave_pos / 2) : 0xFF;
     }
     if (a == 0xFF26) return (uint8_t)(0x70 | p->power << 7 | p->on[0] | p->on[1] << 1 | p->on[2] << 2 | p->on[3] << 3);
     return IO(a & 0x7F) | MASK[a - 0xFF10];
@@ -112,13 +115,14 @@ void apu_write(Gb *g, uint16_t a, uint8_t v) {
     int r = a & 0x7F;
     if (a >= 0xFF30) {
         if (!p->on[2]) IO(r) = v;
-        else if (p->wave_just_read) IO(0x30 + p->wave_pos / 2) = v;
+        else if (p->wave_just_read || g->cgb) IO(0x30 + p->wave_pos / 2) = v;
         return;
     }
     if (a == 0xFF26) {
         if (!(v & 0x80) && p->power) {  /* off: every register cleared; the length counters stay (DMG) */
             memset(g->io + 0x10, 0, 0x16);
             memset(p->on, 0, sizeof p->on);
+            if (g->cgb) memset(p->len, 0, sizeof p->len);
             p->power = 0;
         } else if ((v & 0x80) && !p->power) {
             p->power = 1;
@@ -129,6 +133,7 @@ void apu_write(Gb *g, uint16_t a, uint8_t v) {
         return;
     }
     if (a > 0xFF26) return;  /* unused */
+    if (!p->power && g->cgb) return;
     if (!p->power) {  /* off: only the length counters can be written (DMG) */
         if (r == 0x11 || r == 0x16) v &= 0x3F;
         else if (r != 0x1B && r != 0x20) return;
