@@ -22,9 +22,9 @@ class TestInes(unittest.TestCase):
                                                       "NMI=$D400 RESET=$C070 IRQ=$C070"))
 
     def test_mapper_high_nibble(self):
-        code, text = info(make_rom(f6=0x10, f7=0x40))
+        code, text = info(make_rom(f6=0x40, f7=0x60))
         self.assertEqual(code, 2)
-        self.assertIn("mapper 65 not supported", text)
+        self.assertIn("mapper 100 not supported", text)
 
     def test_nes2_mapper_bits_8_to_11(self):
         rom = bytearray(make_rom(f6=0x30, f7=0x08))  # NES 2.0, low byte 3
