@@ -103,14 +103,14 @@ static SDL_Texture *make_tv_frame(SDL_Renderer *ren, int width, int lines) {
     return t;
 }
 
-/* Draw the picture's visible lines (240, or 224 with the overscan hidden:
- * centred), `width` units wide (256 square pixels, 293 for 8:7, 355 for PAL), and the
+/* Draw the picture's visible columns and lines (256 x 240, or 240 and 224
+ * with the overscan hidden: centred), `width` units wide (256 square pixels, 293 for 8:7, 355 for PAL), and the
  * frame over it, scaled into the output. Integer scaling applies to the
  * lines; with 8:7 pixels the width follows (the pixel-art scale mode keeps
  * the uneven columns sharp). banner: NULL-terminated lines of text drawn
  * over the picture in SDL's built-in 8x8 font, one font pixel per NES pixel. */
-static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int scale, int width, int lines,
-                    const char *const *banner) {
+static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int scale, int width, int cols,
+                    int lines, const char *const *banner) {
     int W, H;
     SDL_GetCurrentRenderOutputSize(ren, &W, &H);
     float cw = (float)(frame ? tv_w(width) : width), ch = (float)(frame ? tv_h(lines) : lines);  /* content, in units */
@@ -122,7 +122,7 @@ static void present(SDL_Renderer *ren, SDL_Texture *pic, SDL_Texture *frame, int
     SDL_FRect content = {SDL_floorf((W - cw * sx) / 2), SDL_floorf((H - ch * sy) / 2), cw * sx, ch * sy};
     SDL_FRect picture = {content.x + (frame ? TV_LEFT * sx : 0), content.y + (frame ? TV_TOP * sy : 0),
                          width * sx, lines * sy};
-    SDL_FRect src = {0, (NES_H - lines) / 2.0f, NES_W, (float)lines};
+    SDL_FRect src = {(NES_W - cols) / 2.0f, (NES_H - lines) / 2.0f, (float)cols, (float)lines};
     SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
     SDL_RenderClear(ren);
     SDL_RenderTexture(ren, pic, &src, &picture);
@@ -284,9 +284,10 @@ int main(int argc, char **argv) {
     SDL_Renderer *ren;
     /* starting size: window_scale x the content, smaller if the screen is */
     const int lines = cfg.overscan ? NES_H - 16 : NES_H;  /* visible lines */
-    /* tv: 8:7 (292.6, rounded); PAL and Dendy pixels 1.3862:1 (354.9), as a PAL TV
+    /* tv: 8:7 (256 columns: 292.6, rounded); PAL and Dendy pixels 1.3862:1 (354.9), as a PAL TV
      * showed them (nesdev "Overscan", from memory) */
-    const int width = !cfg.aspect_tv ? NES_W : nes.cart.region == REGION_NTSC ? (NES_W * 8 + 3) / 7 : 355;
+    const int cols = cfg.overscan_sides ? NES_W - 16 : NES_W;  /* visible columns */
+    const int width = !cfg.aspect_tv ? cols : (int)(cols * (nes.cart.region == REGION_NTSC ? 8.0 / 7 : 1.3862) + 0.5);
     int k = cfg.window_scale, cw = cfg.tv_frame ? tv_w(width) : width, ch = cfg.tv_frame ? tv_h(lines) : lines;
     SDL_Rect usable;
     if (SDL_GetDisplayUsableBounds(SDL_GetPrimaryDisplay(), &usable))
@@ -384,7 +385,7 @@ int main(int argc, char **argv) {
         SDL_snprintf(jam_line, sizeof jam_line, "CPU jammed at $%04X", jam_pc);
         const char *jam_banner[] = {jam_line, "F5 reset, F4 load state", forced ? "(region forced in nes.ini)" : NULL, NULL};
         SDL_UpdateTexture(tex, NULL, fb, NES_W * sizeof fb[0]);
-        present(ren, tex, frame_tex, cfg.scale, width, lines, jam_pc >= 0 ? jam_banner : NULL);
+        present(ren, tex, frame_tex, cfg.scale, width, cols, lines, jam_pc >= 0 ? jam_banner : NULL);
         if (message_until && SDL_GetTicks() > message_until) {
             SDL_SetWindowTitle(win, heading);
             message_until = 0;
