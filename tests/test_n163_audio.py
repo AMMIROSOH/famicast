@@ -1,5 +1,5 @@
-"""Namco 163 wavetable sound (runtime/cart.c cart_n163_clock, mixed by
-runtime/apu.c): one channel set up through the $F800/$4800 RAM port, the
+"""Namco 163 wavetable sound (nes/runtime/cart.c cart_n163_clock, mixed by
+nes/runtime/apu.c): one channel set up through the $F800/$4800 RAM port, the
 output read back from nes_headless --wav (48 kHz, after the NES's own
 high-pass filters, so a step in the wave shows as a spike)."""
 import os

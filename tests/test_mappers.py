@@ -1,4 +1,4 @@
-"""Mappers (runtime/cart.c) on tiny hand-assembled ROMs:
+"""Mappers (nes/runtime/cart.c) on tiny hand-assembled ROMs:
 each switches a bank, reads a marker byte from it and stores it at $00, which
 nes_headless --peek reports. The other mappers are covered by test ROMs
 (tests/test_roms.py) and the recompiled games."""
@@ -685,7 +685,7 @@ STORE_COUNT = bytes([0xA5, 0x10, 0x85, 0x00, 0xA5, 0x11, 0x85, 0x01])  # $00/$01
 
 @unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
 class TestMoreBoards(unittest.TestCase):
-    """The boards in runtime/cart.c's "more boards" section and the MMC3 and
+    """The boards in nes/runtime/cart.c's "more boards" section and the MMC3 and
     Namco 108 variants: bank switches, CHR RAM, nametables, IRQ timing."""
 
     def test_prg_banks(self):

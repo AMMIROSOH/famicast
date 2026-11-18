@@ -19,7 +19,7 @@ def run(*args):
 
 
 def write_log(path, frames, presses, reset_at=None):
-    """Write a recording the way runtime/input_log.c expects it."""
+    """Write a recording the way core/input_log.c expects it."""
     with open(path, "wb") as f:
         f.write(b"NESI\x01")
         for i in range(frames):

@@ -1,4 +1,4 @@
-"""Save states (runtime/nes.c): stopping, saving, loading and going on must
+"""Save states (nes/runtime/nes.c): stopping, saving, loading and going on must
 give exactly the run that never stopped; interpreter and recompiled builds
 share the format."""
 import os

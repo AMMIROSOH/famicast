@@ -13,29 +13,33 @@ Non-goals for now: netplay.
 ## Components
 ```
               build time (all driven by CMake)            run time
-ROM / .fds ─► nesrecomp (recomp/, C) ─► gen/<game>.c ─┐
-                decode, blocks, emit C, embed ROM     ├─► cc ─► <game>.exe
-games/<name>.toml (hints) ─┤        runtime/ ─────────┘          │
-trace: nes_headless --play --misses (interpreter) ┘              ▼
-                     ┌──────────────── runtime (C11) ─────────────────┐
+ROM / .fds ─► nesrecomp (nes/recomp/, C) ─► gen/<game>.c ─┐
+                decode, blocks, emit C, embed ROM         ├─► cc ─► <game>.exe
+nes/games/<name>.toml (hints) ─┤   nes/runtime/, core/ ───┘          │
+trace: nes_headless --play --misses (interpreter) ┘                   ▼
+                     ┌──────────── nes/runtime (C11) ──────────────────┐
                      │ dispatch (nes_step): pc → block function        │
                      │   └─ none → cpu_step, the interpreter           │
                      │ bus (nes.c): RAM, PPU/APU registers, cartridge, │
                      │   controllers, DMA                              │
                      │ ppu.c, apu.c, cart.c (mappers), fds.c           │
-                     │ platform/: SDL3 window, audio, gamepads, .ini   │
+                     ├─ nes/frontend.c: the NES as a system ───────────┤
+                     │ core/frontend/: SDL3 window, audio, gamepads,   │
+                     │   .ini, states, recordings (core/input_log.c)   │
                      └─────────────────────────────────────────────────┘
 ```
 
 | Part | Language | Notes |
 |------|----------|-------|
-| `recomp/` | C11 | `nesrecomp`, a build-time tool; also writes the interpreter's opcode switch |
-| `runtime/` | C11 | builds with clang/gcc/MSVC via CMake |
-| `runtime/platform/` | C11 + SDL3 (zlib) | SDL3 fetched by CMake or prebuilt; keyboard + gamepad |
+| `nes/recomp/` | C11 | `nesrecomp`, a build-time tool; also writes the interpreter's opcode switch |
+| `nes/runtime/` | C11 | builds with clang/gcc/MSVC via CMake |
+| `nes/frontend.c` | C11 + SDL3 | the NES behind `core/frontend/system.h` |
+| `core/frontend/` | C11 + SDL3 (zlib) | shared by every system; SDL3 fetched by CMake or prebuilt; keyboard + gamepad |
+| `core/` | C11 | input recordings and pad bits |
 | `tests/` | Python `unittest` + C test runners | test ROMs downloaded by script, not committed; the build does not need Python |
 
 ## CPU state and memory
-- `Cpu` (`runtime/cpu.h`): registers, P in the real 6502 layout
+- `Cpu` (`nes/runtime/cpu.h`): registers, P in the real 6502 layout
   (`C=0x01 Z=0x02 I=0x04 D=0x08 B=0x10 1=0x20 V=0x40 N=0x80`, so values
   pushed by PHP/BRK/NMI and pulled by PLP/RTI are exactly as on hardware),
   the cycle count, interrupt lines and polling state.
@@ -49,12 +53,12 @@ trace: nes_headless --play --misses (interpreter) ┘              ▼
   mapper IRQ), so every register access happens at the right dot.
 
 ## Recompiled code
-- **Decoder** (`recomp/analyze.c`): recursive descent from the reset/NMI/IRQ
-  vectors plus entry points from `games/<name>.toml` and traces.
+- **Decoder** (`nes/recomp/analyze.c`): recursive descent from the reset/NMI/IRQ
+  vectors plus entry points from `nes/games/<name>.toml` and traces.
   Instructions are keyed by address, so overlapping decodes are allowed.
-- **Blocks** (`recomp/emit.c`): one C function per basic block. Each
+- **Blocks** (`nes/recomp/emit.c`): one C function per basic block. Each
   instruction is the same C the interpreter's switch is generated from
-  (`recomp/c6502.c`), so bus traffic and cycle counts are identical by
+  (`nes/recomp/c6502.c`), so bus traffic and cycle counts are identical by
   construction; the recompiler removes fetch/decode/dispatch, and code
   bytes and PC values become constants. A `switch (c->pc)` at the top makes
   every instruction an entry point (resume after an interrupt without
@@ -121,7 +125,12 @@ load. Shortcut: the raw struct ties a state to one build layout; a
 field-wise format is needed once states must survive program updates.
 
 ## Frontend
-SDL3 window, audio and gamepads (`runtime/platform/`). The emulator runs
+SDL3 window, audio and gamepads (`core/frontend/`), the same for every
+system. A system plugs in through `core/frontend/system.h` (the NES:
+`nes/frontend.c`): it loads the game and its saves, runs a frame (input
+in, picture and sound out), saves and loads states, says why a game
+halted, and takes the keys and settings that are its own (NES: F6, region,
+overscan, sprite limit, FDS BIOS). The frontend does the rest. The emulator runs
 on its own thread, so window moves and device changes do not stall the
 sound. Settings come from `<program>.ini` next to the program
 (`settings.c`). Scaling is done by the frontend (fit, integer or stretch),
@@ -129,7 +138,7 @@ so the optional TV frame (`tv_frame.c`, drawn procedurally at 4x and
 filtered) and the picture (nearest-neighbour) scale together.
 
 ## The interpreter (`cpu_step`)
-A switch-based 6502 core (`runtime/cpu.c`, its switch generated by
+A switch-based 6502 core (`nes/runtime/cpu.c`, its switch generated by
 `nesrecomp --cpu-switch` from the same C as the recompiled code), sharing
 the `Cpu` struct and bus. It has three jobs:
 1. Run anything the recompiler did not see (jump tables, RAM code, missed
@@ -164,7 +173,7 @@ lockstep match proves that translation, block discovery and bank handling
 are right: the recompiled program does what the interpreter does. It cannot
 catch an instruction both get wrong. That rests on the interpreter's own
 checks: nestest, SingleStepTests (cycle-by-cycle bus traces) and the test
-ROMs (rungs 2, 3 and 6 below). The templates (recomp/c6502.c) never name
+ROMs (rungs 2, 3 and 6 below). The templates (nes/recomp/c6502.c) never name
 the PC in C: each use is a marker (operand fetch, read at the PC, its
 value, jump, branch), which the interpreter's switch expands to run-time C
 and the emitter to constants; a raw `c->pc` in a template stops the build,

@@ -1,4 +1,4 @@
-"""Test helpers that drive the C recompiler (build/nesrecomp, recomp/main.c):
+"""Test helpers that drive the C recompiler (build/nesrecomp, nes/recomp/main.c):
 its opcode table, iNES summary, and the instructions and blocks it emits,
 read back from the disassembly comments of the generated C."""
 import os
