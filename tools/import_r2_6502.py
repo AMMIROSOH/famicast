@@ -1,4 +1,4 @@
-"""Build tests/data/r2_6502.json from radare2's 6502 disassembler tables.
+"""Build tests/nes/data/r2_6502.json from radare2's 6502 disassembler tables.
 
 radare2 (LGPL-3.0) decodes 6502 in two steps (libr/arch/p/6502/6502dis.inc.c):
 its own list for the unofficial opcodes, then a fallback to the 65816 table
@@ -67,7 +67,7 @@ def main(r2_root):
         "_license": "LGPL-3.0 (radare2); data extracted by tools/import_r2_6502.py",
         "ops": rows,
     }
-    dst = os.path.join(os.path.dirname(__file__), "..", "tests", "data", "r2_6502.json")
+    dst = os.path.join(os.path.dirname(__file__), "..", "tests", "nes", "data", "r2_6502.json")
     with open(dst, "w", newline="\n") as f:
         json.dump(out, f, indent=1, sort_keys=True)
     print("wrote", os.path.normpath(dst))
