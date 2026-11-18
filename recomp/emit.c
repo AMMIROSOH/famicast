@@ -4,7 +4,7 @@
  * code for that opcode (c6502.c), so bus traffic and timing are identical by
  * construction; what the recompiler removes is fetch/decode/dispatch, and
  * with the address known, code bytes and PC values become constants
- * (static_body, M5b). Every instruction start is an entry point (the switch
+ * (expand, M5b). Every instruction start is an entry point (the switch
  * at the top), so execution can resume mid-block, e.g. after an RTI. After
  * each instruction the block returns if an interrupt is due, so interrupts
  * are taken on the same instruction as in the interpreter (this is what
@@ -58,30 +58,40 @@ static void disasm(char *out, size_t len, const Instr *i, const uint8_t *mem) {
     for (size_t n = strlen(out); n && out[n - 1] == ' '; n--) out[n - 1] = 0;
 }
 
-/* Rewrite one line for a known address: code fetches rd(c, c->pc[++])
- * become fetch_k() with the ROM byte as a constant, other reads of c->pc
- * (not assignments, not increments) become the constant PC. *fetched gets
- * bit k for each byte fetched at instruction offset k. */
-static void sub_pc(Buf *o, const char *s, uint16_t *pc, const uint8_t *mem, uint16_t at, unsigned *fetched) {
-    while (*s) {
-        if (!strncmp(s, "rd(c, c->pc++)", 14) || !strncmp(s, "rd(c, c->pc)", 12)) {
-            int inc = s[11] == '+';
+/* One template line (c6502.c markers) as C. With pc = NULL, the
+ * interpreter's C: the PC is read at run time. With pc = the address the
+ * next fetch reads: code fetches become fetch_k() with the ROM byte as a
+ * constant, the PC's value a constant; *fetched gets bit k for each byte
+ * fetched at instruction offset k from `at`, and @J sets *jump. */
+static void expand(Buf *o, const char *s, uint16_t *pc, const uint8_t *mem, uint16_t at, unsigned *fetched, int *jump) {
+    for (; *s; s++) {
+        if (*s != '@') { bprintf(o, "%c", *s); continue; }
+        switch (*++s) {
+        case 'F': case 'R':
+            if (!pc) { bprintf(o, *s == 'F' ? "rd(c, c->pc++)" : "rd(c, c->pc)"); break; }
             *fetched |= 1u << ((uint16_t)(*pc - at) & 15);
             bprintf(o, "fetch_k(c, 0x%04X, 0x%02X)", *pc, mem[*pc]);
-            if (inc) (*pc)++;
-            s += inc ? 14 : 12;
-        } else if (!strncmp(s, "c->pc", 5) && strncmp(s + 5, " =", 2) && strncmp(s + 5, "++", 2)) {
-            bprintf(o, "0x%04X", *pc);
-            s += 5;
-        } else {
-            bprintf(o, "%c", *s++);
+            if (*s == 'F') (*pc)++;
+            break;
+        case 'P': if (pc) bprintf(o, "0x%04X", *pc); else bprintf(o, "c->pc"); break;
+        case 'J': if (jump) *jump = 1; /* fall through */
+        case 'B': bprintf(o, "c->pc ="); break;
+        case 'I': bprintf(o, "c->pc++"); break;
+        default: fprintf(stderr, "nesrecomp: unknown template marker @%c\n", *s); exit(2);
         }
     }
 }
 
+static void plain(Buf *o, const char *indent, const char *line) {
+    bprintf(o, "%s", indent);
+    expand(o, line, NULL, NULL, 0, NULL, NULL);
+    bprintf(o, "\n");
+}
+
 /* The interpreter's C for `ins` with constants, as above, up to the first
- * assignment of a run-time value to c->pc (RTS/RTI). c->pc is preset to the
- * next instruction; control transfers overwrite it. Writes indented lines. */
+ * jump to a run-time value (RTS/RTI: @J; the right-hand side still sees the
+ * known PC). c->pc is preset to the next instruction; control transfers
+ * overwrite it. Writes indented lines. */
 static void static_body(Buf *o, const Instr *ins, const uint8_t *mem) {
     Lines l;
     body(ins->op, &l);
@@ -90,33 +100,20 @@ static void static_body(Buf *o, const Instr *ins, const uint8_t *mem) {
     unsigned fetched = 0;
     bprintf(o, "        c->pc = 0x%04X;\n", (uint16_t)(ins->pc + ins->size));
     for (int k = 0; k < l.n; k++) {
-        const char *line = l.s[k];
-        if (!*line) continue;
+        if (!*l.s[k]) continue;
+        if (dynamic) { plain(o, "        ", l.s[k]); continue; }
         bprintf(o, "        ");
-        const char *as = strstr(line, "c->pc = ");
-        int lhs_blank = as != NULL;
-        for (const char *p = line; as && p < as; p++) lhs_blank &= *p == ' ';
-        if (dynamic) {
-            bprintf(o, "%s", line);
-        } else if (lhs_blank) {  /* assignment: the right-hand side sees the old value */
-            bprintf(o, "%.*s", (int)(as - line) + 8, line);
-            sub_pc(o, as + 8, &pc, mem, ins->pc, &fetched);
-            dynamic = as == line;  /* top level (RTS/RTI); an indented one is a taken branch */
-        } else {
-            sub_pc(o, line, &pc, mem, ins->pc, &fetched);
-        }
+        expand(o, l.s[k], &pc, mem, ins->pc, &fetched, &dynamic);
         bprintf(o, "\n");
     }
-    /* sub_pc recognises operand fetches by their text. Every operand byte
-     * (offsets 1 to size-1) must have been fetched, and nothing past the
-     * next instruction's first byte (implied instructions read it as a
-     * dummy). If a change to the interpreter's instruction C writes a fetch
-     * another way, stop the build rather than emit code that reads the
-     * wrong bytes. */
+    /* Every operand byte (offsets 1 to size-1) must have been fetched, and
+     * nothing past the next instruction's first byte (implied instructions
+     * read it as a dummy). If a template changes that, stop the build
+     * rather than emit code that reads the wrong bytes. */
     unsigned need = ((1u << ins->size) - 1) & ~1u, allowed = (1u << (ins->size + 1)) - 2;
     if ((fetched & need) != need || (fetched & ~allowed)) {
-        fprintf(stderr, "nesrecomp: $%04X %s: the interpreter's C fetches offsets %X (bits), the instruction"
-                        " has %d bytes (emit.c sub_pc no longer matches cpu_ops.h)\n",
+        fprintf(stderr, "nesrecomp: $%04X %s: the template fetches offsets %X (bits), the instruction"
+                        " has %d bytes (recomp/c6502.c)\n",
                 ins->pc, ins->op->mn, fetched, ins->size);
         exit(2);
     }
@@ -130,7 +127,7 @@ static void dynamic_body(Buf *o, const Instr *ins) {
     bprintf(o, "        c->pc = 0x%04X;  /* operand in the next window: read at run time */\n",
             (uint16_t)(ins->pc + 1));
     for (int k = 0; k < l.n; k++)
-        if (*l.s[k]) bprintf(o, "        %s\n", l.s[k]);
+        if (*l.s[k]) plain(o, "        ", l.s[k]);
 }
 
 static int is_store(const Instr *i) {
@@ -371,7 +368,7 @@ void emit_cpu_switch(Buf *o) {
         body(&OPS[i], &l);
         bprintf(o, "case 0x%02X: { /* %s %s */\n", i, OPS[i].mn, OPS[i].mode);
         for (int k = 0; k < l.n; k++)
-            if (*l.s[k]) bprintf(o, "    %s\n", l.s[k]);
+            if (*l.s[k]) plain(o, "    ", l.s[k]);
         bprintf(o, "} break;\n");
     }
 }

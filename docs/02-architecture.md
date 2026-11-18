@@ -164,9 +164,12 @@ lockstep match proves that translation, block discovery and bank handling
 are right: the recompiled program does what the interpreter does. It cannot
 catch an instruction both get wrong. That rests on the interpreter's own
 checks: nestest, SingleStepTests (cycle-by-cycle bus traces) and the test
-ROMs (rungs 2, 3 and 6 below). The emitter finds operand fetches in that C
-by their text; it stops the build if an instruction's fetches stop matching
-its size, so a template change cannot silently read the wrong bytes.
+ROMs (rungs 2, 3 and 6 below). The templates (recomp/c6502.c) never name
+the PC in C: each use is a marker (operand fetch, read at the PC, its
+value, jump, branch), which the interpreter's switch expands to run-time C
+and the emitter to constants; a raw `c->pc` in a template stops the build,
+and so do fetches that stop matching the instruction's size, so a template
+change cannot silently read the wrong bytes.
 
 ## Verification ladder (each rung must pass before the next)
 1. Opcode table matches an independent table (all 256 entries: mnemonic, mode,

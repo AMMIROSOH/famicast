@@ -3,6 +3,23 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · Instruction templates: PC markers instead of text matching
+- **What**: c6502.c's templates name every use of the PC with a marker
+  (`@F` operand fetch, `@R` read at the PC, `@P` its value, `@I` step,
+  `@J` jump, `@B` taken branch); emit.c `expand` turns them into run-time
+  C (interpreter switch, operands in the next window) or constants
+  (recompiled blocks). Replaces `sub_pc`, which found `rd(c, c->pc++)` and
+  `c->pc = ` by their text.
+- **Same output**: `cpu_switch.inc` and the generated C of all 9 configured
+  programs (8 games and the FDS BIOS) are byte-identical to before.
+- **Mutations**: a literal `rd(c, c->pc++)` in a template stops nesrecomp
+  ("c->pc in a template"); an absolute-mode template that skips its high
+  byte fetch stops the build at the first such instruction. A high byte
+  read with `@R` instead of `@F` is right in recompiled code (the PC is
+  preset) and wrong in the interpreter, which the CPU tests catch.
+- **Tests**: as before; the 3 nestest tests could not download their log
+  (qmtpro.com's certificate has expired).
+
 ## 2026-11-18 · MMC5 vertical split ($5200-$5202)
 - **What**: tile columns on one side of $5200 & 31 take ExRAM as their
   nametable, their own Y scroll ($5201 + scanline, mod 240) and CHR bank

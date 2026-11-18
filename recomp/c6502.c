@@ -7,7 +7,16 @@
  * Every rd()/wr() is one CPU cycle, including the dummy reads and writes the
  * real 2A03 performs (sequences from 6502_cpu.txt / nesdev; checked cycle by
  * cycle against SingleStepTests). The opcode fetch is done by the caller.
- * Helpers (rd, wr, push, pull, op_*) live in runtime/cpu_ops.h. */
+ * Helpers (rd, wr, push, pull, op_*) live in runtime/cpu_ops.h.
+ *
+ * Every use of the PC is a marker, never C text, so a consumer that knows
+ * the instruction's address can make it a constant (emit.c expand):
+ *   @F  operand fetch        rd(c, c->pc++)
+ *   @R  read at the PC       rd(c, c->pc)
+ *   @P  the PC's value       c->pc
+ *   @I  step the PC          c->pc++
+ *   @J  jump                 c->pc =   (from the next line on the PC is a run-time value)
+ *   @B  taken branch         c->pc =   (the target, known from the offset) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,8 +27,12 @@ static void add(Lines *o, const char *fmt, ...) {
     if (o->n == MAX_LINES) { fprintf(stderr, "c6502: too many lines\n"); exit(1); }
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(o->s[o->n++], LINE_LEN, fmt, ap);
+    vsnprintf(o->s[o->n], LINE_LEN, fmt, ap);
     va_end(ap);
+    if (strstr(o->s[o->n++], "c->pc")) {  /* emit.c could not make it a constant */
+        fprintf(stderr, "c6502: c->pc in a template, use a marker: %s\n", o->s[o->n - 1]);
+        exit(1);
+    }
 }
 
 static int is(const char *mn, const char *list) {
@@ -61,25 +74,25 @@ static const char *const UNSTABLE[][2] = {
 };
 
 static const char *const SPECIAL[][12] = {
-    {"JSR", "uint16_t lo = rd(c, c->pc++);", "rd(c, 0x100 | c->s);",
-     "push(c, c->pc >> 8);", "push(c, c->pc & 0xFF);",
-     "c->pc = lo | rd(c, c->pc) << 8;"},
-    {"RTS", "rd(c, c->pc);", "rd(c, 0x100 | c->s);", "uint16_t lo = pull(c);",
-     "c->pc = lo | pull(c) << 8;", "rd(c, c->pc);", "c->pc++;"},
-    {"RTI", "rd(c, c->pc);", "rd(c, 0x100 | c->s);", "c->p = (pull(c) & ~FLAG_B) | FLAG_U;",
-     "uint16_t lo = pull(c);", "c->pc = lo | pull(c) << 8;"},
+    {"JSR", "uint16_t lo = @F;", "rd(c, 0x100 | c->s);",
+     "push(c, @P >> 8);", "push(c, @P & 0xFF);",
+     "@J lo | @R << 8;"},
+    {"RTS", "@R;", "rd(c, 0x100 | c->s);", "uint16_t lo = pull(c);",
+     "@J lo | pull(c) << 8;", "@R;", "@I;"},
+    {"RTI", "@R;", "rd(c, 0x100 | c->s);", "c->p = (pull(c) & ~FLAG_B) | FLAG_U;",
+     "uint16_t lo = pull(c);", "@J lo | pull(c) << 8;"},
     /* An NMI seen in BRK's first four cycles takes over its vector; B is still
      * pushed set. The sequence does not poll at its end, so the handler's first
      * instruction always runs (nesdev "CPU interrupts", cpu_interrupts_v2 2). */
-    {"BRK", "rd(c, c->pc++);", "push(c, c->pc >> 8);", "push(c, c->pc & 0xFF);",
+    {"BRK", "@F;", "push(c, @P >> 8);", "push(c, @P & 0xFF);",
      "uint16_t vec = c->nmi ? 0xFFFA : 0xFFFE;", "if (vec == 0xFFFA) c->nmi = 0;",
      "push(c, c->p | FLAG_B | FLAG_U);", "c->p |= FLAG_I;",
-     "uint16_t lo = rd(c, vec);", "c->pc = lo | rd(c, vec + 1) << 8;",
+     "uint16_t lo = rd(c, vec);", "@J lo | rd(c, vec + 1) << 8;",
      "c->poll_prev = 0;"},
-    {"PHA", "rd(c, c->pc);", "push(c, c->a);"},
-    {"PHP", "rd(c, c->pc);", "push(c, c->p | FLAG_B | FLAG_U);"},
-    {"PLA", "rd(c, c->pc);", "rd(c, 0x100 | c->s);", "c->a = pull(c);", "nz(c, c->a);"},
-    {"PLP", "rd(c, c->pc);", "rd(c, 0x100 | c->s);", "c->p = (pull(c) & ~FLAG_B) | FLAG_U;"},
+    {"PHA", "@R;", "push(c, c->a);"},
+    {"PHP", "@R;", "push(c, c->p | FLAG_B | FLAG_U);"},
+    {"PLA", "@R;", "rd(c, 0x100 | c->s);", "c->a = pull(c);", "nz(c, c->a);"},
+    {"PLP", "@R;", "rd(c, 0x100 | c->s);", "c->p = (pull(c) & ~FLAG_B) | FLAG_U;"},
     {"KIL", "c->jammed = 1;"},
 };
 
@@ -99,27 +112,27 @@ static void ea(Lines *o, const char *mode, int read) {
     const char *fix = read ? "if ((ea ^ base) & 0xFF00) rd(c, (base & 0xFF00) | (ea & 0xFF));"
                            : "rd(c, (base & 0xFF00) | (ea & 0xFF));";
     if (!strcmp(mode, "ZP")) {
-        add(o, "uint16_t ea = rd(c, c->pc++);");
+        add(o, "uint16_t ea = @F;");
     } else if (!strcmp(mode, "ZPX") || !strcmp(mode, "ZPY")) {
-        add(o, "uint8_t zp = rd(c, c->pc++);");
+        add(o, "uint8_t zp = @F;");
         add(o, "rd(c, zp);");
         add(o, "uint16_t ea = (uint8_t)(zp + c->%c);", mode[2] == 'X' ? 'x' : 'y');
     } else if (!strcmp(mode, "ABS")) {
-        add(o, "uint16_t ea = rd(c, c->pc++);");
-        add(o, "ea |= rd(c, c->pc++) << 8;");
+        add(o, "uint16_t ea = @F;");
+        add(o, "ea |= @F << 8;");
     } else if (!strcmp(mode, "ABX") || !strcmp(mode, "ABY")) {
-        add(o, "uint16_t base = rd(c, c->pc++);");
-        add(o, "base |= rd(c, c->pc++) << 8;");
+        add(o, "uint16_t base = @F;");
+        add(o, "base |= @F << 8;");
         add(o, "uint16_t ea = base + c->%c;", mode[2] == 'X' ? 'x' : 'y');
         add(o, "%s", fix);
     } else if (!strcmp(mode, "IZX")) {
-        add(o, "uint8_t zp = rd(c, c->pc++);");
+        add(o, "uint8_t zp = @F;");
         add(o, "rd(c, zp);");
         add(o, "zp += c->x;");
         add(o, "uint16_t ea = rd(c, zp);");
         add(o, "ea |= rd(c, (uint8_t)(zp + 1)) << 8;");
     } else if (!strcmp(mode, "IZY")) {
-        add(o, "uint8_t zp = rd(c, c->pc++);");
+        add(o, "uint8_t zp = @F;");
         add(o, "uint16_t base = rd(c, zp);");
         add(o, "base |= rd(c, (uint8_t)(zp + 1)) << 8;");
         add(o, "uint16_t ea = base + c->y;");
@@ -144,42 +157,42 @@ void body(const Op *op, Lines *o) {
          * interrupts that arrive during its last cycle (nesdev "CPU
          * interrupts", blargg cpu_interrupts_v2 5-branch_delays_irq). */
         add(o, "uint8_t poll1 = c->poll;");
-        add(o, "int8_t off = (int8_t)rd(c, c->pc++);");
+        add(o, "int8_t off = (int8_t)@F;");
         add(o, "if (%s) {", row[1]);
-        add(o, "    rd(c, c->pc);");
-        add(o, "    uint16_t t = c->pc + off;");
-        add(o, "    if ((t ^ c->pc) & 0xFF00) rd(c, (c->pc & 0xFF00) | (t & 0xFF));");
+        add(o, "    @R;");
+        add(o, "    uint16_t t = @P + off;");
+        add(o, "    if ((t ^ @P) & 0xFF00) rd(c, (@P & 0xFF00) | (t & 0xFF));");
         add(o, "    else c->poll_prev = poll1;");
-        add(o, "    c->pc = t;");
+        add(o, "    @B t;");
         add(o, "}");
         return;
     }
     if (!strcmp(mn, "JMP")) {
         if (!strcmp(mode, "ABS")) {
-            add(o, "uint16_t lo = rd(c, c->pc++);");
-            add(o, "c->pc = lo | rd(c, c->pc) << 8;");
+            add(o, "uint16_t lo = @F;");
+            add(o, "@J lo | @R << 8;");
         } else {
-            add(o, "uint16_t ptr = rd(c, c->pc++);");
-            add(o, "ptr |= rd(c, c->pc++) << 8;");
+            add(o, "uint16_t ptr = @F;");
+            add(o, "ptr |= @F << 8;");
             add(o, "uint16_t lo = rd(c, ptr);");
-            add(o, "c->pc = lo | rd(c, (ptr & 0xFF00) | ((ptr + 1) & 0xFF)) << 8;");  /* page-wrap bug */
+            add(o, "@J lo | rd(c, (ptr & 0xFF00) | ((ptr + 1) & 0xFF)) << 8;");  /* page-wrap bug */
         }
         return;
     }
     if (!strcmp(mode, "IMP")) {
-        add(o, "rd(c, c->pc);");
+        add(o, "@R;");
         add(o, "%s", FIND(IMPLIED, mn)[1]);
         return;
     }
     if (!strcmp(mode, "ACC")) {
-        add(o, "rd(c, c->pc);");
+        add(o, "@R;");
         add(o, "c->a = op_%s(c, c->a);", mn);
         return;
     }
     if (is(mn, READ)) {
         const char *fn = !strcmp(mn, "LAX") && !strcmp(mode, "IMM") ? "LXA" : mn;
         if (!strcmp(mode, "IMM")) {
-            add(o, "op_%s(c, rd(c, c->pc++));", fn);
+            add(o, "op_%s(c, @F);", fn);
             return;
         }
         ea(o, mode, 1);
