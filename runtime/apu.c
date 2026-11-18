@@ -199,11 +199,18 @@ static void dmc_clock(Apu *a) {
     }
 }
 
+/* a silent pulse or noise channel: its timer steps leave mix() unchanged */
+static int env_volume(const Envelope *e) { return e->constant ? e->period : e->decay; }
+
 static void timers(Apu *a) {
     if (a->cycle & 1) {  /* pulse timers run on APU cycles (every other CPU cycle) */
         for (int i = 0; i < 2; i++) {
             Pulse *p = &a->pulse[i];
-            if (p->timer == 0) { p->timer = p->period; p->seq = (p->seq + 1) & 7; a->mix_dirty = 1; }
+            if (p->timer == 0) {
+                p->timer = p->period;
+                p->seq = (p->seq + 1) & 7;
+                if (p->len && env_volume(&p->env)) a->mix_dirty = 1;
+            }
             else p->timer--;
         }
     }
@@ -219,13 +226,14 @@ static void timers(Apu *a) {
         n->timer = n->period;
         uint16_t fb = (n->lfsr ^ (n->lfsr >> (n->mode ? 6 : 1))) & 1;
         n->lfsr = (uint16_t)(n->lfsr >> 1 | fb << 14);
-        a->mix_dirty = 1;
+        if (n->len && env_volume(&n->env)) a->mix_dirty = 1;
     }
     Dmc *d = &a->dmc;
     if (--d->timer == 0) {
         d->timer = d->period;
+        uint8_t level = d->level;
         dmc_clock(a);
-        a->mix_dirty = 1;
+        if (d->level != level) a->mix_dirty = 1;
     }
 }
 
@@ -643,8 +651,51 @@ static void vrc7_clock(Apu *a) {
     if (!s->silent) vrc7_sample(a);
 }
 
+/* How many of the next cycles (up to target) change nothing but timer
+ * counts, the frame counter's count and the output sum: no timer reaching
+ * its event, no frame counter step, no output sample, mixer up to date.
+ * 0 with expansion sound (its own per-cycle clocks). */
+static int64_t quiet_cycles(const Apu *a, uint64_t target) {
+    if (a->mix_dirty || a->fc_delay || a->has_mmc5 || a->has_5b || a->has_vrc6 || a->has_vrc7 || a->has_fds ||
+        (a->cart && a->cart->n163_sound))
+        return 0;
+    /* e: the first of the next cycles (1 = the next one) with an event */
+    int64_t e = (int64_t)(target - a->cycle) + 1;
+    int64_t first_odd = (a->cycle + 1) & 1 ? 1 : 2;  /* pulses tick on odd cycles */
+    for (int i = 0; i < 2; i++) {
+        int64_t p = first_odd + 2 * (int64_t)a->pulse[i].timer;  /* the tick that finds 0 */
+        if (p < e) e = p;
+    }
+    if (a->tri.timer + 1 < e) e = a->tri.timer + 1;
+    if (a->noise.timer < e) e = a->noise.timer ? a->noise.timer : 1;  /* --timer == 0 */
+    if (a->dmc.timer < e) e = a->dmc.timer ? a->dmc.timer : 1;
+    const int32_t *s = FC_STEP[a->pal];
+    int32_t steps[6] = {s[0], s[1], s[2], a->fc_mode ? s[4] : s[3], a->fc_mode ? 1 : s[3] + 1, s[3] + 2};
+    for (int i = 0; i < 6; i++)
+        if (steps[i] > a->fc_count && steps[i] - a->fc_count < e) e = steps[i] - a->fc_count;
+    if (a->fc_count < 0) e = 1;  /* not expected; let the slow path handle it */
+    int64_t sample = (a->cpu_hz - a->frac + APU_SAMPLE_RATE - 1) / APU_SAMPLE_RATE;  /* frac crosses cpu_hz */
+    if (sample < e) e = sample;
+    return e - 1;
+}
+
 void apu_run(Apu *a, uint64_t target) {
     while (a->cycle < target) {
+        int64_t k = quiet_cycles(a, target);
+        if (k > 0) {  /* what k one-cycle steps below would do */
+            int ticks = (int)((a->cycle + k + 1) / 2 - (a->cycle + 1) / 2);  /* odd cycles in (cycle, cycle + k] */
+            a->pulse[0].timer = (uint16_t)(a->pulse[0].timer - ticks);
+            a->pulse[1].timer = (uint16_t)(a->pulse[1].timer - ticks);
+            a->tri.timer = (uint16_t)(a->tri.timer - k);
+            a->noise.timer = (uint16_t)(a->noise.timer - k);
+            a->dmc.timer = (uint16_t)(a->dmc.timer - k);
+            a->fc_count += (int32_t)k;
+            for (int64_t i = 0; i < k; i++) a->acc += a->mix_last;  /* one add per cycle: the same sum */
+            a->acc_n += (int)k;
+            a->frac += APU_SAMPLE_RATE * k;
+            a->cycle += (uint64_t)k;
+            continue;
+        }
         a->cycle++;
         frame_counter(a);
         timers(a);

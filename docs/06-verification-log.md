@@ -3,6 +3,28 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · Profiling: PPU and APU fast paths (bit-identical)
+- **Profile** (a sampling profiler on a /Zi Release build, recompiled Air
+  Fortress): PPU ~70%, APU ~20%, recompiled game code ~5%.
+- **Changes**: APU: runs of cycles with no timer event, frame counter step
+  or output sample are stepped at once (`quiet_cycles`; one float add per
+  cycle stays, so the sums are the same); silent pulse/noise steps and DMC
+  steps that leave the level no longer recompute the mixer. PPU: visible
+  lines a tile (8 dots) at a time: the four fetches at their dots, then 8
+  pixels; for background-only tiles the 8 palette indices come from a
+  table in one 64-bit word (SWAR); cartridges no mapper watches fetch
+  nametables and CHR directly; sprite evaluation in its own loop, with
+  off-line sprites two dots per step and nothing after the 64th; dots
+  258-320 (sprite fetches) skip ppu_step's checks.
+- **Same output**: frame and audio hashes (`--play 1/2`, 2,000-3,000
+  frames) unchanged for 27 games (mappers 0, 1, 2, 3, 4, 5, 7, 23, 69, 71,
+  FDS) against the build before; test suite as before; Zelda no Densetsu
+  `--diff` identical.
+- **Speed** (20,000 frames): Air Fortress 16.3x -> 33.1x real time
+  interpreted, 17.2x -> 34.8x recompiled (Mesen2's test runner: 6.3x).
+  Zelda no Densetsu 15.8x -> 23.5x interpreted, 14.6x -> 20.7x recompiled
+  (still slower than the interpreter: the RAM checks).
+
 ## 2026-11-18 · Speed, and FDS denormals
 - **FDS 2.5x slower than NES games**: Zelda no Densetsu ran 6,000 frames
   in 15.7 s in the interpreter (Air Fortress: 6.1 s), the recompiled build
