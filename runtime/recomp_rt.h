@@ -15,7 +15,7 @@ typedef void (*RecompFn)(Cpu *c);
 /* Code recompiled from a file of a Famicom Disk System disk: it runs from
  * RAM, where other files may be loaded later, so a block runs only while RAM
  * holds the bytes it was made from (checked on entry, and after stores that
- * could change them). */
+ * could change them); if not, it returns without running anything. */
 typedef struct {
     RecompFn fn;
     const uint8_t *bytes;

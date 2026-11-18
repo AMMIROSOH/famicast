@@ -3,6 +3,22 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · FDS: one RAM check per block, O(1) RAM lookup
+- **Profile** (recompiled Zelda no Densetsu): `ram_lookup` 12.7% (a binary
+  search over ~10,000 entries on every dispatch; MSVC has no musttail, so
+  every block returns to the dispatcher), the APU with FDS sound ~35%.
+- **Changes**: a block's entry check is the only RAM check where one file
+  has code at the address (a block that finds other code returns without
+  running; the dispatcher then interprets); an address -> first entry
+  index built once replaces the binary search.
+- **Result**: Zelda recompiled 20.7x -> 23.9x real time (interpreted
+  23.1x); `--diff` identical on its own disk (6,000 frames, 99.4%) and on
+  Metroid's (3,000 frames: blocks refusing other code).
+- **Not done**: the FDS channel and its low-pass every cycle (most of the
+  APU's share for FDS games). Skipping it while silent gained nothing in
+  Zelda (its channel plays); cheaper filter math would change the output
+  bits.
+
 ## 2026-11-18 · Profiling: PPU and APU fast paths (bit-identical)
 - **Profile** (a sampling profiler on a /Zi Release build, recompiled Air
   Fortress): PPU ~70%, APU ~20%, recompiled game code ~5%.

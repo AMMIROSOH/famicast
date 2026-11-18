@@ -259,8 +259,10 @@ M11 (Famicom Disk System, interpreter):
   file on the disk loaded from $0200 is its own region; entries come from
   traces, whose RAM misses carry the instruction's bytes to tell the file
   (`ram` hints: [file FNV-1a, address]). A block runs only while RAM holds
-  its bytes: checked by the dispatcher (`ram_lookup`), on entry (chains),
-  and after stores that may hit the block. 6 games identical in `--diff`,
+  its bytes: checked on entry (a block that finds other code returns
+  without running, and the dispatcher interprets), by `ram_lookup` only
+  where several files have code at the address, and after stores that may
+  hit the block. 6 games identical in `--diff`,
   98.7-99.8% recompiled (06).
 - [x] CMake options renamed: `ROMS`, `EMBED_ROM`, `AUTO_HINTS(_FRAMES)`,
   `FRONTEND`, `SDL3_PREFIX` (old `NES_*` cache values carry over).

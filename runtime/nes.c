@@ -381,15 +381,26 @@ static void fds_disk_check(Nes *n) {
     cart_fds_check(&n->cart, id);
 }
 
-/* FDS disk files' code: the first block made from what RAM holds at pc */
+/* FDS disk files' code: the block made from what RAM holds at pc. A block
+ * checks RAM itself on entry (and returns without running if it differs),
+ * so only where several files have code at pc is RAM compared here. */
 static RecompFn ram_lookup(const Cpu *c) {
     const RecompProgram *p = recomp_program;
-    size_t lo = 0, hi = p->ram_entries_n;
-    while (lo < hi) {
-        size_t mid = (lo + hi) / 2;
-        if (p->ram_entries[mid].pc < c->pc) lo = mid + 1;
-        else hi = mid;
+    /* first[a]: the first entry at address a or later (ram_entries is sorted) */
+    static uint32_t first[0x10001];
+    static int built;
+    if (!built) {
+        size_t e = 0;
+        for (uint32_t a = 0; a <= 0x10000; a++) {
+            while (e < p->ram_entries_n && p->ram_entries[e].pc < a) e++;
+            first[a] = (uint32_t)e;
+        }
+        built = 1;
     }
+    size_t lo = first[c->pc];
+    if (lo < p->ram_entries_n && p->ram_entries[lo].pc == c->pc &&
+        (lo + 1 == p->ram_entries_n || p->ram_entries[lo + 1].pc != c->pc))
+        return p->ram_blocks[p->ram_entries[lo].block].fn;  /* the only one */
     for (; lo < p->ram_entries_n && p->ram_entries[lo].pc == c->pc; lo++) {
         const RecompRamBlock *b = &p->ram_blocks[p->ram_entries[lo].block];
         if (recomp_ram_is(c, b->start, b->bytes, b->len)) return b->fn;
@@ -423,9 +434,11 @@ void nes_step(Nes *n) {
         if (!f && recomp_program->ram_entries_n) f = ram_lookup(c);
         if (f) {
             f(c);
-            n->steps_native++;
-            n->cycles_native += c->cycles - before;
-            return;
+            if (c->cycles != before) {  /* else a disk file's block found other code in RAM */
+                n->steps_native++;
+                n->cycles_native += c->cycles - before;
+                return;
+            }
         }
     }
     int kind = c->poll_prev ? FALLBACK_INTERRUPT : nes_miss_slot(n, c->pc) < 0x8000 ? FALLBACK_RAM : FALLBACK_ROM;
