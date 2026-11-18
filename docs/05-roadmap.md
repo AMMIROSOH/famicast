@@ -21,6 +21,12 @@ only when that test passes in CI.
 | [M11](#m11--famicom-disk-system) | Famicom Disk System, recompiled | done (2 unlicensed disks open) |
 | [Speed](#speed-passes) | Profiling passes | ongoing |
 | [Stretch](#stretch) | JIT, analysis build, native backend | open |
+| [G1](#g1--sm83-cpu) | Game Boy: SM83 CPU from templates, interpreter | done |
+| [G2](#g2--memory-timer-cartridges) | Game Boy: memory map, timer, interrupts, MBC1/2/3/5 | open |
+| [G3](#g3--ppu-and-frontend) | Game Boy: PPU, the window program (core/frontend) | open |
+| [G4](#g4--apu) | Game Boy: sound | open |
+| [G5](#g5--recompiler) | Game Boy: recompiler, lockstep diff | open |
+| [G6](#g6--game-boy-color) | Game Boy Color | open |
 
 ## Layout
 ```
@@ -30,6 +36,7 @@ retrocast/
   core/                    shared by every system
     input_log.c            input recordings, pad bits
     frontend/              sdl3_main.c settings.c tv_frame.c, system.h (a system's interface)
+    recomp/                template.c: instruction templates, PC markers (every recompiler)
   nes/                     the NES and the Famicom Disk System
     CMakeLists.txt         nes_recompile(), nes, nes_headless, nesrecomp
     recomp/                nesrecomp: ops.c (opcode table), c6502.c (C per opcode),
@@ -41,6 +48,11 @@ retrocast/
     frontend.c             the NES for core/frontend (system.h)
     tests/                 cpu_tests.c nes_headless.c
     games/<name>.toml      per-game hints (entry points, banked entries; fds.toml: the BIOS)
+  gb/                      the Game Boy (so far the SM83 CPU)
+    CMakeLists.txt         gbrecomp, gbcpu, gb_cpu_tests
+    recomp/                gbrecomp: sm83.c (C per opcode), main.c
+    runtime/               cpu.h cpu_ops.h cpu.c
+    tests/                 cpu_tests.c (SingleStepTests sm83)
   tests/                   Python unittest suite, fetch_test_roms.py
   tools/                   bench.py, smoke_games.py, import_r2_6502.py, make_release.py
   dist/                    README.txt for the release archives
@@ -320,6 +332,41 @@ Found by sampling profiles; each keeps the output identical (06).
   17.2x → 34.8x recompiled, Zelda no Densetsu 14.6x → 23.9x.
 - [ ] FDS sound costs the most in FDS games (its channel and low-pass every
   cycle); cheaper filter math would change the output bits.
+
+## Game Boy
+Same order as the NES: the reference interpreter first, checked against
+independent tests, then the system, then the recompiler. Shared code goes
+to `core/` when the Game Boy is its second user (`docs/02` "Frontend").
+
+### G1 · SM83 CPU
+- [x] Instruction templates from the opcode bit fields (`gb/recomp/sm83.c`),
+  with the NES's PC markers, now in `core/recomp/template.c` (the NES
+  recompiler uses them from there too).
+- [x] `gbrecomp --cpu-switch`: the interpreter's switch (both tables, CB
+  nested); `gb/runtime/cpu.c`, one M-cycle per bus access or internal cycle.
+- [x] **Exit:** SingleStepTests sm83, all 500 opcode files (registers, RAM,
+  every M-cycle; HALT and STOP registers and RAM only). Met.
+
+### G2 · Memory, timer, cartridges
+- [ ] Memory map, IE/IF and interrupt entry, HALT (and its bug), DIV/TIMA,
+  joypad, OAM DMA; MBC1, MBC2, MBC3 (with the clock), MBC5; battery saves.
+- [ ] **Exit:** blargg `cpu_instrs` and `instr_timing`, mooneye timer tests.
+
+### G3 · PPU and frontend
+- [ ] Background, window, sprites, the mode timing and STAT interrupts; the
+  Game Boy behind `core/frontend/system.h` (160 x 144, 59.73 Hz).
+- [ ] **Exit:** dmg-acid2; games from the set boot to play.
+
+### G4 · APU
+- [ ] Two pulses, wave, noise; frame sequencer.
+- [ ] **Exit:** blargg `dmg_sound`.
+
+### G5 · Recompiler
+- [ ] Decoding, banks (MBCs), blocks from the templates, auto hints,
+  lockstep diff against the interpreter.
+
+### G6 · Game Boy Color
+- [ ] Double speed, VRAM/WRAM banks, palettes, HDMA.
 
 ## Stretch
 - JIT for code in RAM or found at run time. With play-to-recompile and auto

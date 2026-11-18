@@ -4,7 +4,7 @@
  * code for that opcode (c6502.c), so bus traffic and timing are identical by
  * construction; what the recompiler removes is fetch/decode/dispatch, and
  * with the address known, code bytes and PC values become constants
- * (expand, M5b). Every instruction start is an entry point (the switch
+ * (template_expand, M5b). Every instruction start is an entry point (the switch
  * at the top), so execution can resume mid-block, e.g. after an RTI. After
  * each instruction the block returns if an interrupt is due, so interrupts
  * are taken on the same instruction as in the interpreter (this is what
@@ -15,20 +15,6 @@
 
 #include "recomp.h"
 
-void bprintf(Buf *b, const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    int n = vsnprintf(NULL, 0, fmt, ap);
-    va_end(ap);
-    if (b->len + (size_t)n + 1 > b->cap) {
-        b->cap = (b->len + (size_t)n + 1) * 2;
-        b->s = realloc(b->s, b->cap);
-    }
-    va_start(ap, fmt);
-    vsnprintf(b->s + b->len, (size_t)n + 1, fmt, ap);
-    va_end(ap);
-    b->len += (size_t)n;
-}
 
 uint32_t fnv1a(const uint8_t *d, size_t n) {
     uint32_t h = 2166136261u;
@@ -58,36 +44,6 @@ static void disasm(char *out, size_t len, const Instr *i, const uint8_t *mem) {
     for (size_t n = strlen(out); n && out[n - 1] == ' '; n--) out[n - 1] = 0;
 }
 
-/* One template line (c6502.c markers) as C. With pc = NULL, the
- * interpreter's C: the PC is read at run time. With pc = the address the
- * next fetch reads: code fetches become fetch_k() with the ROM byte as a
- * constant, the PC's value a constant; *fetched gets bit k for each byte
- * fetched at instruction offset k from `at`, and @J sets *jump. */
-static void expand(Buf *o, const char *s, uint16_t *pc, const uint8_t *mem, uint16_t at, unsigned *fetched, int *jump) {
-    for (; *s; s++) {
-        if (*s != '@') { bprintf(o, "%c", *s); continue; }
-        switch (*++s) {
-        case 'F': case 'R':
-            if (!pc) { bprintf(o, *s == 'F' ? "rd(c, c->pc++)" : "rd(c, c->pc)"); break; }
-            *fetched |= 1u << ((uint16_t)(*pc - at) & 15);
-            bprintf(o, "fetch_k(c, 0x%04X, 0x%02X)", *pc, mem[*pc]);
-            if (*s == 'F') (*pc)++;
-            break;
-        case 'P': if (pc) bprintf(o, "0x%04X", *pc); else bprintf(o, "c->pc"); break;
-        case 'J': if (jump) *jump = 1; /* fall through */
-        case 'B': bprintf(o, "c->pc ="); break;
-        case 'I': bprintf(o, "c->pc++"); break;
-        default: fprintf(stderr, "nesrecomp: unknown template marker @%c\n", *s); exit(2);
-        }
-    }
-}
-
-static void plain(Buf *o, const char *indent, const char *line) {
-    bprintf(o, "%s", indent);
-    expand(o, line, NULL, NULL, 0, NULL, NULL);
-    bprintf(o, "\n");
-}
-
 /* The interpreter's C for `ins` with constants, as above, up to the first
  * jump to a run-time value (RTS/RTI: @J; the right-hand side still sees the
  * known PC). c->pc is preset to the next instruction; control transfers
@@ -101,9 +57,9 @@ static void static_body(Buf *o, const Instr *ins, const uint8_t *mem) {
     bprintf(o, "        c->pc = 0x%04X;\n", (uint16_t)(ins->pc + ins->size));
     for (int k = 0; k < l.n; k++) {
         if (!*l.s[k]) continue;
-        if (dynamic) { plain(o, "        ", l.s[k]); continue; }
+        if (dynamic) { template_plain(o, "        ", l.s[k]); continue; }
         bprintf(o, "        ");
-        expand(o, l.s[k], &pc, mem, ins->pc, &fetched, &dynamic);
+        template_expand(o, l.s[k], &pc, mem, ins->pc, &fetched, &dynamic);
         bprintf(o, "\n");
     }
     /* Every operand byte (offsets 1 to size-1) must have been fetched, and
@@ -127,7 +83,7 @@ static void dynamic_body(Buf *o, const Instr *ins) {
     bprintf(o, "        c->pc = 0x%04X;  /* operand in the next window: read at run time */\n",
             (uint16_t)(ins->pc + 1));
     for (int k = 0; k < l.n; k++)
-        if (*l.s[k]) plain(o, "        ", l.s[k]);
+        if (*l.s[k]) template_plain(o, "        ", l.s[k]);
 }
 
 static int is_store(const Instr *i) {
@@ -368,7 +324,7 @@ void emit_cpu_switch(Buf *o) {
         body(&OPS[i], &l);
         bprintf(o, "case 0x%02X: { /* %s %s */\n", i, OPS[i].mn, OPS[i].mode);
         for (int k = 0; k < l.n; k++)
-            if (*l.s[k]) plain(o, "    ", l.s[k]);
+            if (*l.s[k]) template_plain(o, "    ", l.s[k]);
         bprintf(o, "} break;\n");
     }
 }

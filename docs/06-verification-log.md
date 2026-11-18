@@ -3,6 +3,24 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-19 · Game Boy G1: SM83 CPU
+- **What**: `gb/recomp/sm83.c` writes each opcode's C from its bit fields
+  with the PC markers; `gbrecomp --cpu-switch` makes the interpreter's
+  switch (`gb/runtime/cpu.c`). The template helpers (lines, markers, their
+  expansion) moved to `core/recomp/template.c`; nesrecomp uses them too.
+- **SingleStepTests sm83** (`python tests/fetch_test_roms.py --sst-sm83`,
+  `tests/test_gb_cpu.py`): all 500 files, 1,000 tests each, pass on
+  registers, IME and the EI delay, RAM, and every M-cycle (kind, address,
+  value); HALT and STOP on registers and RAM only.
+- **Mutations**: ADC without the carry in the half-carry fails ADC A,(HL)
+  (8E: "f = 0, want 20"); PUSH writing low before high fails C5 (RAM);
+  LD HL,SP+e without its internal cycle fails F8 ("2 cycles, want 3").
+- **NES unchanged**: nesrecomp from main and from this branch, same
+  arguments, every 50th NES archive and every 200th FDS disk: 83 of 83
+  identical (72 programs, 11 refused alike); `cpu_switch.inc` identical.
+- **Not checked yet**: interrupt entry (`gb_cpu_interrupt`) and HALT
+  waking need the system (G2).
+
 ## 2026-11-18 · Layout: core/ and nes/, the frontend behind system.h
 - **What**: the NES code moved to `nes/` (recomp/, runtime/, tests/,
   games/, its own CMakeLists.txt); `core/` holds what other systems will

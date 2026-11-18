@@ -8,6 +8,7 @@
 add_executable(nesrecomp recomp/main.c recomp/ops.c recomp/c6502.c recomp/analyze.c
     recomp/emit.c runtime/cart.c runtime/fds.c)
 target_include_directories(nesrecomp PRIVATE runtime)
+target_link_libraries(nesrecomp PRIVATE recomp_template)
 
 # WORKING_DIRECTORY on custom commands that run our programs: without it the
 # Visual Studio generator writes a bare "nesrecomp.exe" (relative to build/),

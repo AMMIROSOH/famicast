@@ -46,6 +46,9 @@ plans in [docs/05-roadmap.md](docs/05-roadmap.md).
   most of the time, so recompiling gains little over the interpreter here.
 - **Frontend**: save states, input recordings, fullscreen and scaling
   options, an optional TV frame.
+- **Game Boy**: started. The SM83 CPU passes SingleStepTests sm83 (every
+  opcode, cycle by cycle); no games run yet
+  ([roadmap](docs/05-roadmap.md#game-boy)).
 
 ## Mappers
 The mapper is the cartridge's banking hardware; the iNES header names it.
