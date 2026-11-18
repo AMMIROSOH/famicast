@@ -35,8 +35,8 @@ retrocast/
     recomp/          gbrecomp: sm83.c (C per opcode), recomp.c (regions, blocks)
     runtime/         CPU, bus (gb.c), PPU, APU, cartridges; recomp_rt.h
     frontend.c, tests/
-  tests/             Python unittest suite for every system, fetch_test_roms.py
-  tools/             bench.py, smoke_games.py, make_release.py, ...
+  tests/             Python unittest suite: nes/, gb/ per system; fetch_test_roms.py, shared helpers
+  tools/             bench.py, smoke_games.py, make_release.py, ci_systems.py, ...
   dist/              README.txt for the release archives
   docs/              this: what is shared
 ```
@@ -143,4 +143,4 @@ TV frame (`tv_frame.c`) and the picture scale together.
 6. The system's test ROMs (blargg, mooneye, acid2 and others) pass in the
    interpreter build.
 7. Frame-hash regression for the recompiled games in a build (NES:
-   `tests/test_regression.py`).
+   `tests/nes/test_regression.py`).

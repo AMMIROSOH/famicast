@@ -7,7 +7,8 @@ import tempfile
 import unittest
 
 from tests.games import BATTLE_CITY, find_rom
-from tests.test_roms import RUNNER
+from tests.nes.test_roms import RUNNER
+from tests.games import built
 
 START, SELECT, A = 0x08, 0x04, 0x01
 PRESSES = [(300, START), (700, START), (760, 0x10), (800, A)]  # menu, game, up, fire
@@ -30,7 +31,7 @@ def write_log(path, frames, presses, reset_at=None):
             f.write(struct.pack("BBB", pad, 0, 1 if i == reset_at else 0))
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestInput(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

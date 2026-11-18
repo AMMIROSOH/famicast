@@ -2,8 +2,8 @@
  *
  * Laid out as 16x16 grids (row = high nibble, column = low nibble), the same
  * shape as the nesdev wiki "CPU unofficial opcodes" matrix, so it can be
- * checked by eye. Checked by tests/test_ops.py against radare2's tables
- * (tests/data/r2_6502.json); cycle counts against nestest.log and the
+ * checked by eye. Checked by tests/nes/test_ops.py against radare2's tables
+ * (tests/nes/data/r2_6502.json); cycle counts against nestest.log and the
  * SingleStepTests suite (nes/docs/verification-log.md, M2).
  *
  * Unofficial names follow nesdev/nestest: SLO RLA SRE RRA SAX LAX DCP ISB ANC

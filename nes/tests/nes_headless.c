@@ -1,4 +1,4 @@
-/* Headless NES runner for tests (driven by tests/test_roms.py and others).
+/* Headless NES runner for tests (driven by tests/nes/test_roms.py and others).
  *
  *   nes_headless [ROM] [--frames N] [--blargg] [--peek ADDR] [--ppm FILE] [--hash]
  *                      [--press F:MASK]... [--record FILE] [--replay FILE] [--play SEED]

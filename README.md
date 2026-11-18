@@ -60,7 +60,8 @@ Builds are **Release**; tests, timings and full-speed play assume it. Keep
 without it `cmake --build` builds Debug, which is too slow to play.
 Ninja and Makefiles ignore the flag and build Release anyway. Programs are
 put in `build/` with every generator (no `Release/` or `Debug/` subfolder).
-Headless (no SDL3): add `-DFRONTEND=OFF`. On Windows the game programs open
+Headless (no SDL3): add `-DFRONTEND=OFF`. Only some systems:
+`-DSYSTEMS=gb` (default `nes;gb`). Warnings as errors: `-DWERROR=ON`. On Windows the game programs open
 no console window; use the `_headless` programs for text output.
 
 ## Recompiling a game
@@ -123,11 +124,19 @@ Each system adds its own keys and settings (its README).
 ```
 python tests/fetch_test_roms.py            # public test ROMs (also run by the tests on demand)
 python tests/fetch_test_roms.py --sst      # optional: ~1 GB, per-opcode CPU tests (--sst-sm83: Game Boy)
-python -m unittest discover -s tests -t .
+python -m unittest discover -s tests -t .          # everything; one system: -s tests/gb
 ```
-No Python packages needed. CPU tests need the C build; SingleStepTests
-files not downloaded are skipped. Tests for recompiled games run for the
-games the build was configured with and are skipped otherwise.
+No Python packages needed. Tests are grouped by system (`tests/nes/`,
+`tests/gb/`; shared helpers in `tests/`). CPU tests need the C build;
+SingleStepTests files not downloaded are skipped (`NES_SST_REQUIRED=1`,
+`GB_SST_REQUIRED=1` make them fail instead), and so are tests whose program
+was not built (`RETROCAST_STRICT=1`: fail). Tests for recompiled games run
+for the games the build was configured with and are skipped otherwise.
+
+CI (`.github/workflows/ci.yml`) builds and tests only the systems a change
+touches (`tools/ci_systems.py`; shared code means all of them) with GCC,
+Clang and MSVC, warnings as errors, plus the window programs; test data is
+kept in the Actions cache. The required check is `ci-ok`.
 
 ## Docs
 | File | Content |

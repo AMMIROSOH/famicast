@@ -54,7 +54,7 @@ first-hand yet; check them before relying on the detail.
 ## Disassemblers used as an independent check
 - **radare2** (LGPL-3.0), `libr/arch/p/6502` + `libr/arch/p/snes/optable.h`.
   Its 6502 decoder = own list of unofficial opcodes, falling back to the 65816
-  table in 8-bit mode. We extract it into `tests/data/r2_6502.json`
+  table in 8-bit mode. We extract it into `tests/nes/data/r2_6502.json`
   (`tools/import_r2_6502.py`) and compare our table to it. It agrees on
   254/256 opcodes; the two differences are radare2 mistakes (see 06).
   radare2's code analysis cannot resolve the jumps that really hurt static

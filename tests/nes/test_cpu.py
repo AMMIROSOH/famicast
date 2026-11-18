@@ -9,10 +9,11 @@ import re
 import subprocess
 import unittest
 
-from tests.nesrecomp import BUILT, ops
+from tests.nes.nesrecomp import BUILT, ops
 from tests.fetch_test_roms import ROMS, fetch
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from tests.games import ROOT  # noqa: E402
+from tests.games import built
 BUILD = os.environ.get("NES_BUILD", os.path.join(ROOT, "build"))
 RUNNER = os.path.join(BUILD, "cpu_tests.exe" if os.name == "nt" else "cpu_tests")
 LOG_STATE = re.compile(r"^([0-9A-F]{4}).*(A:\w\w X:\w\w Y:\w\w P:\w\w SP:\w\w).*CYC:(\d+)")
@@ -22,7 +23,7 @@ def run(*args):
     return subprocess.run([RUNNER, *args], capture_output=True, text=True, check=False)
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see module docstring)")
+@built(RUNNER, "build the C runtime first (see module docstring)")
 class TestNestest(unittest.TestCase):
     def test_trace_matches_nintendulator_log(self):
         with open(fetch("nestest.log")) as f:
@@ -44,7 +45,7 @@ SST_DISAGREE = {
 }
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see module docstring)")
+@built(RUNNER, "build the C runtime first (see module docstring)")
 class TestSingleStep(unittest.TestCase):
     def test_every_opcode(self):
         required = os.environ.get("NES_SST_REQUIRED") == "1"

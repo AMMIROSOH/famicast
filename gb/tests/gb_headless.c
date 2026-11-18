@@ -1,4 +1,4 @@
-/* Game Boy without a window, for tests (tests/test_gb_roms.py, test_gb_recomp.py).
+/* Game Boy without a window, for tests (tests/gb/test_roms.py, test_gb_recomp.py).
  *   gb_headless ROM [--frames N] [--pgm FILE] [--wav FILE] [--play] [--state-at F FILE] [--load-state FILE]
  *               [--misses FILE] [--diff] [--coverage] [--ppm FILE] [--model dmg|cgb]
  *   --pgm         write the last whole frame as a grey image (shade 0 = white)

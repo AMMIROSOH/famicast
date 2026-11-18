@@ -7,10 +7,10 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
 
 ## 2026-11-19 · Game Boy G6: Game Boy Color
 - **cgb-acid2**: 0 of 23,040 pixels differ from the reference
-  (`tests/test_gb_ppu.py`, the paletted PNG decoded there; 5-bit
+  (`tests/gb/test_ppu.py`, the paletted PNG decoded there; 5-bit
   components as `(c << 3) | (c >> 2)`, the test's own formula). dmg-acid2
   still exact.
-- **blargg cgb_sound**: the 12 singles (now in `tests/test_gb_roms.py`: 129
+- **blargg cgb_sound**: the 12 singles (now in `tests/gb/test_roms.py`: 129
   ROMs must pass) and the combined ROM pass; the 117 earlier ones still
   pass (cpu_instrs now runs in CGB mode: its header allows it).
 - **Games**: every 40th licensed title of the GBC set (36 games), 30 s of
@@ -52,12 +52,12 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   a small part; every memory access steps the PPU, APU and timer.
 - **Correction (G4)**: the "11x real time" there was a Debug build; in
   Release the interpreter runs about 40x.
-- **Tests**: `tests/test_gb_recomp.py`: block starts, chaining, the bank
+- **Tests**: `tests/gb/test_recomp.py`: block starts, chaining, the bank
   check and a trace-made bank region from a small made-up ROM;
   cpu_instrs recompiled passes and is in lockstep.
 
 ## 2026-11-19 · Game Boy G4: sound
-- **blargg dmg_sound**: the 12 singles pass (`tests/test_gb_roms.py`: 117
+- **blargg dmg_sound**: the 12 singles pass (`tests/gb/test_roms.py`: 117
   ROMs must pass, 20 are listed open; the "103" in the G3 entry
   miscounted, the suite then had 105), and so does the combined
   `dmg_sound.gb`. The wave tests (09, 10, 12) pass with the first sample
@@ -75,7 +75,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
 
 ## 2026-11-19 · Game Boy G3: PPU and the window program
 - **dmg-acid2**: 0 of 23,040 pixels differ from the reference screenshot
-  (`tests/test_gb_ppu.py`, a 2-bit PNG decoded in the test).
+  (`tests/gb/test_ppu.py`, a 2-bit PNG decoded in the test).
 - **Games**: every 40th licensed title (no Proto/Beta/Demo/Unl/Pirate) of a
   1,919-archive set, 30 s with scripted input: 41 of 41 load and show a
   title, menu or play screen on a contact sheet (ROM only, MBC1, MBC2,
@@ -95,7 +95,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
 - **Test ROMs**: the c-sp/game-boy-test-roms v7.0 zip (SHA-256 pinned);
   `gb_headless` reads the result from the serial port (blargg text,
   mooneye's 3 5 8 13 21 34 / six $42) or blargg's cartridge-RAM protocol.
-  `tests/test_gb_roms.py`: 102 pass; 21 open, and the test checks they
+  `tests/gb/test_roms.py`: 102 pass; 21 open, and the test checks they
   still fail (9 boot tests of other models, 9 PPU timing, serial boot
   phase, `timer/rapid_toggle`, the MBC1 multicart).
 - **Found on the way** (each by its test):
@@ -124,7 +124,7 @@ Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.m
   switch (`gb/runtime/cpu.c`). The template helpers (lines, markers, their
   expansion) moved to `core/recomp/template.c`; nesrecomp uses them too.
 - **SingleStepTests sm83** (`python tests/fetch_test_roms.py --sst-sm83`,
-  `tests/test_gb_cpu.py`): all 500 files, 1,000 tests each, pass on
+  `tests/gb/test_cpu.py`): all 500 files, 1,000 tests each, pass on
   registers, IME and the EI delay, RAM, and every M-cycle (kind, address,
   value); HALT and STOP on registers and RAM only.
 - **Mutations**: ADC without the carry in the half-carry fails ADC A,(HL)

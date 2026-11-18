@@ -1,13 +1,14 @@
 """CPU bus scheduling (nes/runtime/nes.c): the lazily caught-up PPU must still
 raise every NMI when the CPU never touches the PPU, on a tiny hand-assembled
-ROM (helpers from tests/test_mappers.py)."""
+ROM (helpers from tests/nes/test_mappers.py)."""
 import os
 import unittest
 
-from tests.test_mappers import RUNNER, ines, lda_sta, peek, put, ram_loop
+from tests.nes.test_mappers import RUNNER, ines, lda_sta, peek, put, ram_loop
+from tests.games import built
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestBus(unittest.TestCase):
     def test_nmi_every_frame_from_a_ram_loop(self):
         """NMI on, then a loop that touches neither the PPU nor the APU: the

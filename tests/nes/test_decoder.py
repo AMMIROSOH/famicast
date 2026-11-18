@@ -1,9 +1,10 @@
-"""Decoder checks through the instructions nesrecomp emits (tests/nesrecomp.py)."""
+"""Decoder checks through the instructions nesrecomp emits (tests/nes/nesrecomp.py)."""
 import re
 import unittest
 
 from tests.fetch_test_roms import fetch
-from tests.nesrecomp import BUILT, falls_through, make_rom, recompile, target
+from tests.nes.nesrecomp import BUILT, falls_through, make_rom, recompile, target
+from tests.games import built
 
 LOG_LINE = re.compile(r"^([0-9A-F]{4})  ((?:[0-9A-F]{2} ){1,3})\s*(\*?)([A-Z]{3})")
 
@@ -19,7 +20,7 @@ def parse_nestest_log(path):
     return rows
 
 
-@unittest.skipUnless(BUILT, "build nesrecomp first (cmake --build build)")
+@built(BUILT, "build nesrecomp first (cmake --build build)")
 class TestDecode(unittest.TestCase):
     def test_modes_and_targets(self):
         # $8000: LDA ($11),Y / JMP ($1234)   $8005: BNE $8005 / RTS
@@ -32,7 +33,7 @@ class TestDecode(unittest.TestCase):
         self.assertIn(0x8007, prog.instrs)     # its fall-through
 
 
-@unittest.skipUnless(BUILT, "build nesrecomp first (cmake --build build)")
+@built(BUILT, "build nesrecomp first (cmake --build build)")
 class TestNestest(unittest.TestCase):
     """Every ROM instruction Nintendulator executed must be found statically,
     with the same bytes and mnemonic, once the dynamic jumps are given as

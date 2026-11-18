@@ -53,7 +53,7 @@ Written in Python first, ported to C in M8a.
 - [x] `nes/runtime/cpu.c` + `cpu_ops.h`, opcode switch generated from the
   opcode table; one bus access per cycle.
 - [x] `nes/tests/cpu_tests.c` on a flat 64 KB bus; driven by
-  `tests/test_cpu.py`.
+  `tests/nes/test_cpu.py`.
 - [x] nestest: all 8,991 lines match, unofficial opcodes included.
 - [x] SingleStepTests: all 244 non-KIL opcodes pass 10,000/10,000, bus cycles included.
 - [x] Interrupt polling on the exact cycle (done in M3).
@@ -68,7 +68,7 @@ Written in Python first, ported to C in M8a.
   (vsync on displays of 59 Hz and up, against tearing).
 - [x] `nes_headless` runner: blargg $6000 protocol, zero-page result codes,
   PPM screenshots, frame hash, scripted input (`--press`).
-- [x] 52/52 test ROMs pass (`tests/test_roms.py`, list in 06).
+- [x] 52/52 test ROMs pass (`tests/nes/test_roms.py`, list in 06).
 - [x] Battle City: title screen and stage 1 render and play (interpreter).
 - [x] `test_ppu_read_buffer` (passes since M7: needs mapper 3).
 - **Exit:** met.
@@ -79,7 +79,7 @@ Written in Python first, ported to C in M8a.
 - [x] Opposite directions (left+right, up+down) filtered, as on a real pad.
 - [x] Input recordings (`core/input_log.c`, `.nesi`): `--record` /
   `--replay` in both `nes` and `nes_headless`; reset presses are recorded.
-- [x] `tests/test_input.py`: record → replay gives the identical frame;
+- [x] `tests/nes/test_input.py`: record → replay gives the identical frame;
   a recording written by Python matches; reset flag replays (uses a local
   Battle City ROM found by SHA-256, `tests/games.py`; skips without it).
 - [ ] Configurable key/button mapping: not needed yet; add when asked.
@@ -128,7 +128,7 @@ M5b, speed:
   cpu_dummy_writes 2/2, dmc_dma_during_read4 4/5; pitch test.
 - [x] DMA model: halt on the next read, repeated halted reads, get/put
   cycles, DMC fetches inside OAM DMA (`run_dma`).
-- [ ] Pending, with reasons in `tests/test_roms.py`: sprdma_and_dmc_dma (2;
+- [ ] Pending, with reasons in `tests/nes/test_roms.py`: sprdma_and_dmc_dma (2;
   expected table unknown, ours is 1-2 clocks off), double_2007_read (PPU
   read-buffer timing for back-to-back $2007 reads).
 - [x] Battle City by ear: "sound is perfect" (user, 2026-11-15).
@@ -195,7 +195,7 @@ M8a, the recompiler in the build:
 - [x] `AUTO_HINTS` (on by default): the build traces each game in the
   interpreter (`nes_headless --play 1 --misses`, `AUTO_HINTS_FRAMES`) and
   gives the trace to `nesrecomp --misses`; one pass, no rebuild loop.
-- [x] Python tests drive `nesrecomp` (`tests/nesrecomp.py`); the scripted
+- [x] Python tests drive `nesrecomp` (`tests/nes/nesrecomp.py`); the scripted
   play became `nes_headless --play`.
 - **Exit:** met ([log](verification-log.md)).
 
@@ -206,7 +206,7 @@ M8b:
   `--save-state/--load-state` in nes_headless (also with `--diff`), F2/F4
   in the frontend. Shortcut: the struct is stored raw, so states do not
   survive a change of its layout.
-- [x] Frame-hash regression suite (`tests/test_regression.py`): frame, CPU
+- [x] Frame-hash regression suite (`tests/nes/test_regression.py`): frame, CPU
   cycles and audio after 3,000 scripted frames, per configured game.
 - [x] Frontend: no console window on Windows; `<program>.ini` settings
   (fullscreen, scaling, TV frame, window size); TV frame drawn

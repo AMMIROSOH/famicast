@@ -1,4 +1,4 @@
-/* CPU test runner on a flat 64 KB bus (driven by tests/test_cpu.py).
+/* CPU test runner on a flat 64 KB bus (driven by tests/nes/test_cpu.py).
  *
  *   cpu_tests nestest ROM N   print the state before each of N instructions,
  *                             starting at $C000 (nestest automation mode)

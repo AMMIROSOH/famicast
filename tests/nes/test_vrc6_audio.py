@@ -8,8 +8,9 @@ import subprocess
 import tempfile
 import unittest
 
-from tests import test_mappers  # not its TestMappers by name: unittest would run that class here too
-from tests.test_mappers import RUNNER, lda_sta
+from tests.nes import test_mappers  # not its TestMappers by name: unittest would run that class here too
+from tests.nes.test_mappers import RUNNER, lda_sta
+from tests.games import built
 
 CPU_HZ = 1789773
 
@@ -47,7 +48,7 @@ def rms(x):
     return math.sqrt(sum(v * v for v in x) / len(x))
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestVrc6Audio(unittest.TestCase):
     def test_pulse(self):
         """Clock / (16 * (t + 1)): 3,496 Hz at t = 31; 440 Hz at t = 253, on

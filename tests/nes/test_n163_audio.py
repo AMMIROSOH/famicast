@@ -8,8 +8,9 @@ import subprocess
 import tempfile
 import unittest
 
-from tests import test_mappers  # not its TestMappers by name: unittest would run that class here too
-from tests.test_mappers import RUNNER, lda_sta
+from tests.nes import test_mappers  # not its TestMappers by name: unittest would run that class here too
+from tests.nes.test_mappers import RUNNER, lda_sta
+from tests.games import built
 
 CPU_HZ = 1789773
 
@@ -40,7 +41,7 @@ def rises(x, level):  # times the signal goes from below `level` to at or above 
     return sum(1 for a, b in zip(x, x[1:]) if a < level <= b)
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestN163Audio(unittest.TestCase):
     SQUARE = bytes([0x00] * 4 + [0xFF] * 4)  # 8 samples of 0, then 8 of 15
 

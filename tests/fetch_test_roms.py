@@ -16,10 +16,12 @@ FILES = {
     "nestest.nes": ("f67d55fd6b3cf0bad1cc85f1df0d739c65b53e79cecb7fea8f77ec0eadab0004", [
         "https://www.qmtpro.com/~nes/misc/nestest.nes",
         "https://raw.githubusercontent.com/christopherpow/nes-test-roms/master/other/nestest.nes"]),
-    # CRLF original; the GitHub mirror has LF endings and therefore another hash
-    "nestest.log": ("627c8e180b1a924dfa705c5dc6958fad7ab75a62de556173caf880ccc1337540", [
-        "https://www.qmtpro.com/~nes/misc/nestest.log"]),
+    # hashed with LF line endings: the original has CRLF, the GitHub mirror LF, the same text
+    "nestest.log": ("442c4dd5539c7e88b3fd73c7b732a7eadbd22b47c2cd9e58397ef147f64f6f8f", [
+        "https://www.qmtpro.com/~nes/misc/nestest.log",
+        "https://raw.githubusercontent.com/christopherpow/nes-test-roms/master/other/nestest.log"]),
 }
+TEXT = {"nestest.log"}  # stored with LF endings
 
 
 def fetch(name):
@@ -38,6 +40,8 @@ def fetch(name):
         except OSError as e:
             print(f"  {url}: {e}")
             continue
+        if name in TEXT:
+            data = data.replace(b"\r\n", b"\n")
         if hashlib.sha256(data).hexdigest() != sha:
             print(f"  {url}: hash mismatch, skipped")
             continue

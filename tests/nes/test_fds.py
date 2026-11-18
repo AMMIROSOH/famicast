@@ -11,8 +11,9 @@ import tempfile
 import unittest
 import wave
 
-from tests.nesrecomp import NESRECOMP
-from tests.test_roms import RUNNER
+from tests.nes.nesrecomp import NESRECOMP
+from tests.nes.test_roms import RUNNER
+from tests.games import built
 
 CPU_HZ = 1789773
 
@@ -85,7 +86,7 @@ APU_SQUARE = (sta(0x4015, 0x01) + sta(0x4000, 0xBF) +  # duty 50%, constant volu
               sta(0x4002, 0xFF) + sta(0x4003, 0x00))   # t = 255: CPU / (16 * 256) = 436.9 Hz
 
 
-@unittest.skipUnless(os.path.exists(NESRECOMP), "build nesrecomp first (cmake --build build)")
+@built(NESRECOMP, "build nesrecomp first (cmake --build build)")
 class TestFdsRecompile(unittest.TestCase):
     def test_disk_files(self):
         """Two files load different code at $6000. A RAM miss names its
@@ -118,7 +119,7 @@ class TestFdsRecompile(unittest.TestCase):
         self.assertIn(".rom = rom_image", c)
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestFds(unittest.TestCase):
     def test_drive_reads_first_block(self):
         """Motor on in read mode, gap detection on: after the spin-up and the

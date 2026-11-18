@@ -7,8 +7,9 @@ import tempfile
 import unittest
 
 from tests.fetch_test_roms import fetch_ntr
-from tests.test_roms import RUNNER
-from tests.test_recomp import BC_HEADLESS
+from tests.nes.test_roms import RUNNER
+from tests.nes.test_recomp import BC_HEADLESS
+from tests.games import built
 
 # CHR RAM: the result text (font uploaded around frame 170) is on screen by
 # frame 250, so a state that lost CHR RAM or PPU fields shows in the hash
@@ -25,7 +26,7 @@ def hash_line(out):
     return [line for line in out.splitlines() if line.startswith("HASH ")]
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestStates(unittest.TestCase):
     def test_resume_equals_uninterrupted_run(self):
         rom = fetch_ntr(ROM)

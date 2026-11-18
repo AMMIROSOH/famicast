@@ -9,7 +9,8 @@ import tempfile
 import unittest
 import wave
 
-from tests.test_roms import RUNNER
+from tests.nes.test_roms import RUNNER
+from tests.games import built
 
 CPU_HZ = 1789773
 
@@ -37,7 +38,7 @@ def frequency(path):
     return crossings * rate / len(s)
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestApuPitch(unittest.TestCase):
     def run_tone(self, code):
         with tempfile.TemporaryDirectory() as tmp:

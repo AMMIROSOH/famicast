@@ -7,7 +7,8 @@ import subprocess
 import tempfile
 import unittest
 
-from tests.test_mappers import RUNNER, WAIT_VBLANK, ines, lda_sta, put, vectors
+from tests.nes.test_mappers import RUNNER, WAIT_VBLANK, ines, lda_sta, put, vectors
+from tests.games import built
 
 
 def backdrop_rgb(mask, region=0):
@@ -32,7 +33,7 @@ def backdrop_rgb(mask, region=0):
     return tuple(px[i:i + 3])
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestEmphasis(unittest.TestCase):
     def test_tints(self):
         white = backdrop_rgb(0x00)

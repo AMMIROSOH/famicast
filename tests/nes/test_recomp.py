@@ -1,6 +1,6 @@
 """Recompiler checks (docs/architecture.md verification ladder 4-5).
 
-Blocks and suggestions: through nesrecomp (tests/nesrecomp.py).
+Blocks and suggestions: through nesrecomp (tests/nes/nesrecomp.py).
 nestest: the CPU state after every recompiled block must equal the line of
 nestest.log with the same cycle count. Battle City (local ROM, built with
 -DROMS=...): lockstep against the interpreter with zero fallbacks.
@@ -13,8 +13,9 @@ import unittest
 
 from tests.fetch_test_roms import fetch
 from tests.games import ROOT
-from tests.nesrecomp import BUILT, make_rom, recompile
-from tests.test_cpu import BUILD, LOG_STATE
+from tests.nes.nesrecomp import BUILT, make_rom, recompile
+from tests.nes.test_cpu import BUILD, LOG_STATE
+from tests.games import built
 
 EXE = ".exe" if os.name == "nt" else ""
 NESTEST_RECOMP = os.path.join(BUILD, "nestest_recomp_tests" + EXE)
@@ -28,10 +29,10 @@ def suggested(code, misses):
     return [(int(b), int(a, 16)) for b, a in re.findall(r"\[(\d+), 0x([0-9A-F]{4})\],", saved)]
 
 
-@unittest.skipUnless(BUILT, "build nesrecomp first (cmake --build build)")
+@built(BUILT, "build nesrecomp first (cmake --build build)")
 class TestBlocks(unittest.TestCase):
     def test_every_instruction_in_exactly_one_block(self):
-        with open(os.path.join(ROOT, "tests", "data", "nestest.toml"), "rb") as f:
+        with open(os.path.join(ROOT, "tests", "nes", "data", "nestest.toml"), "rb") as f:
             prog, _ = recompile(fetch("nestest.nes"), entries=tomllib.load(f)["entries"])
         pcs = [pc for b in prog.blocks.values() for pc in b]
         self.assertEqual(sorted(pcs), sorted(prog.instrs))
@@ -52,7 +53,7 @@ class TestBlocks(unittest.TestCase):
         self.assertEqual(suggested(code, "MISS $8000 9 bank 0\nMISS $8003 9 bank 0\n"), [(0, 0x8000)])
 
 
-@unittest.skipUnless(os.path.exists(NESTEST_RECOMP), "configure CMake after fetching nestest, then build")
+@built(NESTEST_RECOMP, "configure CMake after fetching nestest, then build")
 class TestNestestRecompiled(unittest.TestCase):
     def test_block_boundaries_match_log(self):
         want = {}

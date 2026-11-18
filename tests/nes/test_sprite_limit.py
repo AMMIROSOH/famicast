@@ -8,7 +8,8 @@ import subprocess
 import tempfile
 import unittest
 
-from tests.test_mappers import RUNNER, WAIT_VBLANK, ines, lda_sta, put, vectors
+from tests.nes.test_mappers import RUNNER, WAIT_VBLANK, ines, lda_sta, put, vectors
+from tests.games import built
 
 Y, COUNT = 100, 10
 
@@ -40,7 +41,7 @@ def run(*args):
     return drawn, out.split("cycles=")[1].split()[0]
 
 
-@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+@built(RUNNER, "build the C runtime first (see tests/nes/test_cpu.py)")
 class TestSpriteLimit(unittest.TestCase):
     def test_limit(self):
         limited, cycles = run()

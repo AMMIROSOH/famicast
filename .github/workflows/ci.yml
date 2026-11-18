@@ -1,6 +1,10 @@
-# Build and test on Linux (GCC, Clang) and Windows (MSVC). Public test ROMs
-# only (fetched by tests/fetch_test_roms.py); no game ROMs, so the tests of
-# recompiled games skip. SingleStepTests (~1 GB) are not downloaded here.
+# Build and test the systems a change touches (tools/ci_systems.py: a
+# system's own folders select it, shared code selects every system, docs
+# none), each with GCC, Clang and MSVC, warnings as errors. Test data
+# (public test ROMs, nestest, SingleStepTests 2A03 and sm83) is fetched
+# once per version of tests/fetch_test_roms.py and kept in the Actions
+# cache; it is never committed. No game ROMs: the tests of recompiled
+# games skip. The required check is ci-ok, which sums up the rest.
 name: ci
 # main and pull requests only: tags and PR branches were tested twice
 on:
@@ -9,28 +13,79 @@ on:
   pull_request:
 
 jobs:
-  build-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - {os: ubuntu-latest, cc: gcc}
-          - {os: ubuntu-latest, cc: clang}
-          - {os: windows-latest, cc: cl}
-    runs-on: ${{ matrix.os }}
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      systems: ${{ steps.pick.outputs.systems }}
+      cmake: ${{ steps.pick.outputs.cmake }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: pick
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          python3 tools/ci_systems.py "$BASE" "$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
+          python3 -m unittest tests.test_ci_systems
+
+  data:
+    needs: changes
+    if: needs.changes.outputs.systems != '[]'
+    runs-on: ubuntu-latest
+    outputs:
+      key: ${{ steps.key.outputs.key }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Fetch public test ROMs
-        run: python tests/fetch_test_roms.py
-      # headless: the SDL3 frontend needs X11/Wayland dev packages on Linux
+      # computed here once: Windows checkouts have CRLF line endings, so hashFiles differs there
+      - id: key
+        run: echo "key=test-data-${{ hashFiles('tests/fetch_test_roms.py') }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: tests/roms
+          key: ${{ steps.key.outputs.key }}
+          enableCrossOsArchive: true
+      - name: Fetch test data (verified, or downloaded on a cache miss)
+        run: python tests/fetch_test_roms.py --sst --sst-sm83
+
+  build-test:
+    needs: [changes, data]
+    if: needs.changes.outputs.systems != '[]'
+    name: ${{ matrix.system }} (${{ matrix.cc }})
+    strategy:
+      fail-fast: false
+      matrix:
+        system: ${{ fromJSON(needs.changes.outputs.systems) }}
+        cc: [gcc, clang, cl]
+        include:
+          - {cc: gcc, os: ubuntu-latest}
+          - {cc: clang, os: ubuntu-latest}
+          - {cc: cl, os: windows-latest}
+    runs-on: ${{ matrix.os }}
+    env:
+      RETROCAST_STRICT: "1"   # a program the build should have made fails the tests, not skips them
+      NES_SST_REQUIRED: "1"
+      GB_SST_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/cache/restore@v6
+        with:
+          path: tests/roms
+          key: ${{ needs.data.outputs.key }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
+      # headless: the SDL3 frontend is built by the frontend job
       - name: Configure and build (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y ninja-build
-          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DFRONTEND=OFF
+          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DFRONTEND=OFF -DWERROR=ON -DSYSTEMS=${{ matrix.system }}
           cmake --build build
       - name: Configure and build (Windows, MSVC)
         if: runner.os == 'Windows'
@@ -39,7 +94,32 @@ jobs:
         run: |
           for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSDIR=%%i
           call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DFRONTEND=OFF || exit /b 1
+          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DFRONTEND=OFF -DWERROR=ON -DSYSTEMS=${{ matrix.system }} || exit /b 1
           cmake --build build
       - name: Test
-        run: python -m unittest discover -s tests -t . -v
+        run: python -m unittest discover -s tests/${{ matrix.system }} -t . -v
+
+  # The window programs (SDL3, built from source) for the touched systems: MSVC.
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.systems != '[]'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure and build
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSDIR=%%i
+          call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DWERROR=ON "-DSYSTEMS=${{ needs.changes.outputs.cmake }}" || exit /b 1
+          cmake --build build
+
+  ci-ok:
+    if: always()
+    needs: [changes, data, build-test, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job passed or had nothing to do
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - run: 'echo "systems tested - ${{ needs.changes.outputs.systems }}"'
