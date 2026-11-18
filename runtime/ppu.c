@@ -92,7 +92,9 @@ static void load_shifters(Ppu *p) {
 
 /* Background pattern bytes: MMC5 banks them apart from sprites (cart.c). */
 static inline uint8_t bg_pattern(Ppu *p, uint16_t a) {
-    return p->cart->mapper == 5 ? cart_mmc5_bg_read(p->cart, a, p->v) : mem_read(p, a);
+    uint8_t b;
+    if (p->cart->mapper != 5) return mem_read(p, a);
+    return cart_mmc5_split(p->cart, p->dot, 4, a, &b) ? b : cart_mmc5_bg_read(p->cart, a, p->v);
 }
 
 static inline void fetch_step_at(Ppu *p, int phase) {
@@ -101,9 +103,11 @@ static inline void fetch_step_at(Ppu *p, int phase) {
     switch (phase) {
     case 0:
         load_shifters(p);
+        if (p->cart->mapper == 5 && cart_mmc5_split(p->cart, p->dot, 0, 0, &p->nt_byte)) break;
         p->nt_byte = mem_read(p, 0x2000 | (p->v & 0x0FFF));
         break;
     case 2: {
+        if (p->cart->mapper == 5 && cart_mmc5_split(p->cart, p->dot, 2, 0, &p->at_bits)) break;
         uint8_t at = mem_read(p, 0x23C0 | (p->v & 0x0C00) | ((p->v >> 4) & 0x38) | ((p->v >> 2) & 0x07));
         if (p->v & 0x40) at >>= 4;  /* coarse Y bit 1 */
         if (p->v & 0x02) at >>= 2;  /* coarse X bit 1 */
