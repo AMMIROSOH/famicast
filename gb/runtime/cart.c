@@ -126,10 +126,7 @@ void gb_cart_write(GbCart *c, uint16_t a, uint8_t v) {
     }
 }
 
-void gb_cart_tick(GbCart *c) {
-    if (!c->has_rtc || (c->rtc[4] & 0x40)) return;  /* no clock, or halted */
-    if (++c->rtc_cycles < 1048576) return;          /* M-cycles per second */
-    c->rtc_cycles = 0;
+static void rtc_second(GbCart *c) {
     if (++c->rtc[0] != 60) return;
     c->rtc[0] = 0;
     if (++c->rtc[1] != 60) return;
@@ -140,4 +137,17 @@ void gb_cart_tick(GbCart *c) {
     if (day == 512) day = 0, c->rtc[4] |= 0x80;  /* day counter carry */
     c->rtc[3] = (uint8_t)day;
     c->rtc[4] = (uint8_t)((c->rtc[4] & 0xFE) | (day >> 8));
+}
+
+void gb_cart_tick(GbCart *c) {
+    if (!c->has_rtc || (c->rtc[4] & 0x40)) return;  /* no clock, or halted */
+    if (++c->rtc_cycles < 1048576) return;          /* M-cycles per second */
+    c->rtc_cycles = 0;
+    rtc_second(c);
+}
+
+void gb_cart_rtc_advance(GbCart *c, uint64_t seconds) {
+    if (!c->has_rtc || (c->rtc[4] & 0x40)) return;
+    if (seconds > 512ull * 86400) seconds = 512ull * 86400 + 1;  /* past the day counter: it carried */
+    while (seconds--) rtc_second(c);
 }

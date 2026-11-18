@@ -32,7 +32,6 @@ OPEN = {
     "mooneye-test-suite/acceptance/boot_regs-mgb.gb": OTHER_MODEL,
     "mooneye-test-suite/acceptance/boot_regs-sgb.gb": OTHER_MODEL,
     "mooneye-test-suite/acceptance/boot_regs-sgb2.gb": OTHER_MODEL,
-    "mooneye-test-suite/acceptance/ppu/hblank_ly_scx_timing-GS.gb": PPU,
     "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.gb": PPU,
     "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites.gb": PPU,
     "mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb": PPU,

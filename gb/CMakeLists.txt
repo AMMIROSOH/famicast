@@ -20,9 +20,15 @@ add_executable(gb_cpu_tests tests/cpu_tests.c)
 target_link_libraries(gb_cpu_tests PRIVATE gbcpu)
 
 # The Game Boy system (bus, timer, interrupts, cartridges).
-add_library(gbcore STATIC runtime/gb.c runtime/cart.c)
+add_library(gbcore STATIC runtime/gb.c runtime/ppu.c runtime/cart.c)
 target_link_libraries(gbcore PUBLIC gbcpu core)
 
 # Test ROMs report on the serial port (tests/test_gb_roms.py)
 add_executable(gb_headless tests/gb_headless.c)
 target_link_libraries(gb_headless PRIVATE gbcore)
+
+if(FRONTEND)
+    # gb: plays a Game Boy ROM in the interpreter (core/frontend + frontend.c)
+    frontend(gb ${CMAKE_CURRENT_SOURCE_DIR}/frontend.c)
+    target_link_libraries(gb PRIVATE gbcore)
+endif()

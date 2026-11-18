@@ -1,5 +1,8 @@
 /* Game Boy without a window, for tests (tests/test_gb_roms.py).
- *   gb_headless ROM [--frames N]
+ *   gb_headless ROM [--frames N] [--pgm FILE] [--play] [--state-at F FILE] [--load-state FILE]
+ *   --pgm         write the last whole frame as a grey image (shade 0 = white)
+ *   --play        scripted input: Start and A taps, later walking right
+ *   --state-at    save a state before frame F; --load-state: start from one
  * Runs up to N frames (default 3600), stopping early when a test ROM
  * reports on the serial port: blargg's "Passed" / "Failed" text, or
  * mooneye's bytes 3 5 8 13 21 34 (pass) / six $42 (fail), or blargg's
@@ -10,6 +13,7 @@
 #include <string.h>
 
 #include "gb.h"
+#include "input_log.h"  /* PAD_* */
 
 static int result(const Gb *g) {  /* 1 pass, -1 fail, 0 not yet */
     static const char FIB[6] = {3, 5, 8, 13, 21, 34}, FAIL[6] = {0x42, 0x42, 0x42, 0x42, 0x42, 0x42};
@@ -41,9 +45,16 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: gb_headless ROM [--frames N]\n");
         return 2;
     }
-    long frames = 3600;
-    for (int i = 2; i + 1 < argc; i++)
-        if (!strcmp(argv[i], "--frames")) frames = atol(argv[++i]);
+    long frames = 3600, state_at = -1;
+    const char *pgm = NULL, *state_out = NULL, *state_in = NULL;
+    int play = 0;
+    for (int i = 2; i < argc; i++) {
+        if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]);
+        else if (!strcmp(argv[i], "--pgm") && i + 1 < argc) pgm = argv[++i];
+        else if (!strcmp(argv[i], "--play")) play = 1;
+        else if (!strcmp(argv[i], "--state-at") && i + 2 < argc) state_at = atol(argv[++i]), state_out = argv[++i];
+        else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) state_in = argv[++i];
+    }
     FILE *f = fopen(argv[1], "rb");
     if (!f) { perror(argv[1]); return 2; }
     fseek(f, 0, SEEK_END);
@@ -59,8 +70,26 @@ int main(int argc, char **argv) {
         return 2;
     }
     free(rom);
+    if (state_in && gb_state_load(&g, state_in, err, sizeof err) != 0) {
+        fprintf(stderr, "%s: %s\n", state_in, err);
+        return 2;
+    }
     int r = 0;
-    for (long i = 0; i < frames && !(r = result(&g)) && !g.cpu.jammed; i++) gb_run_frame(&g);
+    for (long i = 0; i < frames && !(r = result(&g)) && !g.cpu.jammed; i++) {
+        if (i == state_at && gb_state_save(&g, state_out) != 0) { perror(state_out); return 2; }
+        if (play) {  /* Start and A taps to get past menus, then some walking right */
+            long k = i % 90;
+            gb_set_pad(&g, k < 5 ? PAD_START : k >= 45 && k < 48 ? PAD_A : i > 900 && k >= 60 ? PAD_RIGHT : 0);
+        }
+        gb_run_frame(&g);
+    }
+    if (pgm) {  /* the last whole frame; shade 0 (light) = 255, as dmg-acid2's reference */
+        FILE *o = fopen(pgm, "wb");
+        if (!o) { perror(pgm); return 2; }
+        fprintf(o, "P5\n160 144\n255\n");
+        for (int i = 0; i < 160 * 144; i++) fputc((3 - g.frame[i]) * 85, o);
+        fclose(o);
+    }
     for (int i = 0; i < g.serial_n; i++) {
         unsigned char ch = (unsigned char)g.serial_out[i];
         if (ch == '\n' || (ch >= 0x20 && ch < 0x7F)) putchar(ch);

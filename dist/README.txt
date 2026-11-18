@@ -1,7 +1,7 @@
-retrocast - static recompiler for NES and Famicom Disk System games
+retrocast - static recompiler for NES and Famicom Disk System games (Game Boy in progress)
 https://github.com/Viper-Bit/retrocast
 
-No games are included. Use your own legally dumped games (.nes, .fds).
+No games are included. Use your own legally dumped games (.nes, .fds, .gb).
 
 
 WHAT IS IN HERE
@@ -11,6 +11,9 @@ WHAT IS IN HERE
   nes_headless    The same without a window, for scripts and checks
                   (--frames N, --record/--replay, --diff, --coverage, ...).
   nesrecomp       The recompiler: turns a ROM into C source.
+  gb              Plays a Game Boy game in the built-in interpreter (no sound
+                  yet, not recompiled yet). Usage: gb path/to/game.gb
+  gb_headless     The same without a window, for test ROMs (--frames N).
   kit/            Everything needed to build a recompiled game into a
                   native program (see below), with SDL3 prebuilt.
 
