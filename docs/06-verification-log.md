@@ -3,6 +3,32 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · M7l: 36 more boards
+- **Survey** (the local No-Intro set, 4,031 ROMs): 701 were refused before,
+  583 now. Licensed (no Unl/Pirate tag): 2,785 of 2,793 load (99.7%); the
+  rest are 96, 105, 547 and 555 (not done).
+- **Unit ROMs** (`tests/test_mappers.py`, `TestMoreBoards`): a PRG switch
+  per board (33 cases, from code copied into every bank so any switch keeps
+  it running), CHR ROM + RAM (77, 119; ROM writes ignored) and CPROM's
+  16 KB, the Sunsoft-4 CHR ROM nametable and Namco 3425's CIRAM lines, and
+  the CPU-cycle IRQs of 65, 67, 73 and RAMBO-1 at 1,000 cycles (125 loop
+  turns, +-2). Mutation caught: mapper 232's submapper bit swap removed.
+  `tests/test_ines.py` now names mapper 100 as the unsupported example
+  (65 is supported).
+- **Boot smoke** (`nes_headless`, 1,500 frames with Start presses): all 118
+  dumps on these mappers load, none jams, all reach a title, menu or play
+  screen, checked by eye on contact sheets. Known: the two Nantettatte!!
+  Baseball dumps with the Ko-Game sub-cartridge show the game's "data set
+  is wrong" message (the licence timer is a marked shortcut); the game
+  alone runs. Pin Bot shows about 150 frames of changing tiles as its
+  table appears (CHR RAM filled over several frames), then the table;
+  not compared with hardware.
+- **Recompiled with `NES_AUTO_HINTS`, `--diff` 3,000 frames**: 39 games,
+  one or more per board family, all identical; ROM code interpreted 0.000%
+  in every one. Recompiled cycles 99.98% for most; lower where the game
+  runs code from RAM (Mindblower Pak 90.6%, Pin Bot 99.5%) or takes many
+  IRQs (Klax 99.65%, RAMBO-1 cycle mode).
+
 ## 2026-11-18 · M10: PAL and Dendy
 - **Sources**: nesdev "Cycle reference chart" (clocks, lines, vblank,
   emphasis order), "APU Frame Counter", "APU Noise", "APU DMC" (PAL

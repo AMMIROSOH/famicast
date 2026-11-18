@@ -195,6 +195,15 @@ M7a (runtime):
   latch, about 4 CPU cycles late), X1-005 (80: registers and 128 bytes of
   RAM at $7Exx-$7Fxx; 207: nametables from CHR bank bit 7). 3,320 of 4,031
   ROMs (96% of licensed); 23 games boot; 8 identical to the interpreter (06).
+- [x] M7l: 36 more boards, every licensed one in the survey but four:
+  discrete latches (13, 34, 70, 72, 77, 78, 86, 89, 92-94, 97, 140, 152,
+  180, 184, 188), MMC3/Namco 108 variants (37, 47 multicarts, 76, 88, 95,
+  119 TQROM, 154), Tengen RAMBO-1 (64, 158: CPU-cycle IRQ mode), Irem H3001
+  (65), Sunsoft-3/4 (67, 68: CHR ROM nametables), VRC3 (73), Taito X1-017
+  (82), MMC1A (155) and the unlicensed 41, 113, 228, 232. CHR RAM beside
+  CHR ROM (77, 119). 3,448 of 4,031 ROMs (99.7% of licensed); 118 dumps
+  boot; recompiled games identical to the interpreter (06). Left: 96 (Oeka
+  Kids tablet), 105/555 (NWC timers), 547 (VRC5).
 
 M9 (expansion audio; numbered M8a-M8d in the PRs, which clashed with M8 below):
 - [x] M9a: Namco 163 wavetable sound: one channel every 15 CPU cycles, phase

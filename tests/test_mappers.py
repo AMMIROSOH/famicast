@@ -662,5 +662,134 @@ class TestMappers(unittest.TestCase):
         self.assertEqual([peek(bytes(rom), a) for a in (1, 0)], [0x5A, 0x00])
 
 
+def banked(mapper, code, prg_size=0x20000, chr_=b"", irq=b"", **kw):
+    """Marker 0x40 + n at $x100 of every 8 KB bank n, and in every bank the
+    code at $x200, the IRQ handler at $x400 and the vectors: the code runs at
+    $E200 whatever bank is switched in."""
+    prg = bytearray(prg_size)
+    for b in range(prg_size // 0x2000):
+        o = b * 0x2000
+        prg[o + 0x100] = 0x40 + b
+        put(prg, o + 0x200, code)
+        put(prg, o + 0x400, irq)
+        vectors(prg, o + 0x2000, 0xE200, irq=0xE400)
+    return ines(mapper, prg, chr_, **kw)
+
+
+def ppu_write(addr, value):
+    return lda_sta(addr >> 8, 0x2006) + lda_sta(addr & 0xFF, 0x2006) + lda_sta(value, 0x2007)
+
+
+STORE_COUNT = bytes([0xA5, 0x10, 0x85, 0x00, 0xA5, 0x11, 0x85, 0x01])  # $00/$01 = loop count
+
+
+@unittest.skipUnless(os.path.exists(RUNNER), "build the C runtime first (see tests/test_cpu.py)")
+class TestMoreBoards(unittest.TestCase):
+    """The boards in runtime/cart.c's "more boards" section and the MMC3 and
+    Namco 108 variants: bank switches, CHR RAM, nametables, IRQ timing."""
+
+    def test_prg_banks(self):
+        # (mapper, writes, read address, 8 KB bank expected there, PRG size, header extras)
+        cases = [
+            (34, [(0x8000, 2)], 0x8100, 8, 0x20000, {"submapper": 2}),       # BNROM: 32 KB
+            (34, [(0x7FFD, 1)], 0x8100, 4, 0x10000, {"submapper": 1}),       # NINA-001
+            (37, [(0xA001, 0x80), (0x6000, 3), (0x8000, 6), (0x8001, 2)], 0x8100, 10, 0x40000, {}),  # block 3
+            (47, [(0xA001, 0x80), (0x6000, 1), (0x8000, 6), (0x8001, 2)], 0x8100, 18, 0x40000, {}),
+            (41, [(0x6005, 0)], 0x8100, 20, 0x40000, {}),                    # address bits 0-2
+            (64, [(0x8000, 0x0F), (0x8001, 9)], 0xC100, 9, 0x20000, {}),     # RAMBO-1 RF at $C000
+            (64, [(0x8000, 0x4F), (0x8001, 9), (0x8000, 0x46), (0x8001, 3)], 0xA100, 3, 0x20000, {}),  # mode 1
+            (65, [(0xC000, 5)], 0xC100, 5, 0x20000, {}),
+            (67, [(0xF800, 3)], 0x8100, 6, 0x20000, {}),
+            (68, [(0xF000, 3)], 0x8100, 6, 0x20000, {}),
+            (70, [(0x8000, 0x30)], 0x8100, 6, 0x20000, {}),
+            (72, [(0x8000, 0x83)], 0x8100, 6, 0x20000, {}),
+            (72, [(0x8000, 0x03)], 0x8100, 0, 0x20000, {}),                  # bit 7 clear: not loaded
+            (73, [(0xF000, 3)], 0x8100, 6, 0x20000, {}),
+            (76, [(0x8000, 6), (0x8001, 5)], 0x8100, 5, 0x20000, {}),
+            (78, [(0x8000, 5)], 0x8100, 10, 0x20000, {}),
+            (82, [(0x7EFA, 5 << 2)], 0x8100, 5, 0x20000, {}),
+            (86, [(0x6000, 0x20)], 0x8100, 8, 0x20000, {}),
+            (89, [(0x8000, 0x30)], 0x8100, 6, 0x20000, {}),
+            (92, [(0x8000, 0x82)], 0xC100, 4, 0x20000, {}),                  # $C000 switches
+            (93, [(0x8000, 0x40)], 0x8100, 8, 0x20000, {}),
+            (94, [(0x8000, 0x0C)], 0x8100, 6, 0x20000, {}),
+            (97, [(0x8000, 2)], 0xC100, 4, 0x20000, {}),
+            (97, [(0x8000, 2)], 0x8100, 14, 0x20000, {}),                    # $8000: the last 16 KB
+            (113, [(0x4100, 0x18)], 0x8100, 12, 0x20000, {}),
+            (140, [(0x6000, 0x30)], 0x8100, 12, 0x20000, {}),
+            (152, [(0x8000, 0x20)], 0x8100, 4, 0x20000, {}),
+            (180, [(0x8000, 3)], 0xC100, 6, 0x20000, {}),
+            (188, [(0x8000, 0x12)], 0x8100, 4, 0x40000, {}),
+            (188, [(0x8000, 0x02)], 0x8100, 20, 0x40000, {}),                # bit 4 clear: expansion
+            (228, [(0x80E0, 0)], 0x8100, 6, 0x40000, {}),                    # A6-A10 = 3, A5: 16 KB mode
+            (232, [(0x8000, 0x08), (0xC000, 2)], 0x8100, 12, 0x40000, {}),
+            (232, [(0x8000, 0x08), (0xC000, 2)], 0x8100, 20, 0x40000, {"submapper": 1}),  # block bits swapped
+        ]
+        for mapper, writes, addr, bank, size, extra in cases:
+            with self.subTest(mapper=mapper, writes=writes, extra=extra):
+                code = b"".join(lda_sta(v, a) for a, v in writes) + lda_abs(addr) + END
+                rom = banked(mapper, code, size, bytes(0x2000) if mapper != 34 or extra.get("submapper") == 1
+                             else b"", **extra)
+                self.assertEqual(peek(rom), 0x40 + bank)
+
+    def test_chr_rom_and_ram(self):
+        """77: 2 KB CHR ROM at $0000 (bits 4-7), CHR RAM above (ROM writes
+        ignored). 119: CHR bank bit 6 picks the RAM. 13: 16 KB CHR RAM, bits
+        0-1 the 4 KB at $1000."""
+        chr_ = bytearray(0x8000)
+        for p in range(32):
+            chr_[p * 0x400 + 0x10] = 0x80 + p
+        code = (WAIT_VBLANK + lda_sta(0x30, 0x8000) + ppu_write(0x0010, 0x77) + ppu_write(0x0810, 0x5A) +
+                ppu_read(0x0010) + bytes([0x85, 0x01]) + ppu_read(0x0810) + END)
+        rom = banked(77, code, chr_=bytes(chr_))
+        self.assertEqual(peek(rom, 1), 0x86)  # 2 KB bank 3 = 1 KB page 6
+        self.assertEqual(peek(rom, 0), 0x5A)
+        code = (WAIT_VBLANK + lda_sta(0x02, 0x8000) + lda_sta(0x41, 0x8001) + ppu_write(0x1010, 0x5A) +
+                lda_sta(0x01, 0x8001) + ppu_read(0x1010) + bytes([0x85, 0x01]) +
+                lda_sta(0x41, 0x8001) + ppu_read(0x1010) + END)
+        rom = banked(119, code, chr_=bytes(chr_[:0x2000]))
+        self.assertEqual(peek(rom, 1), 0x81)
+        self.assertEqual(peek(rom, 0), 0x5A)
+        code = (WAIT_VBLANK + lda_sta(1, 0x8000) + ppu_write(0x1010, 0x11) + lda_sta(2, 0x8000) +
+                ppu_write(0x1010, 0x22) + lda_sta(1, 0x8000) + ppu_read(0x1010) + END)
+        self.assertEqual(peek(banked(13, code, 0x8000)), 0x11)
+
+    def test_nametables(self):
+        """68: $E000 bit 4 shows CHR ROM page $80 | $C000 as nametable A.
+        95: R0 bit 5 = CIRAM page of $2000/$2400, R1 bit 5 of $2800/$2C00."""
+        chr_ = bytearray(0x40000)
+        for p in range(256):
+            chr_[p * 0x400 + 0x10] = p
+        code = WAIT_VBLANK + lda_sta(0x05, 0xC000) + lda_sta(0x10, 0xE000) + ppu_read(0x2010) + END
+        self.assertEqual(peek(banked(68, code, chr_=bytes(chr_))), 0x85)
+        code = (WAIT_VBLANK + lda_sta(0, 0x8000) + lda_sta(0x20, 0x8001) + lda_sta(1, 0x8000) +
+                lda_sta(0x00, 0x8001) + ppu_write(0x2010, 0x5A) + ppu_read(0x2810) + bytes([0x85, 0x01]) +
+                lda_sta(0x20, 0x8001) + ppu_read(0x2810) + END)
+        rom = banked(95, code, chr_=bytes(0x8000))
+        self.assertEqual(peek(rom, 1), 0x00)
+        self.assertEqual(peek(rom, 0), 0x5A)
+
+    def irq_loops(self, mapper, setup, ack):
+        """Loop turns (8 cycles each) from the end of `setup` to the IRQ."""
+        code = bytes([0x78]) + lda_sta(0x40, 0x4017) + setup + bytes([0x58])
+        code += ram_loop(0xE200 + len(code))
+        rom = banked(mapper, code, irq=STORE_COUNT + ack + b"\x40")
+        return peek(rom, 0) + 256 * peek(rom, 1)
+
+    def test_cpu_cycle_irqs(self):
+        """1,000-cycle counters fire after ~125 turns of the 8-cycle loop."""
+        n = 1000
+        h3001 = lda_sta(n >> 8, 0x9005) + lda_sta(n & 0xFF, 0x9006) + lda_sta(0, 0x9004) + lda_sta(0x80, 0x9003)
+        self.assertAlmostEqual(self.irq_loops(65, h3001, lda_sta(0, 0x9003)), 125, delta=2)
+        s3 = lda_sta(n >> 8, 0xC800) + lda_sta(n & 0xFF, 0xC800) + lda_sta(0x10, 0xD800)
+        self.assertAlmostEqual(self.irq_loops(67, s3, lda_sta(0, 0x8000)), 125, delta=2)
+        latch = 0x10000 - n  # counts up, fires on the overflow
+        vrc3 = b"".join(lda_sta((latch >> (4 * i)) & 0xF, 0x8000 + 0x1000 * i) for i in range(4)) + lda_sta(2, 0xC000)
+        self.assertAlmostEqual(self.irq_loops(73, vrc3, lda_sta(0, 0xC000)), 125, delta=2)
+        # RAMBO-1 cycle mode: a clock every 4 cycles; after a reload latch + 2 clocks
+        rambo = lda_sta(248, 0xC000) + lda_sta(1, 0xC001) + lda_sta(0, 0xE001)
+        self.assertAlmostEqual(self.irq_loops(64, rambo, lda_sta(0, 0xE000)), 125, delta=2)
+
+
 if __name__ == "__main__":
     unittest.main()
