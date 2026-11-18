@@ -1,6 +1,6 @@
 """Build one release archive for the platform this runs on.
 
-    python tools/make_release.py --name famicast-v0.1.0-windows-x64 [--work DIR] [--out DIR]
+    python tools/make_release.py --name retrocast-v0.1.0-windows-x64 [--work DIR] [--out DIR]
 
 1. SDL3 (release-3.4.20), static, with the frontend's options (cmake/sdl3_options.cmake),
    installed into the staged kit/sdl3.

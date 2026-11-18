@@ -1,5 +1,5 @@
-famicast - static recompiler for NES and Famicom Disk System games
-https://github.com/Viper-Bit/famicast
+retrocast - static recompiler for NES and Famicom Disk System games
+https://github.com/Viper-Bit/retrocast
 
 No games are included. Use your own legally dumped games (.nes, .fds).
 
@@ -15,7 +15,7 @@ WHAT IS IN HERE
                   native program (see below), with SDL3 prebuilt.
 
 On macOS, remove the download quarantine once before the first run:
-  xattr -dr com.apple.quarantine famicast-*
+  xattr -dr com.apple.quarantine retrocast-*
 
 
 PLAYING
@@ -68,5 +68,5 @@ Supported mappers and more: see the project page above.
 
 LICENSES
 
-famicast: GPL-3.0-or-later (LICENSE); the source is on the project page.
+retrocast: GPL-3.0-or-later (LICENSE); the source is on the project page.
 SDL3 (linked into nes and the kit): zlib license (LICENSE-SDL3.txt).

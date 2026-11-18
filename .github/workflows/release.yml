@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then v="$GITHUB_REF_NAME"; else v="dev-${GITHUB_SHA::7}"; fi
-          python tools/make_release.py --name "famicast-$v-${{ matrix.name }}" --out out/dist
+          python tools/make_release.py --name "retrocast-$v-${{ matrix.name }}" --out out/dist
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.name }}
@@ -70,4 +70,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft \
-            --title "famicast $GITHUB_REF_NAME" --notes-file .github/release-notes.md --generate-notes
+            --title "retrocast $GITHUB_REF_NAME" --notes-file .github/release-notes.md --generate-notes
