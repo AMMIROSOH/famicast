@@ -60,24 +60,57 @@ static void mmc1_update(Cart *c) {
     }
 }
 
+static int is_rambo(const Cart *c) { return c->mapper == 64 || c->mapper == 158; }
+
+/* MMC3 and the boards built on it or on the Namco 108 (206). Multicarts 37
+ * and 47 add an outer bank register at $6000 (written while $A001 enables
+ * PRG RAM): 37 bits 0-2 pick the PRG block (0-2: the first 64 KB, 3: the
+ * second, 4-6: the 128 KB at $20000, 7: the 64 KB at $30000), bit 2 the
+ * 128 KB CHR half; 47 bit 0 both 128 KB halves. TQROM (119): CHR bank bit 6
+ * selects the 8 KB CHR RAM. RAMBO-1 (64, 158): R8/R9 1 KB banks at
+ * $0400/$0C00 when $8000 bit 5 is set, RF a third switchable PRG bank. Namco
+ * 3446 (76): R2-R5 are 2 KB banks. Namco 3433/3443 (88, 154): CHR A16 = PPU
+ * A12. Namco 3425 (95): R0/R1 bit 5 drive CIRAM A10. */
 static void mmc3_update(Cart *c) {
-    uint32_t n8 = c->prg_size / 0x2000;
-    uint32_t r6 = c->reg[6] % n8, r7 = c->reg[7] % n8;
-    uint32_t banks[4] = {r6, r7, n8 - 2, n8 - 1};
-    if (c->mmc3_select & 0x40) { banks[0] = n8 - 2; banks[2] = r6; }
+    uint32_t n8 = c->prg_size / 0x2000, pa = 0xFF, po = 0, ca = 0xFF, co = 0;
+    if (c->mapper == 37) {
+        uint8_t b = c->outer & 7;
+        pa = b >= 4 && b < 7 ? 0x0F : 0x07;
+        po = b < 3 ? 0 : b == 3 ? 0x08 : b < 7 ? 0x10 : 0x18;
+        ca = 0x7F, co = (b & 4u) << 5;
+    } else if (c->mapper == 47) {
+        pa = 0x0F, po = (c->outer & 1u) << 4, ca = 0x7F, co = (c->outer & 1u) << 7;
+    }
+    uint32_t fix2 = pa == 0xFF ? n8 - 2 : (0xFEu & pa) | po, fix1 = pa == 0xFF ? n8 - 1 : (0xFFu & pa) | po;
+    uint32_t r6 = ((c->reg[6] & pa) | po) % n8, r7 = ((c->reg[7] & pa) | po) % n8;
+    uint32_t banks[4] = {r6, r7, fix2 % n8, fix1 % n8};
+    if (is_rambo(c)) {  /* RF at $C000, or at $8000 with R6/R7 moved up */
+        uint32_t rf = c->reg[15] % n8;
+        if (c->mmc3_select & 0x40) banks[0] = rf, banks[1] = r6, banks[2] = r7;
+        else banks[2] = rf;
+    } else if (c->mmc3_select & 0x40) { banks[0] = fix2 % n8; banks[2] = r6; }
     for (int i = 0; i < 4; i++) c->prg_off[i] = banks[i] * 0x2000;
     int inv = (c->mmc3_select & 0x80) ? 4 : 0;  /* CHR A12 inversion swaps the halves */
-    set_chr(c, 0 ^ inv, 2, c->reg[0] & 0xFE);
-    set_chr(c, 2 ^ inv, 2, c->reg[1] & 0xFE);
-    set_chr(c, 4 ^ inv, 1, c->reg[2]);
-    set_chr(c, 5 ^ inv, 1, c->reg[3]);
-    set_chr(c, 6 ^ inv, 1, c->reg[4]);
-    set_chr(c, 7 ^ inv, 1, c->reg[5]);
+    const uint8_t *r = c->reg;
+    uint32_t k[8] = {r[0] & 0xFEu, r[0] | 1u, r[1] & 0xFEu, r[1] | 1u, r[2], r[3], r[4], r[5]};
+    if (is_rambo(c) && (c->mmc3_select & 0x20)) k[0] = r[0], k[1] = r[8], k[2] = r[1], k[3] = r[9];
+    for (int i = 0; i < 8 && c->mapper == 76; i++) k[i] = r[2 + i / 2] * 2u + (i & 1u);
+    for (int i = 0; i < 8 && (c->mapper == 88 || c->mapper == 154); i++) k[i] = (k[i] & 0x3F) | (i < 4 ? 0 : 0x40);
+    for (int i = 0; i < 8; i++) {
+        uint32_t b = (k[i] & ca) | co;
+        if (c->mapper == 119 && (b & 0x40))  /* TQROM: CHR RAM after the ROM */
+            c->chr_off[i ^ inv] = c->chr_rom_size + (b & 7) * 0x400;
+        else
+            c->chr_off[i ^ inv] = (b * 0x400) % (c->chr_rom_size ? c->chr_rom_size : c->chr_size);
+    }
     /* TxSROM: CHR bank bit 7 drives CIRAM A10, so nametable q follows the
      * register of CHR page q ($0000-$0FFF): R0/R1 (2 KB, two nametables
-     * each), or R2-R5 with A12 inversion. The mirroring register does nothing. */
-    if (c->mapper == 118)
-        for (int q = 0; q < 4; q++) c->txsrom_nt[q] = (inv ? c->reg[2 + q] : c->reg[q >> 1]) >> 7;
+     * each), or R2-R5 with A12 inversion. The mirroring register does nothing.
+     * RAMBO-1 158 the same, with its 1 KB banks; Namco 3425 (95) with bit 5. */
+    if (c->mapper == 118 || c->mapper == 158)
+        for (int q = 0; q < 4; q++) c->txsrom_nt[q] = (uint8_t)(k[inv ? 4 + q : q] >> 7);
+    if (c->mapper == 95)
+        for (int q = 0; q < 4; q++) c->txsrom_nt[q] = (r[q >> 1] >> 5) & 1;
 }
 
 /* Mapper 185: CHR reads only work while the latch matches the board's diodes
@@ -263,6 +296,79 @@ static uint16_t count16_mask(const Cart *c, int *irq) {
  * every 113 2/3 (scanline mode: the prescaler drops by 3 per cycle and adds
  * 341 when it reaches 0 or less). Clocking $FF reloads the latch and asserts
  * the IRQ. Runs in closed form: the bus only calls it on its slow path. */
+/* One clock of MMC3's IRQ counter (an A12 rise). RAMBO-1 loads one more
+ * after a $C001 reload when the latch is 2 or more (Mesen2's reading, which
+ * Hard Drivin' needs). */
+static void mmc3_clock(Cart *c, uint64_t dot) {
+    if (c->irq_counter == 0 || c->irq_reload) {
+        c->irq_counter = (uint8_t)(c->irq_latch + (is_rambo(c) && c->irq_reload && c->irq_latch >= 2));
+        c->irq_reload = 0;
+    } else {
+        c->irq_counter--;
+    }
+    /* TC0690: about 4 CPU cycles later; the PPU fetches every 2 dots
+     * through the rest of the line, so the next one past that asserts */
+    if (c->irq_counter == 0 && c->irq_enabled) {
+        if (c->mapper == 48) c->irq_due_dot = dot + 12;
+        else c->irq_line = 1;
+    }
+}
+
+/* Counters of CPU cycles: Irem H3001 (65) down to 0, then stops; Sunsoft-3
+ * (67) down past 0, then stops; VRC3 (73) up past $FFFF (or the low byte
+ * past $FF), reloading; RAMBO-1 (64, 158) in its cycle mode clocks MMC3's
+ * counter every 4 cycles. run: n cycles; due: cycles to the IRQ, -1 = none. */
+static int is_cycle_counter(const Cart *c) {
+    return c->mapper == 65 || c->mapper == 67 || c->mapper == 73 || is_rambo(c);
+}
+
+static void cycle_counter_run(Cart *c, int64_t n) {
+    switch (c->mapper) {
+    case 65:
+        if (!c->irq_enabled || !c->irq_count16) return;
+        if (n >= c->irq_count16) { c->irq_count16 = 0; c->irq_line = 1; }
+        else c->irq_count16 = (uint16_t)(c->irq_count16 - n);
+        return;
+    case 67:
+        if (!c->irq_enabled) return;
+        if (n > c->irq_count16) { c->irq_count16 = 0xFFFF; c->irq_enabled = 0; c->irq_line = 1; }
+        else c->irq_count16 = (uint16_t)(c->irq_count16 - n);
+        return;
+    case 73: {
+        if (!(c->vrc_irq_ctrl & 2)) return;
+        int64_t mask = (c->vrc_irq_ctrl & 4) ? 0xFF : 0xFFFF, cur = c->irq_count16 & mask, latch = c->irq_reload16 & mask;
+        int64_t v = cur + n;
+        if (v > mask) { c->irq_line = 1; v = latch + (v - mask - 1) % (mask - latch + 1); }
+        c->irq_count16 = (uint16_t)((c->irq_count16 & ~mask) | v);
+        return;
+    }
+    default: {
+        if (!(c->irq_ctrl & 1)) return;
+        int64_t k = (c->irq_prescale + n) / 4;
+        c->irq_prescale = (uint8_t)((c->irq_prescale + n) % 4);
+        while (k-- > 0) mmc3_clock(c, 0);
+    }
+    }
+}
+
+static int64_t cycle_counter_due(const Cart *c) {
+    switch (c->mapper) {
+    case 65: return c->irq_enabled && c->irq_count16 ? c->irq_count16 : -1;
+    case 67: return c->irq_enabled ? c->irq_count16 + 1 : -1;
+    case 73: {
+        if (!(c->vrc_irq_ctrl & 2)) return -1;
+        int64_t mask = (c->vrc_irq_ctrl & 4) ? 0xFF : 0xFFFF;
+        return mask - (c->irq_count16 & mask) + 1;
+    }
+    default: {
+        if (!(c->irq_ctrl & 1) || !c->irq_enabled) return -1;
+        uint8_t first = c->irq_reload ? (uint8_t)(c->irq_latch + (c->irq_latch >= 2)) : c->irq_latch;
+        int64_t clocks = c->irq_counter && !c->irq_reload ? c->irq_counter : first ? first + 1 : 1;
+        return (4 - c->irq_prescale) + 4 * (clocks - 1);
+    }
+    }
+}
+
 void cart_run(Cart *c, uint64_t cycle) {
     if (cycle <= c->irq_cycle) { c->irq_cycle = cycle; return; }
     int64_t n = (int64_t)(cycle - c->irq_cycle);
@@ -275,6 +381,7 @@ void cart_run(Cart *c, uint64_t cycle) {
         c->n163_counter = (uint16_t)to;
         return;
     }
+    if (is_cycle_counter(c)) { cycle_counter_run(c, n); return; }
     int irq;
     uint16_t mask = count16_mask(c, &irq);
     if (mask) {
@@ -302,6 +409,9 @@ int64_t cart_cycles_to_irq(const Cart *c, uint64_t cycle) {
     } else if (c->mapper == 19) {
         if (!c->n163_irq_enable || c->n163_counter >= 0x7FFF) return -1;
         need = 0x7FFF - c->n163_counter;
+    } else if (is_cycle_counter(c)) {
+        need = cycle_counter_due(c);
+        if (need < 0) return -1;
     } else if (c->mapper == 18 || c->mapper == 69 || is_bandai(c)) {
         int irq;
         uint16_t mask = count16_mask(c, &irq);
@@ -533,7 +643,13 @@ float cart_n163_level(const Cart *c) {
 
 uint8_t cart_nt_read(Cart *c, const uint8_t *ciram, uint16_t a) {
     int q = (a >> 10) & 3, off = a & 0x3FF;
-    if (c->mapper == 118 || c->mapper == 207) return ciram[c->txsrom_nt[q] * 0x400 + off];
+    if (c->mapper == 118 || c->mapper == 207 || c->mapper == 95 || c->mapper == 158)
+        return ciram[c->txsrom_nt[q] * 0x400 + off];
+    if (c->mapper == 68) {  /* Sunsoft-4: CIRAM, or CHR ROM pages */
+        uint16_t i = cart_nt_index(c, a);
+        if (!(c->outer & 0x10)) return ciram[i];
+        return c->chr[((0x80u | c->chr_bank[4 + (i >> 10 & 1)]) * 0x400 + (uint32_t)off) % c->chr_rom_size];
+    }
     if (c->mapper == 19) {
         uint8_t v = c->n163_nt[q];
         return v >= 0xE0 ? ciram[(v & 1) * 0x400 + off] : c->chr[((uint32_t)v * 0x400 + (uint32_t)off) % c->chr_size];
@@ -548,7 +664,11 @@ uint8_t cart_nt_read(Cart *c, const uint8_t *ciram, uint16_t a) {
 
 void cart_nt_write(Cart *c, uint8_t *ciram, uint16_t a, uint8_t v) {
     int q = (a >> 10) & 3, off = a & 0x3FF;
-    if (c->mapper == 118 || c->mapper == 207) { ciram[c->txsrom_nt[q] * 0x400 + off] = v; return; }
+    if (c->mapper == 118 || c->mapper == 207 || c->mapper == 95 || c->mapper == 158) {
+        ciram[c->txsrom_nt[q] * 0x400 + off] = v;
+        return;
+    }
+    if (c->mapper == 68) { if (!(c->outer & 0x10)) ciram[cart_nt_index(c, a)] = v; return; }
     if (c->mapper == 19) {
         if (c->n163_nt[q] >= 0xE0) ciram[(c->n163_nt[q] & 1) * 0x400 + off] = v;  /* CHR ROM: ignored */
         return;
@@ -897,6 +1017,159 @@ static void fcg_write(Cart *c, uint16_t a, uint8_t v) {
     fcg_update(c);
 }
 
+/* ---- More boards (nesdev wiki, each "INES Mapper NNN" page and the chip
+ * pages named here). Discrete latch boards: one register, written at
+ * $8000-$FFFF unless noted (bus conflicts ignored), banks in update_banks:
+ *  13 CPROM: 16 KB CHR RAM, bits 0-1 the 4 KB at $1000 ($0000 fixed).
+ *  34 BNROM (submapper 2): 32 KB PRG. NINA-001 (1; without a submapper:
+ *     CHR ROM over 8 KB): $7FFD 32 KB PRG, $7FFE/$7FFF 4 KB CHR, RAM at $6000.
+ *  41 Caltron 6-in-1: $6000-$67FF address bits 0-2 32 KB PRG, 3-4 CHR bits
+ *     2-3, 5 mirroring; $8000 bits 0-1 CHR, only while address bit 2 is set.
+ *  70 Bandai: bits 4-7 16 KB PRG at $8000, 0-3 8 KB CHR. 152: PRG bits 4-6,
+ *     bit 7 one-screen page.
+ *  72/92 Jaleco JF-17/JF-19: bit 7 loads bits 0-3 as the 16 KB PRG bank
+ *     ($8000; 92: $C000, the first bank at $8000), bit 6 as the 8 KB CHR bank.
+ *  77 Irem: bits 0-3 32 KB PRG, 4-7 2 KB CHR ROM at $0000; $0800-$1FFF CHR
+ *     RAM, four nametables.
+ *  78 Irem/Jaleco: bits 0-2 16 KB PRG, bit 3 mirroring (submapper 3 Holy
+ *     Diver: horizontal/vertical; else one-screen), bits 4-7 8 KB CHR.
+ *  86 Jaleco JF-13: $6000-$6FFF bits 4-5 32 KB PRG, bits 0-1 and 6 CHR.
+ *  89 Sunsoft-2: bits 4-6 16 KB PRG, 0-2 and 7 CHR, 3 one-screen page.
+ *  93 Sunsoft-2: bits 4-6 16 KB PRG (CHR RAM). 94 UN1ROM: bits 2-4.
+ *  97 Irem TAM-S1: $8000-$BFFF bits 0-4 16 KB at $C000 (the last at
+ *     $8000), bits 6-7 mirroring.
+ * 113 HES: $4100 (A8 set) bits 3-5 32 KB PRG, 0-2 and 6 CHR, 7 mirroring.
+ * 140 Jaleco JF-11/14: $6000-$7FFF bits 4-5 32 KB PRG, 0-3 8 KB CHR.
+ * 180 Nichibutsu: bits 0-2 16 KB at $C000, the first bank at $8000.
+ * 184 Sunsoft-1: $6000-$7FFF bits 0-2 4 KB CHR at $0000, 4-6 at $1000.
+ * 188 Bandai Karaoke Studio: bit 4 set: bits 0-2 16 KB PRG; clear: the
+ *     expansion cartridge's bank 8 + bits 0-2; $C000 bank 7; bit 5
+ *     mirroring. $6000 reads the microphone buttons (never pressed here).
+ * 228 Active Enterprises (Action 52): the address latches: A6-A10 16 KB
+ *     PRG, A11-A12 the 512 KB chip (3 = 2), A5 16 KB mode, A13 mirroring,
+ *     A0-A3 and data bits 0-1 CHR.
+ * 232 Camerica Quattro: $8000-$BFFF bits 3-4 the 64 KB block (submapper 1:
+ *     swapped), $C000 bits 0-1 the 16 KB in it; $C000 maps the block's last. */
+static void latch_mirroring(Cart *c, uint8_t v) {
+    static const int ONE[2] = {MIRROR_SINGLE_LOW, MIRROR_SINGLE_HIGH}, HV[2] = {MIRROR_HORIZONTAL, MIRROR_VERTICAL};
+    if (c->four_screen) return;
+    switch (c->mapper) {
+    case 78: c->mirroring = c->submapper == 3 ? HV[(v >> 3) & 1] : ONE[(v >> 3) & 1]; break;
+    case 89: c->mirroring = ONE[(v >> 3) & 1]; break;
+    case 152: c->mirroring = ONE[v >> 7]; break;
+    case 154: c->mirroring = ONE[(v >> 6) & 1]; break;
+    case 113: c->mirroring = HV[v >> 7]; break;
+    case 188: c->mirroring = HV[!(v & 0x20)]; break;
+    case 97: {
+        static const int M[4] = {MIRROR_SINGLE_LOW, MIRROR_HORIZONTAL, MIRROR_VERTICAL, MIRROR_SINGLE_HIGH};
+        c->mirroring = M[v >> 6];
+        break;
+    }
+    }
+}
+
+/* ---- Irem H3001 (65): $8000/$A000/$C000 8 KB PRG ($C000 starts at the
+ * second-to-last bank), $E000 the last; $9001 bit 7 mirroring (1
+ * horizontal); $B000-$B007 1 KB CHR; IRQ: $9005/$9006 reload high/low,
+ * $9004 reloads, $9003 bit 7 enables (both acknowledge). The counter counts
+ * CPU cycles down to 0, asserts the IRQ there and stops. */
+static void h3001_write(Cart *c, uint16_t a, uint8_t v) {
+    switch (a & 0xF007) {
+    case 0x8000: c->prg_bank[0] = v; break;
+    case 0xA000: c->prg_bank[1] = v; break;
+    case 0xC000: c->prg_bank[2] = v; break;
+    case 0x9001: if (!c->four_screen) c->mirroring = (v & 0x80) ? MIRROR_HORIZONTAL : MIRROR_VERTICAL; break;
+    case 0x9003: c->irq_enabled = v >> 7; c->irq_line = 0; break;
+    case 0x9004: c->irq_count16 = c->irq_reload16; c->irq_line = 0; break;
+    case 0x9005: c->irq_reload16 = (uint16_t)((c->irq_reload16 & 0x00FF) | v << 8); break;
+    case 0x9006: c->irq_reload16 = (uint16_t)((c->irq_reload16 & 0xFF00) | v); break;
+    default: if ((a & 0xF000) == 0xB000) c->chr_bank[a & 7] = v; break;
+    }
+    banks8_update(c);
+}
+
+/* ---- Sunsoft-3 (67): $8800/$9800/$A800/$B800 2 KB CHR; $C800 the IRQ
+ * counter, high byte then low; $D800 bit 4 counting (resets the byte order);
+ * $E800 mirroring (vertical, horizontal, one screen A, B); $F800 16 KB PRG at
+ * $8000, the last fixed; $8000 acknowledges. The counter counts CPU cycles
+ * down; wrapping past 0 asserts the IRQ and stops it. */
+static void sunsoft3_write(Cart *c, uint16_t a, uint8_t v) {
+    static const int MIRROR[4] = {MIRROR_VERTICAL, MIRROR_HORIZONTAL, MIRROR_SINGLE_LOW, MIRROR_SINGLE_HIGH};
+    switch (a & 0xF800) {
+    case 0x8000: c->irq_line = 0; break;
+    case 0x8800: case 0x9800: case 0xA800: case 0xB800: c->chr_bank[(a >> 12) - 8] = v; break;
+    case 0xC800:
+        c->irq_count16 = c->irq_toggle ? (uint16_t)((c->irq_count16 & 0xFF00) | v)
+                                       : (uint16_t)((c->irq_count16 & 0x00FF) | v << 8);
+        c->irq_toggle ^= 1;
+        break;
+    case 0xD800: c->irq_enabled = (v >> 4) & 1; c->irq_toggle = 0; break;
+    case 0xE800: if (!c->four_screen) c->mirroring = MIRROR[v & 3]; break;
+    case 0xF800: c->prg_bank[0] = v; break;
+    }
+}
+
+/* ---- Sunsoft-4 (68): $8000-$B000 2 KB CHR; $C000/$D000 the CHR ROM banks
+ * (1 KB, bit 7 forced) shown as nametables A/B when $E000 bit 4 is set;
+ * $E000 bits 0-1 mirroring (vertical, horizontal, one screen A, B); $F000
+ * 16 KB PRG at $8000, the last fixed. Submapper 1 (Nantettatte!! Baseball)
+ * with its 16 KB sub-cartridge after the 128 KB: $F000 bit 3 clear maps it.
+ * shortcut: the sub-cartridge's licence timer (its ROM reads only for a
+ * while after a $6000-$7FFF write) and $F000 bit 4 (PRG RAM enable) are not
+ * emulated: the two sub-cartridge dumps report a data error at the title
+ * (the game alone runs). Upgrade by adding the timer and open bus. */
+static void sunsoft4_write(Cart *c, uint16_t a, uint8_t v) {
+    static const int MIRROR[4] = {MIRROR_VERTICAL, MIRROR_HORIZONTAL, MIRROR_SINGLE_LOW, MIRROR_SINGLE_HIGH};
+    int r = (a >> 12) - 8;
+    if (r < 6) c->chr_bank[r] = v;
+    else if (r == 6) { c->outer = v; if (!c->four_screen) c->mirroring = MIRROR[v & 3]; }
+    else c->prg_bank[0] = v;
+}
+
+/* ---- Konami VRC3 (73): $8000-$B000 the 16-bit IRQ latch, a nibble each
+ * (low first); $C000 IRQ control (bit 0 A, 1 E: counting, reloads, 2 M: 8-bit
+ * mode; acknowledges); $D000 acknowledge (E = A); $F000 bits 0-2 16 KB PRG at
+ * $8000, the last fixed. The counter counts CPU cycles up; overflowing (the
+ * low byte in 8-bit mode) reloads the latch and asserts the IRQ. */
+static void vrc3_write(Cart *c, uint16_t a, uint8_t v) {
+    int r = (a >> 12) - 8, sh = r * 4;
+    if (r < 4) c->irq_reload16 = (uint16_t)((c->irq_reload16 & ~(0xF << sh)) | (v & 0xF) << sh);
+    else if (r == 4) {
+        c->vrc_irq_ctrl = v & 7;
+        c->irq_line = 0;
+        if (v & 2) c->irq_count16 = c->irq_reload16;
+    } else if (r == 5) vrc_irq_ack(c);
+    else if (r == 7) c->prg_bank[0] = v & 7;
+}
+
+/* ---- Taito X1-017 (82): registers at $7EF0-$7EFF: $7EF0/$7EF1 2 KB CHR
+ * (1 KB numbers, bit 0 ignored), $7EF2-$7EF5 1 KB CHR, $7EF6 bit 0
+ * mirroring (1 vertical), bit 1 swaps the CHR halves; $7EF7-$7EF9 = $CA, $69,
+ * $84 enable the 5 KB of RAM at $6000-$67FF, $6800-$6FFF, $7000-$73FF;
+ * $7EFA-$7EFC bits 2-7 8 KB PRG at $8000/$A000/$C000, the last fixed.
+ * shortcut: its IRQ ($7EFD-$7EFF) is not emulated; no game is known to use it. */
+static int x1017_ram_on(const Cart *c, uint16_t a) {
+    return a < 0x6800 ? c->reg[0] == 0xCA : a < 0x7000 ? c->reg[1] == 0x69 : a < 0x7400 && c->reg[2] == 0x84;
+}
+
+static void x1017_write(Cart *c, uint16_t a, uint8_t v) {
+    int r = a & 0x0F;
+    if (r < 6) c->chr_bank[r] = v;
+    else if (r == 6) { c->latch = v; if (!c->four_screen) c->mirroring = (v & 1) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL; }
+    else if (r < 10) c->reg[r - 7] = v;
+    else if (r < 13) c->prg_bank[r - 10] = v >> 2;
+}
+
+static void x1017_update(Cart *c) {
+    uint32_t n8 = c->prg_size / 0x2000;
+    for (int w = 0; w < 3; w++) c->prg_off[w] = (c->prg_bank[w] % n8) * 0x2000;
+    c->prg_off[3] = (n8 - 1) * 0x2000;
+    int inv = (c->latch & 2) ? 4 : 0;
+    set_chr(c, 0 ^ inv, 2, c->chr_bank[0] & 0xFEu);
+    set_chr(c, 2 ^ inv, 2, c->chr_bank[1] & 0xFEu);
+    for (int i = 0; i < 4; i++) set_chr(c, (4 + i) ^ inv, 1, c->chr_bank[2 + i]);
+}
+
 static void update_banks(Cart *c) {
     uint32_t n16 = c->prg_size / 0x4000;
     switch (c->mapper) {
@@ -904,7 +1177,85 @@ static void update_banks(Cart *c) {
     case 1: mmc1_update(c); break;
     case 2: set_prg16(c, 0, c->latch); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, 0); break;
     case 3: set_prg16(c, 0, 0); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, (uint32_t)c->latch * 8); break;
-    case 4: case 118: mmc3_update(c); break;
+    case 4: case 118: case 37: case 47: case 64: case 158: case 119:
+    case 76: case 88: case 95: case 154: mmc3_update(c); break;
+    case 155: mmc1_update(c); break;  /* MMC1A */
+    case 65: banks8_update(c); break;
+    case 82: x1017_update(c); break;
+    case 67: case 68: {
+        int sub = c->mapper == 68 && n16 == 9;  /* 68 + its 16 KB sub-cartridge after the 128 KB */
+        set_prg16(c, 0, sub ? ((c->prg_bank[0] & 8) ? c->prg_bank[0] & 7u : 8) : c->prg_bank[0] & 0x0Fu);
+        set_prg16(c, 1, sub ? 7 : n16 - 1);
+        for (int i = 0; i < 4; i++) set_chr(c, i * 2, 2, c->chr_bank[i] * 2u);
+        break;
+    }
+    case 73: set_prg16(c, 0, c->prg_bank[0]); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, 0); break;
+    case 13: set_prg32(c, 0); set_chr(c, 0, 4, 0); set_chr(c, 4, 4, (c->latch & 3u) * 4); break;
+    case 34:
+        if (c->submapper == 1) {
+            set_prg32(c, c->reg[0]);
+            set_chr(c, 0, 4, c->reg[1] * 4u);
+            set_chr(c, 4, 4, c->reg[2] * 4u);
+        } else {
+            set_prg32(c, c->latch);
+            set_chr(c, 0, 8, 0);
+        }
+        break;
+    case 41: {
+        uint32_t chr = (c->outer >> 1 & 0x0Cu) | (c->latch & 3u);
+        set_prg32(c, c->outer & 7);
+        set_chr(c, 0, 8, chr * 8);
+        break;
+    }
+    case 70: case 152:
+        set_prg16(c, 0, (c->latch >> 4) & (c->mapper == 70 ? 0x0F : 7));
+        set_prg16(c, 1, n16 - 1);
+        set_chr(c, 0, 8, (c->latch & 0x0Fu) * 8);
+        break;
+    case 72: case 92:
+        set_prg16(c, 0, c->mapper == 72 ? c->prg_bank[0] : 0);
+        set_prg16(c, 1, c->mapper == 72 ? n16 - 1 : c->prg_bank[0]);
+        set_chr(c, 0, 8, c->chr_bank[0] * 8u);
+        break;
+    case 77:
+        set_prg32(c, c->latch & 0x0F);
+        set_chr(c, 0, 2, (c->latch >> 4) * 2u);
+        for (int i = 2; i < 8; i++) c->chr_off[i] = c->chr_rom_size + (uint32_t)i * 0x400;  /* CHR RAM */
+        break;
+    case 78: set_prg16(c, 0, c->latch & 7); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, (c->latch >> 4) * 8u); break;
+    case 86: set_prg32(c, (c->latch >> 4) & 3); set_chr(c, 0, 8, ((c->latch & 3u) | (c->latch >> 4 & 4u)) * 8); break;
+    case 89:
+        set_prg16(c, 0, (c->latch >> 4) & 7); set_prg16(c, 1, n16 - 1);
+        set_chr(c, 0, 8, ((c->latch & 7u) | (c->latch >> 4 & 8u)) * 8);
+        break;
+    case 93: set_prg16(c, 0, (c->latch >> 4) & 7); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, 0); break;
+    case 94: set_prg16(c, 0, (c->latch >> 2) & 7); set_prg16(c, 1, n16 - 1); set_chr(c, 0, 8, 0); break;
+    case 97: set_prg16(c, 0, n16 - 1); set_prg16(c, 1, c->latch & 0x1F); set_chr(c, 0, 8, 0); break;
+    case 113: set_prg32(c, (c->latch >> 3) & 7); set_chr(c, 0, 8, ((c->latch & 7u) | (c->latch >> 3 & 8u)) * 8); break;
+    case 140: set_prg32(c, (c->latch >> 4) & 3); set_chr(c, 0, 8, (c->latch & 0x0Fu) * 8); break;
+    case 180: set_prg16(c, 0, 0); set_prg16(c, 1, c->latch & 7); set_chr(c, 0, 8, 0); break;
+    case 184:
+        set_prg16(c, 0, 0); set_prg16(c, 1, n16 - 1);
+        set_chr(c, 0, 4, (c->latch & 7u) * 4);
+        set_chr(c, 4, 4, (c->latch >> 4 & 7u) * 4);
+        break;
+    case 188:
+        set_prg16(c, 0, (c->latch & 0x10) ? c->latch & 7u : (c->latch & 7u) | 8);
+        set_prg16(c, 1, 7);
+        set_chr(c, 0, 8, 0);
+        break;
+    case 228: {
+        uint32_t a = c->addr_latch, chip = (a >> 11) & 3, page = ((a >> 6) & 0x1F) | (chip == 3 ? 2 : chip) << 5;
+        set_prg16(c, 0, (a & 0x20) ? page : page & ~1u);
+        set_prg16(c, 1, (a & 0x20) ? page : page | 1u);
+        set_chr(c, 0, 8, ((a & 0x0F) << 2 | (c->latch & 3u)) * 8);
+        break;
+    }
+    case 232:
+        set_prg16(c, 0, c->outer * 4u + (c->latch & 3u));
+        set_prg16(c, 1, c->outer * 4u + 3);
+        set_chr(c, 0, 8, 0);
+        break;
     case 75: vrc1_update(c); break;
     case 32: g101_update(c); break;
     case 33: case 48: case 80: case 207: taito_update(c); break;
@@ -965,24 +1316,34 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
         snprintf(err, errlen, "file shorter than its header says");
         return -1;
     }
-    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 22, 23, 24, 25, 26, 32, 33, 48,
-                                    66, 69, 71, 75, 79, 80, 85, 87, 118, 153, 157, 159, 185, 206, 207, 210};
+    static const int SUPPORTED[] = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 16, 18, 19, 21, 22, 23, 24, 25, 26, 32,
+                                    33, 34, 37, 41, 47, 48, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 75, 76, 77,
+                                    78, 79, 80, 82, 85, 86, 87, 88, 89, 92, 93, 94, 95, 97, 113, 118, 119, 140,
+                                    152, 153, 154, 155, 157, 158, 159, 180, 184, 185, 188, 206, 207, 210, 228, 232};
     int ok = 0;
     for (size_t i = 0; i < sizeof SUPPORTED / sizeof *SUPPORTED; i++) ok |= c->mapper == SUPPORTED[i];
     if (!ok) {
         snprintf(err, errlen, "mapper %d not supported yet", c->mapper);
         return -1;
     }
-    c->chr_ram = c->chr_size == 0;
-    if (c->chr_ram) c->chr_size = 0x2000;
+    /* CHR RAM after the CHR ROM: 8 KB without CHR ROM, CPROM's 16 KB, and the
+     * 8 KB that boards 77 and 119 have besides their ROM */
+    c->chr_rom_size = c->chr_size;
+    uint32_t chr_ram = c->mapper == 13 ? 0x4000 : (c->mapper == 77 || c->mapper == 119 || !c->chr_size) ? 0x2000 : 0;
+    c->chr_ram = chr_ram != 0;
+    c->chr_size += chr_ram;
     c->prg = malloc(c->prg_size);
     c->chr = malloc(c->chr_size + 0x400);  /* + a page of $FF: CHR disabled (mapper 185) */
     memset(c->chr, 0, c->chr_size);
     memset(c->chr + c->chr_size, 0xFF, 0x400);
     memcpy(c->prg, d + off, c->prg_size);
-    if (!c->chr_ram) memcpy(c->chr, d + off + c->prg_size, c->chr_size);
-    if (c->mapper == 1) c->reg[0] = 0x0C;          /* power-on: last bank fixed at $C000 */
-    if (cart_is_mmc3(c) || c->mapper == 206) { c->reg[6] = 0; c->reg[7] = 1; }
+    memcpy(c->chr, d + off + c->prg_size, c->chr_rom_size);
+    if (c->mapper == 1 || c->mapper == 155) c->reg[0] = 0x0C;  /* power-on: last bank fixed at $C000 */
+    if (cart_is_mmc3(c) || c->mapper == 206 || c->mapper == 76 || c->mapper == 88 || c->mapper == 95 ||
+        c->mapper == 154) { c->reg[6] = 0; c->reg[7] = 1; c->reg[15] = 0xFE; }
+    if (c->mapper == 34 && c->submapper != 1 && c->submapper != 2) c->submapper = c->chr_rom_size > 0x2000 ? 1 : 2;
+    if (c->mapper == 65) { c->prg_bank[1] = 1; c->prg_bank[2] = 0xFE; }
+    if (c->mapper == 188) c->latch = 0x10;  /* the first bank at $8000 */
     c->chr_latch[0] = c->chr_latch[1] = 1;  /* MMC2/MMC4: $FE (power-on state unknown) */
     if (c->mapper == 32 && c->submapper == 1 && !c->four_screen) c->mirroring = MIRROR_SINGLE_HIGH;
     c->vrc2 = c->mapper == 22 || ((c->mapper == 23 || c->mapper == 25) && c->submapper == 3);
@@ -992,6 +1353,7 @@ int cart_load(Cart *c, const uint8_t *d, size_t size, char *err, size_t errlen) 
     if (c->mapper == 153) memset(c->prg_ram, 0xFF, 0x2000);
     c->n163_sound = c->mapper == 19;
     if (is_x1005(c)) c->prg_ram_size = 128;  /* the chip's own RAM (battery-backed on some boards) */
+    if (c->mapper == 82) c->prg_ram_size = 0x1400;  /* X1-017: $6000-$73FF */
     if (c->mapper == 5) {
         /* NES 2.0 byte 10: PRG RAM and NVRAM sizes (64 << shift); else the most a board has */
         uint32_t ram = (d[10] & 15) ? 64u << (d[10] & 15) : 0, nv = (d[10] >> 4) ? 64u << (d[10] >> 4) : 0;
@@ -1036,6 +1398,9 @@ uint8_t cart_cpu_read(Cart *c, uint16_t a, uint8_t open_bus) {
     }
     if (a >= 0x6000 && is_bandai(c) && c->mapper != 153) return open_bus;
     if (a >= 0x6000 && is_x1005(c)) return a >= 0x7F00 && c->latch == 0xA3 ? c->prg_ram[a & 0x7F] : open_bus;
+    if (a >= 0x6000 && c->mapper == 82) return x1017_ram_on(c, a) ? c->prg_ram[a - 0x6000] : open_bus;
+    if (a >= 0x6000 && c->mapper == 188) return (uint8_t)((open_bus & 0xF8) | 3);  /* microphone: buttons up */
+    if (a >= 0x6000 && cart_6000_is_io(c) && c->mapper != 34 && c->mapper != 87) return open_bus;  /* registers only */
     if (a >= 0x6000) return (c->rom_at_6000 ? c->prg : c->prg_ram)[c->ram_off + (a - 0x6000)];
     if (c->mapper == 5 && a >= 0x5000) return mmc5_read(c, a, open_bus);
     if (c->mapper == 19) return n163_read(c, a, open_bus);
@@ -1066,15 +1431,21 @@ static void mmc3_write(Cart *c, uint16_t a, uint8_t v) {
     switch ((a >> 13) & 3) {
     case 0:
         if (!odd) c->mmc3_select = v;
-        else c->reg[c->mmc3_select & 7] = v;
+        else c->reg[c->mmc3_select & (is_rambo(c) ? 15 : 7)] = v;
         mmc3_update(c);
         break;
     case 1:
-        if (!odd && !c->four_screen && c->mapper != 118) c->mirroring = (v & 1) ? MIRROR_HORIZONTAL : MIRROR_VERTICAL;
-        break;  /* odd: PRG RAM protect, ignored */
+        if (!odd && !c->four_screen && c->mapper != 118 && c->mapper != 158)
+            c->mirroring = (v & 1) ? MIRROR_HORIZONTAL : MIRROR_VERTICAL;
+        if (odd) c->ram_ctrl = v;  /* PRG RAM enable/protect: only the multicarts' $6000 register heeds it */
+        break;
     case 2:
         if (!odd) c->irq_latch = v;
-        else { c->irq_counter = 0; c->irq_reload = 1; }
+        else {
+            c->irq_counter = 0;
+            c->irq_reload = 1;
+            if (is_rambo(c)) c->irq_ctrl = v & 1, c->irq_prescale = 0;  /* bit 0: count CPU cycles / 4 */
+        }
         break;
     case 3:
         if (!odd) { c->irq_enabled = 0; c->irq_line = 0; c->irq_due_dot = 0; }
@@ -1094,13 +1465,27 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
         if (c->mapper == 19) { n163_write(c, a, v); return 0; }
         if (c->mapper == 16) { fcg_write(c, a, v); return 1; }
         if (is_x1005(c)) { x1005_write(c, a, v); return 1; }
+        if (c->mapper == 82) { x1017_write(c, a, v); update_banks(c); return 1; }
+        if (c->mapper == 34) { c->prg_ram[a - 0x6000] = v; c->reg[a - 0x7FFD] = v; update_banks(c); return 1; }
+        if (c->mapper == 37 || c->mapper == 47) {  /* while $A001 enables PRG RAM writes */
+            if ((c->ram_ctrl & 0xC0) == 0x80) { c->outer = v; mmc3_update(c); }
+            return 1;
+        }
+        if (c->mapper == 41) {  /* the address is the value */
+            c->outer = a & 0x3F;
+            if (!c->four_screen) c->mirroring = (a & 0x20) ? MIRROR_HORIZONTAL : MIRROR_VERTICAL;
+            update_banks(c);
+            return 1;
+        }
         c->latch = v;
+        if (c->mapper == 113) latch_mirroring(c, v);
         update_banks(c);
-        return c->mapper == 79;  /* 87 switches CHR only */
+        return c->mapper != 87 && c->mapper != 184;  /* 87, 184 switch CHR only */
     }
     if (a < 0x6000) return 0;
     if (a < 0x8000) {
-        if (!c->rom_at_6000 && !cart_6000_is_io(c)) c->prg_ram[c->ram_off + (a - 0x6000)] = v;
+        if (c->mapper == 34 || (c->mapper == 82 && x1017_ram_on(c, a))) c->prg_ram[a - 0x6000] = v;
+        else if (!c->rom_at_6000 && !cart_6000_is_io(c)) c->prg_ram[c->ram_off + (a - 0x6000)] = v;
         else if (is_x1005(c) && a >= 0x7F00 && c->latch == 0xA3) c->prg_ram[a & 0x7F] = v;
         return 0;
     }
@@ -1109,10 +1494,30 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
         return 0;
     }
     switch (c->mapper) {
-    case 0: case 5: case 20: case 79: case 87: return 0;
+    case 0: case 5: case 20: case 79: case 87: case 82: case 86: case 113: case 140: case 184: return 0;
     case 19: n163_write(c, a, v); return 1;
-    case 1: mmc1_write(c, a, v, cycle); return 1;
-    case 4: case 118: mmc3_write(c, a, v); return 1;
+    case 1: case 155: mmc1_write(c, a, v, cycle); return 1;
+    case 4: case 118: case 37: case 47: case 64: case 119: case 158: mmc3_write(c, a, v); return 1;
+    case 65: h3001_write(c, a, v); return 1;
+    case 67: sunsoft3_write(c, a, v); update_banks(c); return 1;
+    case 68: sunsoft4_write(c, a, v); update_banks(c); return 1;
+    case 73: vrc3_write(c, a, v); update_banks(c); return 1;
+    case 34: if (c->submapper == 1) return 0; break;  /* NINA-001: registers at $7FFD-$7FFF */
+    case 41: if (!(c->outer & 4)) return 0; break;   /* inner CHR: only in the upper 4 games */
+    case 72: case 92:
+        if (v & 0x80) c->prg_bank[0] = v & 0x0F;
+        if (v & 0x40) c->chr_bank[0] = v & 0x0F;
+        update_banks(c);
+        return 1;
+    case 97: if (a >= 0xC000) return 0; break;
+    case 228: c->addr_latch = a; if (!c->four_screen) c->mirroring = (a & 0x2000) ? MIRROR_HORIZONTAL : MIRROR_VERTICAL; break;
+    case 232:
+        if (a < 0xC000) {
+            c->outer = c->submapper == 1 ? ((v >> 4) & 1) | ((v >> 2) & 2) : (v >> 3) & 3;
+            update_banks(c);
+            return 1;
+        }
+        break;
     case 21: case 22: case 23: case 25: vrc_write(c, a, v); return 1;
     case 9: case 10: mmc2_write(c, a, v); return 1;
     case 18: ss88006_write(c, a, v); return 1;
@@ -1126,19 +1531,24 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cycle) {
     case 210: n175_write(c, a, v); return 1;
     case 16: if (c->submapper == 4) return 0; /* FCG-1/2: $6000-$7FFF only */ /* fall through */
     case 153: case 157: case 159: fcg_write(c, a, v); return 1;
-    case 206:  /* bank select and data only; 3 select bits */
+    case 206: case 76: case 88: case 95: case 154:  /* bank select and data only; 3 select bits */
         if (a < 0xA000) mmc3_write(c, a, (a & 1) ? v : v & 7);
+        if (c->mapper == 154) latch_mirroring(c, v);
         return 1;
     case 71:  /* $C000: PRG; $9000: single-screen select (BF9097 boards) */
         if (a >= 0xC000) { c->latch = v; update_banks(c); }
         else if (a >= 0x9000 && a < 0xA000) c->mirroring = (v & 0x10) ? MIRROR_SINGLE_HIGH : MIRROR_SINGLE_LOW;
         return 1;
-    default: c->latch = v; update_banks(c); return 1;  /* simple latch mappers (bus conflicts ignored) */
     }
+    c->latch = v;  /* simple latch mappers (bus conflicts ignored) */
+    latch_mirroring(c, v);
+    update_banks(c);
+    return 1;
 }
 
 void cart_chr_write(Cart *c, uint16_t a, uint8_t v) {
-    if (c->chr_ram) c->chr[c->chr_off[(a >> 10) & 7] + (a & 0x3FF)] = v;
+    uint32_t o = c->chr_off[(a >> 10) & 7] + (a & 0x3FF);
+    if (c->chr_ram && o >= c->chr_rom_size && o < c->chr_size) c->chr[o] = v;
 }
 
 void cart_ppu_address(Cart *c, uint16_t a, uint64_t dot) {
@@ -1146,20 +1556,7 @@ void cart_ppu_address(Cart *c, uint16_t a, uint64_t dot) {
     if (c->irq_due_dot && dot >= c->irq_due_dot) { c->irq_due_dot = 0; c->irq_line = 1; }  /* TC0690 */
     uint8_t a12 = (a >> 12) & 1;
     if (a12 && !c->a12) {
-        if (dot - c->a12_low_since >= A12_FILTER_DOTS) {
-            if (c->irq_counter == 0 || c->irq_reload) {
-                c->irq_counter = c->irq_latch;
-                c->irq_reload = 0;
-            } else {
-                c->irq_counter--;
-            }
-            /* TC0690: about 4 CPU cycles later; the PPU fetches every 2 dots
-             * through the rest of the line, so the next one past that asserts */
-            if (c->irq_counter == 0 && c->irq_enabled) {
-                if (c->mapper == 48) c->irq_due_dot = dot + 12;
-                else c->irq_line = 1;
-            }
-        }
+        if (dot - c->a12_low_since >= A12_FILTER_DOTS && !(is_rambo(c) && (c->irq_ctrl & 1))) mmc3_clock(c, dot);
     } else if (!a12 && c->a12) {
         c->a12_low_since = dot;
     }
@@ -1167,5 +1564,6 @@ void cart_ppu_address(Cart *c, uint16_t a, uint64_t dot) {
 }
 
 int cart_irq_armed(const Cart *c) {
-    return cart_is_mmc3(c) && c->irq_enabled && (c->irq_counter <= 1 || c->irq_reload);
+    return cart_is_mmc3(c) && c->irq_enabled && (c->irq_counter <= 1 || c->irq_reload) &&
+           !(is_rambo(c) && (c->irq_ctrl & 1));
 }

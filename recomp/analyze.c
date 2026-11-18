@@ -136,9 +136,32 @@ int assumed_layout(const Rom *r, int layout[4]) {
     for (int w = 0; w < 4; w++) layout[w] = -1;
     switch (r->mapper) {
     case 0: case 3: case 87: case 185:  /* no PRG switching (16 KB mirrors: 0,1,0,1) */
+    case 13: case 184:
     case 7: case 11: case 66: case 79:  /* 32 KB switching, bank 0 at power-on */
+    case 34: case 41: case 77: case 86: case 113: case 140: case 228:
         for (int w = 0; w < 4; w++) layout[w] = w % n8;
         return 0;
+    case 180: case 92:           /* 16 KB at $C000 switched, the first at $8000 */
+        layout[0] = 0;
+        layout[1] = 1;
+        return 0;
+    case 97:                     /* Irem TAM-S1: the last 16 KB at $8000 */
+        layout[0] = n8 - 2;
+        layout[1] = n8 - 1;
+        return 0;
+    case 188: case 232:          /* Karaoke Studio: bank 7 at $C000; Quattro: block 0's last */
+        layout[0] = 0;
+        layout[1] = 1;
+        layout[2] = r->mapper == 188 ? 14 : 6;
+        layout[3] = r->mapper == 188 ? 15 : 7;
+        return 0;
+    case 37: case 47:            /* MMC3 multicarts: outer block 0 at power-on */
+        layout[2] = r->mapper == 37 ? 6 : 14;
+        layout[3] = r->mapper == 37 ? 7 : 15;
+        return 0;
+    case 70: case 152: case 72: case 78: case 89: case 93: case 94:  /* 16 KB at $8000, the last fixed */
+    case 67: case 68: case 73: case 155:
+    case 76: case 88: case 95: case 119: case 154:  /* MMC3, Namco 108 boards */
     case 1: case 2: case 71:     /* MMC1 (mode 3), UxROM, Camerica: last 16 KB fixed */
     case 4: case 118: case 206:  /* MMC3, TxSROM, Namco 108: $E000 fixed, $C000 in mode 0 */
     case 32: case 33: case 48:   /* Irem G-101, Taito TC0190/TC0690: the same */
@@ -163,6 +186,7 @@ int assumed_layout(const Rom *r, int layout[4]) {
     case 80: case 207:           /* Taito X1-005 */
     case 24: case 26:            /* VRC6: $8000 16 KB and $C000 8 KB switchable */
     case 85:                     /* VRC7 */
+    case 64: case 158: case 65: case 82:  /* RAMBO-1, Irem H3001, Taito X1-017 */
         layout[3] = n8 - 1;
         return 0;
     case 20:                     /* FDS BIOS at $E000; $6000-$DFFF is RAM */
@@ -176,16 +200,22 @@ int assumed_layout(const Rom *r, int layout[4]) {
  * one unit (consecutive banks), never across units. */
 int unit_windows(const Rom *r) {
     int m = r->mapper;
-    if (m == 7 || m == 11 || m == 66 || m == 79) return 4;  /* 32 KB */
-    if (m == 1 || m == 2 || m == 10 || m == 71 || m == 16 || m == 153 || m == 157 || m == 159)
+    switch (m) {
+    case 7: case 11: case 66: case 79: case 34: case 41: case 77: case 86: case 113: case 140:
+        return 4;                               /* 32 KB */
+    case 1: case 2: case 10: case 71: case 16: case 153: case 157: case 159: case 67: case 68: case 70:
+    case 72: case 73: case 78: case 89: case 92: case 93: case 94: case 97: case 152: case 155: case 180:
+    case 188: case 228: case 232:
         return 2;                               /* 16 KB (MMC1 32 KB mode = two units) */
+    }
     return 1;                                   /* MMC3, Namco 108, VRC: 8 KB windows independent */
 }
 
 int prg_bank_reg(const Rom *r) {
     switch (r->mapper) {
-    case 0: case 3: case 20: case 87: case 185: return 0;
-    case 79: return 0x4100;
+    case 0: case 3: case 20: case 87: case 185: case 13: case 184: return 0;
+    case 79: case 113: return 0x4100;
+    case 34: case 37: case 41: case 47: case 82: case 86: case 140: return 0x6000;  /* registers at $6000-$7FFF */
     case 5: return 0x5100;
     case 16: return 0x6000;  /* FCG-1/2 registers at $6000-$7FFF */
     case 80: case 207: return 0x6000;  /* X1-005 registers at $7EF0-$7EFF */

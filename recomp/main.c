@@ -408,8 +408,8 @@ static void summary(const Cart *c, char *out, size_t len) {
     Rom r = {c->prg, c->prg_size, c->mapper};
     vectors(&r, v);
     char chr[16];
-    if (c->chr_ram) snprintf(chr, sizeof chr, "RAM");
-    else snprintf(chr, sizeof chr, "%u KB", c->chr_size / 1024);
+    if (!c->chr_rom_size) snprintf(chr, sizeof chr, "RAM");
+    else snprintf(chr, sizeof chr, c->chr_ram ? "%u KB + RAM" : "%u KB", c->chr_rom_size / 1024);
     snprintf(out, len, "mapper %d, PRG %u KB, CHR %s, %s mirroring, NMI=$%04X RESET=$%04X IRQ=$%04X",
              c->mapper, c->prg_size / 1024, chr, MIRROR[c->mirroring], v[0], v[1], v[2]);
 }

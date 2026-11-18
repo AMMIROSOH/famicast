@@ -5,8 +5,9 @@
  * 19 Namco 163, 9 MMC2, 10 MMC4, 18 Jaleco SS88006, 69 Sunsoft FME-7, 210
  * Namco 175/340, 16/153/157/159 Bandai FCG, 118 TxSROM, 75 Konami VRC1,
  * 32 Irem G-101, 33/48 Taito TC0190/TC0690, 80/207 Taito X1-005, 24/26
- * Konami VRC6, 85 Konami VRC7 (nesdev wiki, see cart.c), and the Famicom
- * Disk System as 20 (fds.c). Every mapper only sets the bank tables below; reads
+ * Konami VRC6, 85 Konami VRC7, the boards in cart.c's "more boards"
+ * section (nesdev wiki, see cart.c), and the Famicom Disk System as 20
+ * (fds.c). Every mapper only sets the bank tables below; reads
  * go through them. MMC5 and Namco 163 also map the nametables
  * (cart_nt_read), and MMC5 has its own background banks. */
 #ifndef NES_CART_H
@@ -35,7 +36,8 @@ enum { FDS_SIDE = 65500, FDS_RAW_SIDE = 0x18000, FDS_MAX_SIDES = 16 };
 
 typedef struct Cart {
     uint8_t *prg, *chr;
-    uint32_t prg_size, chr_size;
+    uint32_t prg_size, chr_size;     /* chr_size: CHR ROM then CHR RAM (77, 119 have both) */
+    uint32_t chr_rom_size;           /* CHR below this offset is ROM (writes ignored) */
     int chr_ram, mapper, submapper, mirroring, four_screen, battery;  /* submapper: NES 2.0, else 0 */
     int region;                      /* REGION_*: NES 2.0 byte 12, iNES byte 9 bit 0 */
     uint8_t prg_ram[0x10000];        /* $6000-$7FFF: 8 KB, MMC5 up to 64 KB in 8 KB banks */
@@ -45,8 +47,11 @@ typedef struct Cart {
     uint8_t prg_ram_window;          /* bit w: window w maps PRG RAM, prg_off[w] into prg_ram (MMC5) */
     uint32_t chr_off[8];             /* CHR offset of each 1 KB PPU page */
     /* mapper registers */
-    uint8_t reg[8];                  /* MMC1: control, chr0, chr1, prg; MMC3: R0-R7 */
+    uint8_t reg[16];                 /* MMC1: control, chr0, chr1, prg; MMC3: R0-R7; RAMBO-1: R0-RF */
     uint8_t latch;                   /* simple mappers: last value written */
+    uint8_t outer, ram_ctrl;         /* multicart outer bank (37, 41, 47, 232), MMC3 $A001 */
+    uint16_t addr_latch;             /* mappers that latch the address written (228) */
+    uint8_t irq_toggle, irq_prescale;  /* Sunsoft-3 counter write order; RAMBO-1 CPU cycles / 4 */
     uint8_t mmc1_shift, mmc1_count;
     uint64_t mmc1_last_write;        /* CPU cycle (consecutive writes are ignored) */
     uint8_t mmc3_select;
@@ -138,7 +143,12 @@ uint8_t cart_cpu_read(Cart *c, uint16_t a, uint8_t open_bus);
 static inline int cart_is_reg(const Cart *c, uint16_t a) {
     if (c->mapper == 20) return a == 0x4025;  /* FDS: mirroring; $8000-$DFFF is RAM */
     if (a >= 0x8000) return c->mapper != 0;
-    if (c->mapper == 79) return (a & 0xE100) == 0x4100;
+    if (c->mapper == 79 || c->mapper == 113) return (a & 0xE100) == 0x4100;
+    if (c->mapper == 34) return c->submapper == 1 && a >= 0x7FFD;  /* NINA-001 */
+    if (c->mapper == 86) return a >= 0x6000 && a < 0x7000;
+    if (c->mapper == 41) return a >= 0x6000 && a < 0x6800;
+    if (c->mapper == 82) return (a & 0xFFF0) == 0x7EF0;
+    if (c->mapper == 37 || c->mapper == 47 || c->mapper == 140 || c->mapper == 184) return a >= 0x6000;
     if (c->mapper == 5) return a >= 0x5000 && a < 0x6000;
     if (c->mapper == 19) return a >= 0x4800 && a < 0x6000;
     if (c->mapper == 16 && c->submapper != 5) return a >= 0x6000;  /* FCG-1/2 */
@@ -148,8 +158,11 @@ static inline int cart_is_reg(const Cart *c, uint16_t a) {
 /* $6000-$7FFF is no memory: a register or an EEPROM line (reads and writes
  * take the bus's slow path). */
 static inline int cart_6000_is_io(const Cart *c) {
-    return c->mapper == 87 || c->mapper == 16 || c->mapper == 157 || c->mapper == 159 || c->mapper == 80 ||
-           c->mapper == 207;
+    switch (c->mapper) {
+    case 16: case 34: case 37: case 41: case 47: case 80: case 82: case 86: case 87: case 140: case 157:
+    case 159: case 184: case 188: case 207: return 1;
+    }
+    return 0;
 }
 /* VRC6 (24, 26): the register an address hits, as $x000-$x003 (26 swaps A0 and A1). */
 static inline uint16_t cart_vrc6_reg(const Cart *c, uint16_t a) {
@@ -162,8 +175,14 @@ static inline int cart_vrc7_line(const Cart *c, uint16_t a) {
     return (a & (c->submapper == 1 ? 0x08 : c->submapper == 2 ? 0x10 : 0x18)) != 0;
 }
 /* MMC3's IRQ counter: MMC3, TxSROM (an MMC3 board wiring CHR bank bit 7 to
- * the nametables) and Taito TC0690 (48) */
-static inline int cart_is_mmc3(const Cart *c) { return c->mapper == 4 || c->mapper == 118 || c->mapper == 48; }
+ * the nametables), Taito TC0690 (48), the MMC3 multicarts and TQROM (37, 47,
+ * 119), Tengen RAMBO-1 (64, 158; in its A12 mode) */
+static inline int cart_is_mmc3(const Cart *c) {
+    switch (c->mapper) {
+    case 4: case 37: case 47: case 48: case 64: case 118: case 119: case 158: return 1;
+    }
+    return 0;
+}
 /* A CPU read the PPU must be caught up for first (MMC5 scanline IRQ status). */
 static inline int cart_read_syncs(const Cart *c, uint16_t a) { return c->mapper == 5 && a == 0x5204; }
 /* Returns 1 if the PRG mapping may have changed (the bus re-maps its pages). */
@@ -171,10 +190,14 @@ int cart_cpu_write(Cart *c, uint16_t a, uint8_t v, uint64_t cpu_cycle);
 /* PPU $0000-$1FFF (inline: the PPU fetches every few dots) */
 static inline uint8_t cart_chr_read(Cart *c, uint16_t a) { return c->chr[c->chr_off[(a >> 10) & 7] + (a & 0x3FF)]; }
 void cart_chr_write(Cart *c, uint16_t a, uint8_t v);
-/* MMC5, Namco 163, TxSROM and X1-005 207 map each 1 KB nametable themselves:
- * cart_nt_read/write (ciram = the PPU's nametable RAM). The rest use cart_nt_index. */
+/* MMC5, Namco 163, TxSROM, X1-005 207, Sunsoft-4 (68), Namco 3425 (95) and
+ * RAMBO-1 158 map each 1 KB nametable themselves: cart_nt_read/write (ciram
+ * = the PPU's nametable RAM). The rest use cart_nt_index. */
 static inline int cart_custom_nt(const Cart *c) {
-    return c->mapper == 5 || c->mapper == 19 || c->mapper == 118 || c->mapper == 207;
+    switch (c->mapper) {
+    case 5: case 19: case 68: case 95: case 118: case 158: case 207: return 1;
+    }
+    return 0;
 }
 uint8_t cart_nt_read(Cart *c, const uint8_t *ciram, uint16_t a);
 void cart_nt_write(Cart *c, uint8_t *ciram, uint16_t a, uint8_t v);

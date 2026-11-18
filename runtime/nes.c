@@ -465,12 +465,12 @@ void nes_step(Nes *n) {
  * shortcut: the struct is stored raw, so a state only loads in builds with
  * the same layout (checked by size and version); write fields one by one
  * when states must survive program updates. */
-enum { STATE_VERSION = 15 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
+enum { STATE_VERSION = 16 };  /* 2: submapper, VRC2/VRC4 fields; 3: MMC5, Namco 163, 64 KB PRG RAM;
                                 4: MMC2/MMC4, SS88006, FME-7; 5: Bandai FCG EEPROMs; 6: TxSROM;
                                 7: emphasis in the frame buffer; 8: TC0690 IRQ delay;
                                 9: Namco 163 sound; 10: MMC5 sound; 11: Sunsoft 5B;
                                 12: VRC6 sound; 13: VRC7;
-                                14: regions (master clocks); 15: FDS */
+                                14: regions (master clocks); 15: FDS; 16: more boards (cart.c) */
 
 typedef struct {
     char magic[4];  /* "NESS" */
