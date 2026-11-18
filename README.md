@@ -190,6 +190,7 @@ scale = fit         # fit (keep aspect), integer (sharp pixels), stretch
 tv_frame = 0        # 1 = picture inside a TV-like frame
 overscan = 1        # 1 = hide the top/bottom 8 lines, as a TV did
 overscan_sides = 0  # 1 = hide the left/right 8 columns too
+sprite_limit = 1    # 0 = draw every sprite (less flicker; a few games glitch)
 aspect = tv         # tv = pixels as on a TV (8:7 NTSC, 1.39:1 PAL), square = square pixels
 region = auto       # auto (from the ROM header), ntsc, pal, dendy
 window_scale = 3    # starting window size

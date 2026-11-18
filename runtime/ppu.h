@@ -50,6 +50,10 @@ typedef struct Ppu {
     uint16_t fb[256 * 240];  /* per pixel: bits 0-5 colour, 6-8 emphasis ($2001 bits 5-7) */
 } Ppu;
 
+/* 1: draw every sprite on a line, not only the first 8 (less flicker; a
+ * display option, not console state, so not in save states) */
+extern int ppu_all_sprites;
+
 void ppu_reset(Ppu *p, Cart *cart);
 void ppu_step(Ppu *p);
 void ppu_run(Ppu *p, int dots);  /* = dots x ppu_step, skipping idle vblank lines */

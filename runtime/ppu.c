@@ -191,6 +191,39 @@ static void evaluation_dot(Ppu *p) {
     }
 }
 
+int ppu_all_sprites;
+
+/* pattern address of a sprite's row (8x8: $2000 bit 3 picks the table; 8x16: tile bit 0) */
+static uint16_t sprite_addr(const Ppu *p, uint8_t tile, int row, int h) {
+    if (h == 16) return (uint16_t)(((tile & 1) ? 0x1000 : 0) + (tile & 0xFE) * 16 + (row >= 8 ? 16 : 0) + (row & 7));
+    return (uint16_t)(((p->ctrl & 0x08) ? 0x1000 : 0) + tile * 16 + row);
+}
+
+static void sprite_to_line(Ppu *p, uint8_t x0, uint8_t lo, uint8_t hi, uint8_t attr, int zero) {
+    for (int off = 0; off < 8 && x0 + off < 256; off++) {
+        uint8_t px = (uint8_t)(((lo >> (7 - off)) & 1) | (((hi >> (7 - off)) & 1) << 1));
+        if (px) p->sp_line[x0 + off] = (uint8_t)(px | ((attr & 3) + 4) << 2 | (attr & 0x20) | (zero ? 0x40 : 0));
+    }
+}
+
+/* ppu_all_sprites: the in-range sprites after the first 8, behind them (OAM
+ * order), read without bus side effects: evaluation, overflow and the
+ * mapper's view of the fetches stay as on hardware */
+static void extra_sprites(Ppu *p, int h) {
+    int idx[64], m = 0, seen = 0;
+    for (int k = 0; k < 64; k++)
+        if (y_in_range(p, p->oam[k * 4]) && ++seen > 8) idx[m++] = k;
+    while (m--) {
+        const uint8_t *o = &p->oam[idx[m] * 4];
+        int row = p->scanline - o[0];
+        if (o[2] & 0x80) row = h - 1 - row;
+        uint16_t a = sprite_addr(p, o[1], row, h);
+        uint8_t lo = cart_chr_read(p->cart, a), hi = cart_chr_read(p->cart, (uint16_t)(a + 8));
+        if (o[2] & 0x40) lo = reverse8(lo), hi = reverse8(hi);
+        sprite_to_line(p, o[3], lo, hi, o[2], 0);
+    }
+}
+
 static void sprite_fetch_dot(Ppu *p) {
     int i = (p->dot - 257) >> 3, phase = (p->dot - 257) & 7;
     if (phase == 0 || phase == 2) {  /* garbage nametable / attribute fetch */
@@ -204,11 +237,7 @@ static void sprite_fetch_dot(Ppu *p) {
     uint8_t y = i < n ? s[0] : 0xFF, tile = i < n ? s[1] : 0xFF, attr = i < n ? s[2] : 0xFF;
     int row = (p->scanline - y) & (h - 1);
     if (i < n && (attr & 0x80)) row = h - 1 - row;
-    uint16_t addr;
-    if (h == 16)
-        addr = (uint16_t)(((tile & 1) ? 0x1000 : 0) + (tile & 0xFE) * 16 + (row >= 8 ? 16 : 0) + (row & 7));
-    else
-        addr = (uint16_t)(((p->ctrl & 0x08) ? 0x1000 : 0) + tile * 16 + row);
+    uint16_t addr = sprite_addr(p, tile, row, h);
     if (phase == 4) {
         p->sp_fetch_lo = mem_read(p, addr);
         return;
@@ -226,16 +255,8 @@ static void sprite_fetch_dot(Ppu *p) {
     /* front-most opaque sprite per pixel (lower slot wins), as render_pixel
      * would find it by scanning the 8 slots */
     memset(p->sp_line, 0, sizeof p->sp_line);
-    for (int k = n - 1; k >= 0; k--) {
-        for (int off = 0; off < 8; off++) {
-            int x = p->sp_x[k] + off;
-            if (x > 255) break;
-            uint8_t px = (uint8_t)(((p->sp_lo[k] >> (7 - off)) & 1) | (((p->sp_hi[k] >> (7 - off)) & 1) << 1));
-            if (!px) continue;
-            p->sp_line[x] = (uint8_t)(px | ((p->sp_attr[k] & 3) + 4) << 2 | (p->sp_attr[k] & 0x20) |
-                                      (k == 0 ? 0x40 : 0));
-        }
-    }
+    if (ppu_all_sprites && n == 8) extra_sprites(p, h);
+    for (int k = n - 1; k >= 0; k--) sprite_to_line(p, p->sp_x[k], p->sp_lo[k], p->sp_hi[k], p->sp_attr[k], k == 0);
 }
 
 static void render_pixel(Ppu *p) {

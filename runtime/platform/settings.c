@@ -30,6 +30,11 @@ static const char DEFAULT_FILE[] =
     "# sides a little; scrolling games often blank the leftmost 8 themselves)\n"
     "overscan_sides = 0\n"
     "\n"
+    "# sprite_limit: 1 = at most 8 sprites per line, as on the console (games\n"
+    "# flicker to show them all); 0 = draw every sprite: less flicker, but a few\n"
+    "# games hide things behind the limit on purpose\n"
+    "sprite_limit = 1\n"
+    "\n"
     "# aspect: tv = pixels the shape a TV gave them (NTSC 8:7, PAL games 1.39:1);\n"
     "#         square = square pixels (the picture 12% narrower, PAL 28%)\n"
     "aspect = tv\n"
@@ -56,7 +61,7 @@ static int parse_bool(const char *v, int *out) {
 }
 
 void settings_load(Settings *s, const char *path) {
-    *s = (Settings){0, SCALE_FIT, 0, 3, 1, 1, 0, 1, -1};
+    *s = (Settings){0, SCALE_FIT, 0, 3, 1, 1, 0, 1, 1, -1};
     FILE *f = fopen(path, "r");
     if (!f) {
         if ((f = fopen(path, "w"))) {
@@ -80,6 +85,7 @@ void settings_load(Settings *s, const char *path) {
         else if (!strcmp(key, "record_misses")) ok = parse_bool(val, &s->record_misses);
         else if (!strcmp(key, "overscan")) ok = parse_bool(val, &s->overscan);
         else if (!strcmp(key, "overscan_sides")) ok = parse_bool(val, &s->overscan_sides);
+        else if (!strcmp(key, "sprite_limit")) ok = parse_bool(val, &s->sprite_limit);
         else if (!strcmp(key, "aspect")) {
             if (!strcmp(val, "tv")) s->aspect_tv = 1, ok = 1;
             else if (!strcmp(val, "square")) s->aspect_tv = 0, ok = 1;
