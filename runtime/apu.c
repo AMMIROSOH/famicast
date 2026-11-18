@@ -316,6 +316,9 @@ static void output(Apu *a) {
      * 2.4x an APU square at 15, same polarity (nesdev "FDS audio") */
     if (a->has_fds) {
         a->fds.lp += 0.0069966f * ((float)a->fds.out - a->fds.lp);  /* 1 - e^(-2 pi 2000 / 1789773) */
+        /* silent channel: the decay would stop on a denormal (x * 0.993 rounds
+         * back to x), and denormal math every cycle made FDS games 2.5x slower */
+        if (a->fds.lp < 1e-6f && a->fds.lp > -1e-6f) a->fds.lp = 0;
         a->acc += 2.4f * 0.1494f / 63.0f * a->fds.lp;
     }
     a->acc_n++;

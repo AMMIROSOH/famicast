@@ -3,6 +3,21 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
+## 2026-11-18 · Speed, and FDS denormals
+- **FDS 2.5x slower than NES games**: Zelda no Densetsu ran 6,000 frames
+  in 15.7 s in the interpreter (Air Fortress: 6.1 s), the recompiled build
+  no faster. The FDS output low-pass (every CPU cycle) decays to a
+  denormal while the channel is silent and stays there (x * 0.993 rounds
+  back to x). Flushed to 0 below 1e-6: 6.3 s.
+- **Headless speed, 6,000 frames, no input** (Release, MSVC): Air Fortress
+  16.3x real time interpreted, 17.2x recompiled (99.98%); Zelda no
+  Densetsu 15.8x interpreted, 14.6x recompiled (99.6%: the RAM checks
+  cost more than they save there). Most of the time is not the CPU.
+- **Mesen2** (`--testrunner` with a Lua script counting 20,000 frames,
+  which keeps its debugger on): Air Fortress 52.9 s (6.3x real time)
+  against 22.1 s / 20.6 s here. FDS images do not start in its test
+  runner (it stops at its 100 s limit), so no FDS comparison.
+
 ## 2026-11-18 · M11: FDS games recompiled (per disk file)
 - **Build**: `-DROMS=<6 .fds>;Air Fortress -DFDS_BIOS=<Rev 1> -DFRONTEND=OFF`,
   auto hints (6,000 frames, seed 1). Code found in 3-10 disk files per
