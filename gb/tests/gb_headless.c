@@ -67,7 +67,7 @@ static const struct { const char *name; size_t off, len; } FIELDS[] = {
     F(vram), F(wram), F(oam), F(hram), F(io), F(apu), F(ie), F(ifl), F(div), F(tima), F(tma), F(tac),
     F(tima_reload), F(sb), F(sc), F(serial_left), F(serial_out), F(serial_n), F(p1), F(pad), F(lcdc), F(stat),
     F(scy), F(scx), F(ly), F(lyc), F(wy), F(wx), F(stat_line), F(mode), F(wy_hit), F(win_line), F(dot),
-    F(mode3_end), F(fb), F(frame), F(frame_count), F(dma_reg), F(dma_start), F(dma_on), F(dma_pos), F(dma_src),
+    F(m3), F(fb), F(frame), F(frame_count), F(dma_reg), F(dma_start), F(dma_on), F(dma_pos), F(dma_src),
     F(dma_next), F(frame_end), F(cgb), F(compat), F(vbk), F(svbk), F(opri), F(key1), F(double_speed), F(half), F(bcps),
     F(ocps), F(bg_pal), F(obj_pal), F(hdma_src), F(hdma_dst), F(hdma_left), F(hdma_on), F(hdma_due),
 };

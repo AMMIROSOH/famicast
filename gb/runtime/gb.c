@@ -100,7 +100,7 @@ static uint8_t io_read(Gb *g, uint16_t a) {
     case 0xFF07: return g->tac | 0xF8;
     case 0xFF0F: return g->ifl | 0xE0;
     case 0xFF40: return g->lcdc;
-    case 0xFF41: return (uint8_t)(0x80 | g->stat | ((g->lcdc & 0x80) && g->ly == g->lyc ? 4 : 0) | ppu_mode(g));
+    case 0xFF41: return (uint8_t)(0x80 | g->stat | ((g->lcdc & 0x80 ? g->ly_seen == g->ly && g->ly == g->lyc : g->coin_hold) ? 4 : 0) | ppu_vmode(g));
     case 0xFF42: return g->scy;
     case 0xFF43: return g->scx;
     case 0xFF44: return g->ly;
@@ -117,9 +117,9 @@ static uint8_t io_read(Gb *g, uint16_t a) {
     case 0xFF4F: return 0xFE | g->vbk;
     case 0xFF55: return (uint8_t)((g->hdma_on ? 0 : 0x80) | g->hdma_left);
     case 0xFF68: return g->bcps | 0x40;
-    case 0xFF69: return g->bg_pal[g->bcps & 0x3F];
+    case 0xFF69: return ppu_vmode(g) == 3 ? 0xFF : g->bg_pal[g->bcps & 0x3F];  /* palette RAM: the PPU owns it in mode 3 */
     case 0xFF6A: return g->ocps | 0x40;
-    case 0xFF6B: return g->obj_pal[g->ocps & 0x3F];
+    case 0xFF6B: return ppu_vmode(g) == 3 ? 0xFF : g->obj_pal[g->ocps & 0x3F];
     case 0xFF6C: return 0xFE | g->opri;
     case 0xFF70: return g->compat ? 0xFF : 0xF8 | g->svbk;
     case 0xFF72: case 0xFF73: case 0xFF76: case 0xFF77: return 0x00;  /* undocumented; FF76/7 read the sound's output */
@@ -187,7 +187,7 @@ static void io_write(Gb *g, uint16_t a, uint8_t v) {
     case 0xFF6A: g->ocps = v & 0xBF; return;
     case 0xFF69: case 0xFF6B: {  /* a palette byte; the index steps on if asked */
         uint8_t *ps = a == 0xFF69 ? &g->bcps : &g->ocps;
-        (a == 0xFF69 ? g->bg_pal : g->obj_pal)[*ps & 0x3F] = v;
+        if (ppu_vmode(g) != 3) (a == 0xFF69 ? g->bg_pal : g->obj_pal)[*ps & 0x3F] = v;  /* lost in mode 3, the index still steps */
         if (*ps & 0x80) *ps = (uint8_t)(0x80 | ((*ps + 1) & 0x3F));
         return;
     }
@@ -233,10 +233,16 @@ static int dma_conflict(const Gb *g, uint16_t a) {
     return g->dma_on && a < 0xFF00 && (a >= 0xFE00 || bus_of(g, a) == bus_of(g, g->dma_src));
 }
 /* The PPU owns VRAM in mode 3 and OAM in modes 2 and 3: the CPU reads $FF
- * and its writes are lost (Pan Docs "Accessing VRAM and OAM"). */
-static int ppu_owns(const Gb *g, uint16_t a) {
-    int mode = ppu_mode(g);
-    return (video_bus(a) && mode == 3) || (a >= 0xFE00 && a < 0xFEA0 && mode >= 2);
+ * and its writes are lost (Pan Docs "Accessing VRAM and OAM"). Reads are
+ * blocked as the mode begins and free a dot late; writes see the mode a dot
+ * late at both ends, and OAM is free for one cycle as mode 3 begins (mooneye
+ * lcdon_timing, lcdon_write_timing). */
+static int ppu_owns(const Gb *g, uint16_t a, int write) {
+    int mode = ppu_mode(g), seen = ppu_vmode(g);
+    int oam = a >= 0xFE00 && a < 0xFEA0;
+    if (!video_bus(a) && !oam) return 0;
+    if (write) return seen == 3 || (oam && seen == 2 && mode == 2);
+    return mode == 3 || seen == 3 || (oam && mode == 2);
 }
 /* An HBlank HDMA block is moved in the first CPU cycle after hblank began
  * (the CPU waits), in recompiled code as in the interpreter. */
@@ -245,7 +251,7 @@ uint8_t gb_read(GbCpu *c, uint16_t a) {
     tick(g);
     hdma_poll(g);
     if (dma_conflict(g, a)) return a >= 0xFE00 ? 0xFF : dma_peek(g, (uint16_t)(g->dma_src + g->dma_pos));
-    if (ppu_owns(g, a)) return 0xFF;
+    if (ppu_owns(g, a, 0)) return 0xFF;
     return bus_read(g, a);
 }
 void gb_write(GbCpu *c, uint16_t a, uint8_t v) {
@@ -260,7 +266,7 @@ void gb_write(GbCpu *c, uint16_t a, uint8_t v) {
     }
     tick(g);
     hdma_poll(g);
-    if (!dma_conflict(g, a) && !ppu_owns(g, a)) bus_write(g, a, v);
+    if (!dma_conflict(g, a) && !ppu_owns(g, a, 1)) bus_write(g, a, v);
 }
 void gb_idle(GbCpu *c) {
     Gb *g = c->bus;

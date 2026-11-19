@@ -1,7 +1,8 @@
 """Game Boy PPU and save states: dmg-acid2 (background, window, objects, priorities, flips,
 8x16, the 10-per-line limit) and cgb-acid2 (the same in CGB mode: map
 attributes, palettes, VRAM bank 1, OAM-order priority) must match their
-reference screenshots pixel for pixel. ROMs and screenshots from the
+reference screenshots pixel for pixel; so must cgb-acid-hell (LCDC writes in
+the middle of a line, a real device's photo). ROMs and screenshots from the
 c-sp/game-boy-test-roms zip (tests/fetch_test_roms.py fetch_gb_test_roms)."""
 import os
 import struct
@@ -81,6 +82,22 @@ class TestCgbAcid2(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = os.path.join(tmp, "frame.ppm")
             subprocess.run([RUNNER, os.path.join(base, "cgb-acid2.gbc"), "--frames", "120", "--ppm", out],
+                           capture_output=True, check=False)
+            with open(out, "rb") as f:
+                pix = f.read().split(b"\n", 3)[3]
+        bad = [(x, y) for y in range(144) for x in range(160)
+               if tuple(pix[(y * 160 + x) * 3:(y * 160 + x) * 3 + 3]) != ref[y][x]]
+        self.assertEqual(len(bad), 0, f"{len(bad)} pixels differ, first at {bad[:5]}")
+
+
+@built(RUNNER, "build gb_headless first")
+class TestCgbAcidHell(unittest.TestCase):
+    def test_matches_reference(self):
+        base = os.path.join(fetch_gb_test_roms(), "cgb-acid-hell")
+        ref = png_rgb(os.path.join(base, "cgb-acid-hell.png"))
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "frame.ppm")
+            subprocess.run([RUNNER, os.path.join(base, "cgb-acid-hell.gbc"), "--frames", "120", "--ppm", out],
                            capture_output=True, check=False)
             with open(out, "rb") as f:
                 pix = f.read().split(b"\n", 3)[3]

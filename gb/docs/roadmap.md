@@ -10,7 +10,7 @@ Exit tests and results: [verification-log.md](verification-log.md).
 |---|---|---|
 | [G1](#g1--sm83-cpu) | SM83 CPU from templates, interpreter | done |
 | [G2](#g2--memory-timer-cartridges) | memory map, timer, interrupts, MBC1/2/3/5 | done |
-| [G3](#g3--ppu-and-frontend) | PPU, the window program (core/frontend) | done (8 PPU timing tests open) |
+| [G3](#g3--ppu-and-frontend) | PPU, the window program (core/frontend) | done |
 | [G4](#g4--apu) | sound | done |
 | [G5](#g5--recompiler) | recompiler, lockstep diff | done (code in RAM interpreted) |
 | [G6](#g6--game-boy-color) | Game Boy Color | done |
@@ -40,22 +40,23 @@ Exit tests and results: [verification-log.md](verification-log.md).
   102 ROMs pass (`tests/gb/test_roms.py`); since then `timer/rapid_toggle`
   (a TAC write that enables a bit falling in that cycle counts), the
   serial clock's phase (the first bit goes at DIV's next bit-8 fall) and
-  the MBC1 multicart wiring (`gb/runtime/cart.c`) pass. Open: boot tests
-  of other models; 8 PPU timing tests belong to G3.
+  the MBC1 multicart wiring (`gb/runtime/cart.c`) pass. The boot tests
+  of other models pass since G6; the 8 PPU timing tests belong to G3 (done there).
 
 ## G3 · PPU and frontend
 - [x] `gb/runtime/ppu.c`: background, window (its own line counter),
   objects (10 per line, DMG priority, flips, 8x16), palettes; mode 3 as
   long as SCX, the window and objects make it; VRAM/OAM closed to the CPU
-  while the PPU uses them; the DMG STAT-write interrupt. A line is drawn
-  when mode 3 starts (mid-line register writes show on the next line).
+  while the PPU uses them; the DMG STAT-write interrupt. Mode 3 is drawn a
+  dot at a time (register writes in the middle of a line show at their
+  pixel); LCD-on timing, the mode the CPU reads a dot late.
 - [x] `gb` (`gb/frontend.c` behind `core/frontend/system.h`): 160 x 144 at
   59.73 Hz, battery saves (`ROM.sav`; MBC3's clock moves on while the
   program is closed), save states (F2/F4), palette setting (green, gray).
 - [x] **Exit:** dmg-acid2 pixel for pixel (`tests/gb/test_ppu.py`, with a
   save-state round trip); every 40th licensed title of a ~1,900-ROM set
-  (41 games) reaches a title, menu or play screen. Open: 8 mooneye PPU
-  timing tests (mode 3 lengths, LCD-on timing, STAT details).
+  (41 games) reaches a title, menu or play screen; the 8 mooneye PPU
+  timing tests (mode 3 lengths with objects, LCD-on timing, STAT details).
 
 ## G4 · APU
 - [x] `gb/runtime/apu.c`: two pulses (sweep on the first), wave, noise;
@@ -103,8 +104,9 @@ Exit tests and results: [verification-log.md](verification-log.md).
 - [x] Boot states of the other models (`gb_headless --model dmg0|mgb|sgb|
   sgb2|cgb0|agb`): the nine mooneye boot tests that were open and six of
   mooneye's `misc` boot tests now pass.
+- [x] Palette RAM is closed during mode 3 (reads $FF, writes lost); the
+  picture is drawn a dot at a time: cgb-acid-hell pixel for pixel.
 - [ ] Open: a Color game's boot DIV is unchecked, AGE's spsw
-  tima/mode0/ch2/prefetch ROMs fail, palette RAM is not closed during mode 3, cgb-acid-hell (needs
-  mid-line rendering), compatibility mode lacks the boot ROM's button
+  tima/mode0/ch2/prefetch ROMs fail, compatibility mode lacks the boot ROM's button
   palettes and the DMG logo tilemap.
 
