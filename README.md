@@ -93,9 +93,12 @@ the cache; on Windows with Git Bash, give Windows paths (`pwd -W`). Target
 names drop "(...)"/"[...]" tags from the file name.
 
 ## Controls and settings
-Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =
-Select, F5 = reset, Esc = quit. Gamepads: first = player 1, second = player 2,
-hot-plug; D-pad or left stick, East = A, South = B, Back = Select, Start.
+Keyboard (player 1): arrows, X = A, Z = B, S = X, A = Y, Q = L, W = R,
+Enter = Start, Right Shift = Select, F5 = reset, Esc = quit. Gamepads:
+first = player 1, second = player 2, hot-plug; D-pad or left stick, East =
+A, South = B, North = X, West = Y, shoulders = L and R, Back = Select,
+Start. Each system reads the buttons its pad has (the NES and Game Boy:
+A, B, Select, Start and the directions).
 
 | Key | Action |
 |-----|--------|
@@ -115,8 +118,9 @@ window_scale = 3    # starting window size
 Each system adds its own keys and settings (its README).
 - **Save states** work across builds of the same version: a state saved by
   the interpreter program loads in the recompiled one and the reverse.
-- **Recordings**: `build/nes game.nes --record run.nesi`, then
-  `--replay run.nesi` (live input resumes at the end); the same for `gb`.
+- **Recordings**: `build/nes game.nes --record run.rcin`, then
+  `--replay run.rcin` (live input resumes at the end); the same for `gb`. A
+  recording names its system; one from another system is refused.
 - A jammed CPU (a crash on hardware too) leaves the last picture on screen
   with a message; F5 resets, F4 loads a state.
 

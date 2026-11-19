@@ -127,7 +127,16 @@ SDL3 window, audio and gamepads (`core/frontend/`), the same for every
 system. A system plugs in through `core/frontend/system.h`: it loads the
 game and its saves, runs a frame (input in, picture and sound out), saves
 and loads states, says why a game halted, and takes the keys and settings
-that are its own. The frontend does the rest. The emulator runs on its own
+that are its own. The frontend does the rest.
+- **Sound**: the system names its rate and channels (`SysInfo`: the NES
+  mono, the Game Boy stereo) and returns sample frames, interleaved.
+- **Input**: one set of 16-bit buttons per player for every system (A, B,
+  X, Y, L, R, Select, Start, the directions; 4 bits free), from the
+  keyboard and gamepads; each system reads the ones its pad has.
+- **Recordings** (`core/input_log.c`): version 2 names the system and keeps
+  16 bits per pad; version 1 (NES, a byte per pad) still loads.
+
+The emulator runs on its own
 thread, so window moves and device changes do not stall the sound.
 Settings come from `<program>.ini` next to the program (`settings.c`).
 Scaling is done by the frontend (fit, integer or stretch), so the optional

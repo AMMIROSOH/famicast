@@ -158,8 +158,8 @@ the interpreter. Three ways to recompile it too:
   recompiles the game with those addresses.
 - **By hand**, from a recording (reaches what the script cannot):
   ```
-  build/nes game.nes --record run.nesi
-  build/nes_headless game.nes --replay run.nesi --misses --out misses.txt
+  build/nes game.nes --record run.rcin
+  build/nes_headless game.nes --replay run.rcin --misses --out misses.txt
   build/nesrecomp game.nes --hints nes/games/game.toml --misses misses.txt --save-hints nes/games/game.toml
   cmake --build build --config Release
   ```

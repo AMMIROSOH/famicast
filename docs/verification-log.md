@@ -6,6 +6,19 @@ reproducible check is not "verified".
 Checks of one system: [NES](../nes/docs/verification-log.md),
 [Game Boy](../gb/docs/verification-log.md).
 
+## 2026-11-19 · Frontend: sound channels, 16-bit buttons, recordings v2, 32-bit template addresses
+- **Recordings**: `tests/nes/test_recording.py`, a made-up ROM reading pad 1
+  through $4016: a version 1 and a version 2 recording of A + Start (with
+  X, not on the NES pad) both read $90; `--record` writes `RCIN`, 2, `nes`
+  and 5 bytes a frame; a `gb` recording is refused (exit 2, and by `nes`
+  itself). `gb` records, replays its own recording.
+- **Templates**: nesrecomp and gbrecomp output (nestest with its hints,
+  cpu_instrs, both interpreter switches) byte for byte the same as before
+  the address type changed.
+- **Builds**: the suite passes with `RETROCAST_STRICT=1`; NES and Game Boy
+  alone with gcc and `-Werror`; `nes` and `gb` (MSVC) run with a mono and a
+  stereo audio device.
+
 ## 2026-11-18 · Layout: core/ and nes/, the frontend behind system.h
 - **What**: the NES code moved to `nes/` (recomp/, runtime/, tests/,
   games/, its own CMakeLists.txt); `core/` holds what other systems will

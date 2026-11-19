@@ -205,17 +205,22 @@ void apu_tick(Gb *g) {
             if (IO(0x25) & 0x10 << i) l += s;
             if (IO(0x25) & 1 << i) r += s;
         }
-        p->acc += (l * ((IO(0x24) >> 4 & 7) + 1) + r * ((IO(0x24) & 7) + 1)) / 64.0f;
+        p->acc[0] += l * ((IO(0x24) >> 4 & 7) + 1) / 32.0f;
+        p->acc[1] += r * ((IO(0x24) & 7) + 1) / 32.0f;
     }
     p->acc_n++;
     p->frac += GB_SAMPLE_RATE;
     if (p->frac < 1048576) return;
     p->frac -= 1048576;
-    float x = p->acc / (float)p->acc_n;
-    p->acc = 0, p->acc_n = 0;
-    float y = x - p->cap;  /* the output capacitor (SameBoy's charge factor 0.999958 per clock, at 48 kHz) */
-    p->cap = x - y * 0.996336f;
-    if (p->buf_len < GB_APU_BUF) p->buf[p->buf_len++] = 0.5f * y;
+    for (int c = 0; c < 2; c++) {
+        float x = p->acc[c] / (float)p->acc_n;
+        float y = x - p->cap[c];  /* the output capacitor (SameBoy's charge factor 0.999958 per clock, at 48 kHz) */
+        p->cap[c] = x - y * 0.996336f;
+        p->acc[c] = 0;
+        if (p->buf_len < GB_APU_BUF) p->buf[p->buf_len * 2 + c] = 0.5f * y;
+    }
+    p->acc_n = 0;
+    if (p->buf_len < GB_APU_BUF) p->buf_len++;
 }
 
 void apu_boot(Gb *g) {
@@ -231,8 +236,8 @@ void apu_boot(Gb *g) {
 int apu_take_samples(Gb *g, float *out, int max) {
     GbApu *p = &g->apu;
     int n = p->buf_len < max ? p->buf_len : max;
-    memcpy(out, p->buf, (size_t)n * sizeof *out);
-    memmove(p->buf, p->buf + n, (size_t)(p->buf_len - n) * sizeof *out);
+    memcpy(out, p->buf, (size_t)n * 2 * sizeof *out);
+    memmove(p->buf, p->buf + 2 * n, (size_t)(p->buf_len - n) * 2 * sizeof *out);
     p->buf_len -= n;
     return n;
 }

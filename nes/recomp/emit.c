@@ -51,7 +51,7 @@ static void disasm(char *out, size_t len, const Instr *i, const uint8_t *mem) {
 static void static_body(Buf *o, const Instr *ins, const uint8_t *mem) {
     Lines l;
     body(ins->op, &l);
-    uint16_t pc = (uint16_t)(ins->pc + 1);
+    uint32_t pc = (uint16_t)(ins->pc + 1);
     int dynamic = 0;
     unsigned fetched = 0;
     bprintf(o, "        c->pc = 0x%04X;\n", (uint16_t)(ins->pc + ins->size));
@@ -59,7 +59,7 @@ static void static_body(Buf *o, const Instr *ins, const uint8_t *mem) {
         if (!*l.s[k]) continue;
         if (dynamic) { template_plain(o, "        ", l.s[k]); continue; }
         bprintf(o, "        ");
-        template_expand(o, l.s[k], &pc, mem, ins->pc, &fetched, &dynamic);
+        template_expand(o, l.s[k], &pc, mem, 0xFFFF, ins->pc, &fetched, &dynamic);
         bprintf(o, "\n");
     }
     /* Every operand byte (offsets 1 to size-1) must have been fetched, and

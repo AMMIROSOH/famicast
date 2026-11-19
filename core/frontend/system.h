@@ -17,11 +17,15 @@ typedef struct {
     int cols, lines;          /* the visible part, centred in it */
     double fps;               /* frames per second the game runs at */
     double aspect;            /* shown pixel width / height (1 = square) */
-    int sample_rate;          /* mono float samples */
+    int sample_rate;          /* float samples a second, per channel */
+    int channels;             /* 1 = mono, 2 = stereo (samples interleaved, left first) */
     char name[256];           /* the game, for the window title */
     char tag[16];             /* after it: "Game (NTSC)" */
     char state_path[1024];    /* F2 / F4 */
 } SysInfo;
+
+/* The system, as recordings name it ("nes", "gb"; core/input_log.h). */
+extern const char SYS_ID[];
 
 /* The system's own settings: offered every key the frontend does not
  * know (1 = taken), and appended to the default settings file. */
@@ -33,8 +37,10 @@ int sys_setting(const char *key, const char *value);
  * a message in err. */
 int sys_open(const char *path, const Settings *cfg, SysInfo *info, char *err, size_t errlen);
 void sys_reset(void);
-/* One frame with this input: the picture into rgb (width * height), the
- * sound into samples (at most max). Returns the number of samples. */
+/* One frame with this input (InputFrame: the PAD_* buttons; the system
+ * reads the ones its pad has): the picture into rgb (width * height), the
+ * sound into samples, at most max sample frames (a frame: one float per
+ * channel). Returns the number of sample frames. */
 int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max);
 /* Why the game stopped (a crashed CPU), as lines for the picture, or NULL. */
 const char *sys_halted(char *buf, size_t len);

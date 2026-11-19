@@ -39,8 +39,12 @@ void buf_write_file(const char *path, const Buf *b);  /* exits on error */
  * read at run time. With pc = the address the next fetch reads: code
  * fetches become fetch_k() with the byte from mem as a constant, the PC's
  * value a constant; *fetched gets bit k for each byte fetched at offset k
- * from `at`, and @J sets *jump. */
-void template_expand(Buf *o, const char *s, uint16_t *pc, const uint8_t *mem, uint16_t at, unsigned *fetched, int *jump);
+ * from `at`, and @J sets *jump. Addresses are 32 bits, wrapped by `mask`
+ * (the 6502 and SM83: $FFFF; mem holds mask + 1 bytes).
+ * shortcut: fetches are single bytes; a CPU that fetches 16-bit words
+ * (the 68000) needs a marker for them and big-endian constants. */
+void template_expand(Buf *o, const char *s, uint32_t *pc, const uint8_t *mem, uint32_t mask, uint32_t at,
+                     unsigned *fetched, int *jump);
 /* indent, the line as the interpreter's C, newline */
 void template_plain(Buf *o, const char *indent, const char *line);
 

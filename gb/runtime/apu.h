@@ -21,12 +21,12 @@ typedef struct GbApu {
     uint8_t sweep_timer, sweep_on, sweep_neg_used;
     uint8_t wave_pos, wave_sample, wave_just_read;  /* just_read: a sample was read this M-cycle */
     uint16_t lfsr;
-    /* output: a box filter to 48 kHz, the console's high-pass capacitor */
-    float acc, cap;
+    /* output, left and right: a box filter to 48 kHz, the console's high-pass capacitors */
+    float acc[2], cap[2];
     int acc_n;
     uint32_t frac;
-    float buf[GB_APU_BUF];
-    int buf_len;
+    float buf[GB_APU_BUF * 2];  /* stereo sample frames, left first */
+    int buf_len;               /* in sample frames */
 } GbApu;
 
 struct Gb;
@@ -35,6 +35,6 @@ void apu_frame_step(struct Gb *g);     /* DIV bit 12 fell (512 Hz) */
 uint8_t apu_read(struct Gb *g, uint16_t a);
 void apu_write(struct Gb *g, uint16_t a, uint8_t v);
 void apu_boot(struct Gb *g);           /* the state the boot ROM leaves */
-int apu_take_samples(struct Gb *g, float *out, int max);  /* drain the 48 kHz mono output */
+int apu_take_samples(struct Gb *g, float *out, int max);  /* drain up to max 48 kHz stereo sample frames */
 
 #endif

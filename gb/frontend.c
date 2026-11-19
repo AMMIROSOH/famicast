@@ -15,6 +15,8 @@
 #define APP_NAME "gb"
 #endif
 
+const char SYS_ID[] = "gb";
+
 const char SYS_SETTINGS[] =
     "# palette: the four shades: green = the original screen's tint, gray = neutral grays\n"
     "palette = green\n";
@@ -100,6 +102,7 @@ int sys_open(const char *path, const Settings *settings, SysInfo *info, char *er
     info->fps = 4194304.0 / 70224;  /* 59.73 Hz */
     info->aspect = 1.0;
     info->sample_rate = GB_SAMPLE_RATE;
+    info->channels = 2;  /* NR51 pans each channel left, right or both */
     return 0;
 }
 
@@ -118,7 +121,7 @@ int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
     static const uint32_t GREEN[4] = {0xE0F8D0, 0x88C070, 0x346856, 0x081820};
     static const uint32_t GRAY[4] = {0xFFFFFF, 0xAAAAAA, 0x555555, 0x000000};
     const uint32_t *pal = gray ? GRAY : GREEN;
-    gb_set_pad(&gb, in->pad[0]);
+    gb_set_pad(&gb, (uint8_t)in->pad[0]);  /* the Game Boy's buttons: the low byte */
     gb_run_frame(&gb);
     if (gb.cgb)  /* RGB555; 5 bits to 8 as (c << 3) | (c >> 2) */
         for (int i = 0; i < 160 * 144; i++) {

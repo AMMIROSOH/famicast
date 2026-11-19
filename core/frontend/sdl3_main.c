@@ -5,14 +5,15 @@
  *   --frames N   quit after N frames (smoke tests)
  *   --record     save the input of every frame (core/input_log.h)
  *   --replay     play a recording back; live input resumes when it ends
- * Keyboard (player 1): arrows, X = A, Z = B, Enter = Start, Right Shift =
- * Select, F5 = reset, Esc = quit. F2 = save state, F4 = load state,
+ * Keyboard (player 1): arrows, X = A, Z = B, S = X, A = Y, Q = L, W = R,
+ * Enter = Start, Right Shift = Select (each system reads the buttons its
+ * pad has), F5 = reset, Esc = quit. F2 = save state, F4 = load state,
  * F10 = TV frame on/off, F11 or Alt+Enter = fullscreen on/off; other keys
  * go to the system (NES: F6 = next disk side).
  * Settings: <program>.ini next to the program (settings.c).
  * Gamepads: first connected = player 1, second = player 2; hot-plug works.
  * D-pad or left stick; East = A, South = B (NES layout: B left of A),
- * Back = Select, Start = Start. */
+ * North = X, West = Y, shoulders = L and R, Back = Select, Start = Start. */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <stdarg.h>
@@ -28,17 +29,21 @@
 #define APP_NAME "nes"  /* CMake sets the program's name: the settings file is NAME.ini */
 #endif
 
-enum { MAX_W = 512, MAX_H = 480, MAX_SAMPLES = 8192, STICK_DEADZONE = 16000 };
+enum { MAX_W = 512, MAX_H = 480, MAX_FRAMES = 8192, STICK_DEADZONE = 16000 };  /* MAX_FRAMES: sample frames */
 
 static SysInfo info;
 
 static SDL_Gamepad *gamepads[2];
 
-static uint8_t keyboard_buttons(void) {
+static uint16_t keyboard_buttons(void) {
     const bool *k = SDL_GetKeyboardState(NULL);
-    uint8_t b = 0;
+    uint16_t b = 0;
     if (k[SDL_SCANCODE_X]) b |= PAD_A;
     if (k[SDL_SCANCODE_Z]) b |= PAD_B;
+    if (k[SDL_SCANCODE_S]) b |= PAD_X;
+    if (k[SDL_SCANCODE_A]) b |= PAD_Y;
+    if (k[SDL_SCANCODE_Q]) b |= PAD_L;
+    if (k[SDL_SCANCODE_W]) b |= PAD_R;
     if (k[SDL_SCANCODE_RSHIFT]) b |= PAD_SELECT;
     if (k[SDL_SCANCODE_RETURN] && !(SDL_GetModState() & SDL_KMOD_ALT)) b |= PAD_START;  /* Alt+Enter: fullscreen */
     if (k[SDL_SCANCODE_UP]) b |= PAD_UP;
@@ -48,15 +53,17 @@ static uint8_t keyboard_buttons(void) {
     return b;
 }
 
-static uint8_t gamepad_buttons(SDL_Gamepad *g) {
+static uint16_t gamepad_buttons(SDL_Gamepad *g) {
     if (!g) return 0;
-    static const struct { SDL_GamepadButton button; uint8_t bit; } map[] = {
+    static const struct { SDL_GamepadButton button; uint16_t bit; } map[] = {
         {SDL_GAMEPAD_BUTTON_EAST, PAD_A},       {SDL_GAMEPAD_BUTTON_SOUTH, PAD_B},
+        {SDL_GAMEPAD_BUTTON_NORTH, PAD_X},      {SDL_GAMEPAD_BUTTON_WEST, PAD_Y},
+        {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, PAD_L}, {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, PAD_R},
         {SDL_GAMEPAD_BUTTON_BACK, PAD_SELECT},  {SDL_GAMEPAD_BUTTON_START, PAD_START},
         {SDL_GAMEPAD_BUTTON_DPAD_UP, PAD_UP},   {SDL_GAMEPAD_BUTTON_DPAD_DOWN, PAD_DOWN},
         {SDL_GAMEPAD_BUTTON_DPAD_LEFT, PAD_LEFT}, {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, PAD_RIGHT},
     };
-    uint8_t b = 0;
+    uint16_t b = 0;
     for (size_t i = 0; i < sizeof map / sizeof *map; i++)
         if (SDL_GetGamepadButton(g, map[i].button)) b |= map[i].bit;
     int x = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFTX);
@@ -150,7 +157,7 @@ typedef struct {
     uint32_t fb[MAX_W * MAX_H];
     int fb_new;
     char halt[256];           /* why the game stopped (sys_halted), or "" */
-    SDL_AtomicInt pads, reset, quit, done;  /* pads: player 1 | player 2 << 8 */
+    SDL_AtomicInt pads, reset, quit, done;  /* pads: player 1 | player 2 << 16 */
     SDL_AudioStream *audio;
     double fps;
     long max_frames;
@@ -160,7 +167,7 @@ typedef struct {
 
 static int emu_thread(void *arg) {
     Emu *u = arg;
-    static float samples[MAX_SAMPLES];
+    static float samples[MAX_FRAMES * 2];  /* interleaved when stereo */
     const double frame_ns = 1e9 / u->fps;
     uint64_t next = SDL_GetTicksNS();
     for (long frame = 0; !SDL_GetAtomicInt(&u->quit) && (u->max_frames <= 0 || frame < u->max_frames); frame++) {
@@ -170,14 +177,14 @@ static int emu_thread(void *arg) {
             in = u->replay->frames[frame];
         } else {
             int pads = SDL_GetAtomicInt(&u->pads);
-            in.pad[0] = (uint8_t)pads, in.pad[1] = (uint8_t)(pads >> 8);
+            in.pad[0] = (uint16_t)pads, in.pad[1] = (uint16_t)((unsigned)pads >> 16);
             in.flags = reset ? INPUT_RESET : 0;
         }
         if (u->record) input_log_write(u->record, in);
 
         SDL_LockMutex(u->lock);
         if (in.flags & INPUT_RESET) sys_reset();
-        int ns = sys_frame(&in, u->fb, samples, MAX_SAMPLES);
+        int ns = sys_frame(&in, u->fb, samples, MAX_FRAMES);  /* sample frames */
         u->fb_new = 1;
         char halt[256];
         const char *h = sys_halted(halt, sizeof halt);
@@ -185,9 +192,10 @@ static int emu_thread(void *arg) {
         SDL_UnlockMutex(u->lock);
 
         if (u->audio) {
-            SDL_PutAudioStreamData(u->audio, samples, ns * (int)sizeof(float));
+            const int frame_bytes = info.channels * (int)sizeof(float);
+            SDL_PutAudioStreamData(u->audio, samples, ns * frame_bytes);
             const float target = 3.0f * info.sample_rate / (float)u->fps;
-            float queued = (float)SDL_GetAudioStreamQueued(u->audio) / sizeof(float);
+            float queued = (float)SDL_GetAudioStreamQueued(u->audio) / (float)frame_bytes;
             float ratio = 1.0f + 0.005f * (queued - target) / target;
             SDL_SetAudioStreamFrequencyRatio(u->audio, ratio < 0.995f ? 0.995f : ratio > 1.005f ? 1.005f : ratio);
         }
@@ -241,8 +249,12 @@ int main(int argc, char **argv) {
         SDL_Log("%s: not an input recording", replay);
         return 1;
     }
+    if (replay && strcmp(replay_log.system, SYS_ID)) {
+        SDL_Log("%s: recorded on another system (%s), this is %s", replay, replay_log.system, SYS_ID);
+        return 1;
+    }
     FILE *record_file = NULL;
-    if (record && !(record_file = input_log_create(record))) {
+    if (record && !(record_file = input_log_create(record, SYS_ID))) {
         SDL_Log("%s: cannot create", record);
         return 1;
     }
@@ -282,10 +294,10 @@ int main(int argc, char **argv) {
                                          SDL_TEXTUREACCESS_STREAMING, info.width, info.height);
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_PIXELART);
 
-    /* Audio: mono float at the system's rate. Video sets the pace (NES 60.1 or 50 Hz);
+    /* Audio: float at the system's rate and channels. Video sets the pace (NES 60.1 or 50 Hz);
      * the playback rate is nudged (+-0.5%) to keep about 3 frames queued, so
      * the two clocks never drift apart (no crackle, no growing latency). */
-    const SDL_AudioSpec spec = {SDL_AUDIO_F32, 1, info.sample_rate};
+    const SDL_AudioSpec spec = {SDL_AUDIO_F32, info.channels, info.sample_rate};
     SDL_AudioStream *audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
     if (audio) SDL_ResumeAudioStreamDevice(audio);
     else SDL_Log("no audio: %s", SDL_GetError());
@@ -335,8 +347,8 @@ int main(int argc, char **argv) {
             }
             gamepad_event(&e);
         }
-        SDL_SetAtomicInt(&emu.pads, input_clean(keyboard_buttons() | gamepad_buttons(gamepads[0])) |
-                                        input_clean(gamepad_buttons(gamepads[1])) << 8);
+        SDL_SetAtomicInt(&emu.pads, (int)(input_clean(keyboard_buttons() | gamepad_buttons(gamepads[0])) |
+                                          (unsigned)input_clean(gamepad_buttons(gamepads[1])) << 16));
 
         SDL_LockMutex(emu.lock);
         const int fresh = emu.fb_new;

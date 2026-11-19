@@ -25,7 +25,8 @@ On macOS, remove the download quarantine once before the first run:
 
 PLAYING
 
-Keyboard: arrows, X = A, Z = B, Enter = Start, Right Shift = Select,
+Keyboard: arrows, X = A, Z = B, (S = X, A = Y, Q = L, W = R for pads
+that have them), Enter = Start, Right Shift = Select,
 F5 = reset, F2 / F4 = save / load state, F6 = next disk side (FDS),
 F10 = TV frame, F11 or Alt+Enter = fullscreen, Esc = quit.
 Gamepads work too (first = player 1, second = player 2).
