@@ -252,6 +252,7 @@ void gb_write(GbCpu *c, uint16_t a, uint8_t v) {
         uint16_t d0 = g->div;
         uint8_t old = g->tac;
         tick(g);
+        hdma_poll(g);
         timer_tac_write(g, v, d0, old);
         return;
     }
