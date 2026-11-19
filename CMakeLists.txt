@@ -137,7 +137,7 @@ foreach(sys IN LISTS SYSTEMS)
     if(NOT sys MATCHES "^(nes|gb)$")
         message(FATAL_ERROR "SYSTEMS: unknown system ${sys} (nes, gb)")
     endif()
-    add_subdirectory(${sys})
+    add_subdirectory(${sys} ${CMAKE_BINARY_DIR}/sys_${sys})  # not build/<sys>: that is the program (no .exe off Windows)
 endforeach()
 
 foreach(rom IN LISTS ROMS)
