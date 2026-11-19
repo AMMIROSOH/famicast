@@ -3,38 +3,42 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const char MAGIC[5] = {'N', 'E', 'S', 'I', 1};
+static const char V1[5] = {'N', 'E', 'S', 'I', 1}, V2[5] = {'R', 'C', 'I', 'N', 2};
 
-FILE *input_log_create(const char *path) {
+FILE *input_log_create(const char *path, const char *system) {
     FILE *f = fopen(path, "wb");
-    if (f) fwrite(MAGIC, 1, sizeof MAGIC, f);
+    char sys[4] = {0};
+    for (size_t i = 0; i < sizeof sys && system[i]; i++) sys[i] = system[i];
+    if (f) fwrite(V2, 1, sizeof V2, f), fwrite(sys, 1, sizeof sys, f);
     return f;
 }
 
 void input_log_write(FILE *f, InputFrame fr) {
-    uint8_t b[3] = {fr.pad[0], fr.pad[1], fr.flags};
-    fwrite(b, 1, 3, f);
+    uint8_t b[5] = {(uint8_t)fr.pad[0], (uint8_t)(fr.pad[0] >> 8), (uint8_t)fr.pad[1], (uint8_t)(fr.pad[1] >> 8), fr.flags};
+    fwrite(b, 1, sizeof b, f);
 }
 
 int input_log_load(const char *path, InputLog *log) {
     memset(log, 0, sizeof *log);
     FILE *f = fopen(path, "rb");
     if (!f) return -1;
-    char head[5];
     fseek(f, 0, SEEK_END);
-    long size = ftell(f) - (long)sizeof head;
+    long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (size < 0 || size % 3 || fread(head, 1, sizeof head, f) != sizeof head ||
-        memcmp(head, MAGIC, sizeof MAGIC) != 0) {
-        fclose(f);
-        return -1;
-    }
-    log->count = size / 3;
+    char head[9] = {0};
+    int v2 = 0, ok = size >= 5 && fread(head, 1, 5, f) == 5;
+    if (ok && !memcmp(head, V2, 5)) v2 = 1, ok = fread(head + 5, 1, 4, f) == 4;
+    else ok = ok && !memcmp(head, V1, 5);
+    long body = size - (v2 ? 9 : 5), per = v2 ? 5 : 3;
+    if (!ok || body % per) { fclose(f); return -1; }
+    memcpy(log->system, v2 ? head + 5 : "nes", 4);
+    log->count = body / per;
     log->frames = malloc((size_t)log->count * sizeof *log->frames + 1);
     for (long i = 0; i < log->count; i++) {
-        uint8_t b[3];
-        if (fread(b, 1, 3, f) != 3) { fclose(f); input_log_free(log); return -1; }
-        log->frames[i] = (InputFrame){{b[0], b[1]}, b[2]};
+        uint8_t b[5];
+        if (fread(b, 1, (size_t)per, f) != (size_t)per) { fclose(f); input_log_free(log); return -1; }
+        log->frames[i] = v2 ? (InputFrame){{(uint16_t)(b[0] | b[1] << 8), (uint16_t)(b[2] | b[3] << 8)}, b[4]}
+                            : (InputFrame){{b[0], b[1]}, b[2]};
     }
     fclose(f);
     return 0;
@@ -45,8 +49,8 @@ void input_log_free(InputLog *log) {
     memset(log, 0, sizeof *log);
 }
 
-uint8_t input_clean(uint8_t b) {
-    if ((b & (PAD_LEFT | PAD_RIGHT)) == (PAD_LEFT | PAD_RIGHT)) b &= (uint8_t)~(PAD_LEFT | PAD_RIGHT);
-    if ((b & (PAD_UP | PAD_DOWN)) == (PAD_UP | PAD_DOWN)) b &= (uint8_t)~(PAD_UP | PAD_DOWN);
+uint16_t input_clean(uint16_t b) {
+    if ((b & (PAD_LEFT | PAD_RIGHT)) == (PAD_LEFT | PAD_RIGHT)) b &= (uint16_t)~(PAD_LEFT | PAD_RIGHT);
+    if ((b & (PAD_UP | PAD_DOWN)) == (PAD_UP | PAD_DOWN)) b &= (uint16_t)~(PAD_UP | PAD_DOWN);
     return b;
 }

@@ -20,6 +20,8 @@ recompiles one (through `-DROMS`, see the [root README](../README.md#recompiling
   lockstep with the interpreter, 34 of the 39 with 94.8-99.97% of their CPU
   cycles recompiled (the rest run much code from RAM, which is always
   interpreted).
+- **Sound**: stereo, as the console's headphone output: NR51 pans each
+  channel, NR50 sets each side's volume.
 - **Speed**: about 40x real time (23x for a double-speed Color game), the
   same recompiled: the picture and sound hardware, stepped every cycle,
   take most of the time.
@@ -47,7 +49,7 @@ the game's .ini; Color games bring their own colours.
 
 `gb_headless ROM` options: `--frames N`, `--play` (scripted input),
 `--pgm FILE` (DMG shades) or `--ppm FILE` (colour) for the last frame,
-`--wav FILE` (the sound), `--state-at F FILE` / `--load-state FILE`,
+`--wav FILE` (the sound, stereo), `--state-at F FILE` / `--load-state FILE`,
 `--misses FILE`, `--diff`, `--coverage`, `--model dmg|cgb`. Test ROMs that
 report on the serial port or in cartridge RAM print `result: passed`.
 

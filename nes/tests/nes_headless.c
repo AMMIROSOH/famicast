@@ -346,8 +346,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s: not an input recording\n", replay);
         return 2;
     }
+    if (replay && strcmp(log.system, "nes")) {
+        fprintf(stderr, "%s: recorded on another system (%s)\n", replay, log.system);
+        return 2;
+    }
     FILE *rec = NULL;
-    if (record && !(rec = input_log_create(record))) { perror(record); return 2; }
+    if (record && !(rec = input_log_create(record, "nes"))) { perror(record); return 2; }
     if (play_seed >= 0) {
         if (frames < 0) frames = 6000;
         play_script(&log, frames, (unsigned)play_seed);
@@ -373,8 +377,8 @@ int main(int argc, char **argv) {
         frames_run++;
         if (wav || audio_hash) collect_audio(&nes);
         else nes.apu.buf_len = 0;
-        nes.pad[0] = ref.pad[0] = in.pad[0];
-        nes.pad[1] = ref.pad[1] = in.pad[1];
+        nes.pad[0] = ref.pad[0] = (uint8_t)in.pad[0];  /* the NES pad: the low byte */
+        nes.pad[1] = ref.pad[1] = (uint8_t)in.pad[1];
         if (!diff) nes_run_frame(&nes);
         else if (run_frame_diff(&nes, &ref, f) != 0) return 253;
         else if (memcmp(nes.ppu.fb, ref.ppu.fb, sizeof nes.ppu.fb)) {

@@ -2,7 +2,7 @@
  *   gb_headless ROM [--frames N] [--pgm FILE] [--wav FILE] [--play] [--state-at F FILE] [--load-state FILE]
  *               [--misses FILE] [--diff] [--coverage] [--ppm FILE] [--model dmg|cgb]
  *   --pgm         write the last whole frame as a grey image (shade 0 = white)
- *   --wav         write the sound (48 kHz mono, 16-bit)
+ *   --wav         write the sound (48 kHz stereo, 16-bit)
  *   --ppm         write the last whole frame in colour (CGB: 5-bit components as (c << 3) | (c >> 2))
  *   --model       run as a DMG or a CGB (default: what the header asks for)
  *   --play        scripted input: Start and A taps, later walking right
@@ -166,8 +166,8 @@ int main(int argc, char **argv) {
     FILE *w = wav ? fopen(wav, "wb") : NULL;
     if (wav && !w) { perror(wav); return 2; }
     static const uint8_t WAV[44] = {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ',
-                                    16, 0, 0, 0, 1, 0, 1, 0, 0x80, 0xBB, 0, 0, 0x00, 0x77, 1, 0,  /* PCM, mono, 48000 Hz, 96000 B/s */
-                                    2, 0, 16, 0, 'd', 'a', 't', 'a', 0, 0, 0, 0};
+                                    16, 0, 0, 0, 1, 0, 2, 0, 0x80, 0xBB, 0, 0, 0x00, 0xEE, 2, 0,  /* PCM, stereo, 48000 Hz, 192000 B/s */
+                                    4, 0, 16, 0, 'd', 'a', 't', 'a', 0, 0, 0, 0};
     if (w) fwrite(WAV, 1, sizeof WAV, w);
     long nsamples = 0;
     int r = 0;
@@ -182,8 +182,8 @@ int main(int argc, char **argv) {
         if (!diff) gb_run_frame(&g);
         else if (frame_diff(&g, &ref, i) != 0) return 1;
         ref.apu.buf_len = 0;  /* drained as g is below */
-        float buf[GB_APU_BUF];
-        int n = apu_take_samples(&g, buf, GB_APU_BUF);
+        float buf[GB_APU_BUF * 2];
+        int n = 2 * apu_take_samples(&g, buf, GB_APU_BUF);  /* floats: left, right, ... */
         for (int k = 0; w && k < n; k++) {
             float x = buf[k] < -1 ? -1 : buf[k] > 1 ? 1 : buf[k];
             int16_t v = (int16_t)(x * 32767);

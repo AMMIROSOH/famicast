@@ -144,13 +144,13 @@ static void emit_ins(Buf *o, const Region *R, const Ins *i) {
     bprintf(o, "    fetch_k(c, 0x%04X, 0x%02X);\n", i->pc, R->mem[i->pc]);
     if (i->cb) bprintf(o, "    fetch_k(c, 0x%04X, 0x%02X);\n", (uint16_t)(i->pc + 1), i->op);
     bprintf(o, "    {\n        c->pc = 0x%04X;\n", (uint16_t)(i->pc + i->size));
-    uint16_t pc = (uint16_t)(i->pc + (i->cb ? 2 : 1));  /* the first operand byte */
+    uint32_t pc = (uint16_t)(i->pc + (i->cb ? 2 : 1));  /* the first operand byte */
     unsigned fetched = 0;
     int dynamic = 0;
     for (int k = 0; k < l.n; k++) {
         if (dynamic) { template_plain(o, "        ", l.s[k]); continue; }
         bprintf(o, "        ");
-        template_expand(o, l.s[k], &pc, R->mem, i->pc, &fetched, &dynamic);
+        template_expand(o, l.s[k], &pc, R->mem, 0xFFFF, i->pc, &fetched, &dynamic);
         bprintf(o, "\n");
     }
     bprintf(o, "    }\n");

@@ -36,17 +36,18 @@ void buf_write_file(const char *path, const Buf *b) {
     if (!f || fwrite(b->s, 1, b->len, f) != b->len || fclose(f)) { perror(path); exit(2); }
 }
 
-void template_expand(Buf *o, const char *s, uint16_t *pc, const uint8_t *mem, uint16_t at, unsigned *fetched, int *jump) {
+void template_expand(Buf *o, const char *s, uint32_t *pc, const uint8_t *mem, uint32_t mask, uint32_t at,
+                     unsigned *fetched, int *jump) {
     for (; *s; s++) {
         if (*s != '@') { bprintf(o, "%c", *s); continue; }
         switch (*++s) {
         case 'F': case 'R':
             if (!pc) { bprintf(o, *s == 'F' ? "rd(c, c->pc++)" : "rd(c, c->pc)"); break; }
-            *fetched |= 1u << ((uint16_t)(*pc - at) & 15);
-            bprintf(o, "fetch_k(c, 0x%04X, 0x%02X)", *pc, mem[*pc]);
-            if (*s == 'F') (*pc)++;
+            *fetched |= 1u << ((*pc - at) & mask & 15);
+            bprintf(o, "fetch_k(c, 0x%04X, 0x%02X)", (unsigned)(*pc & mask), mem[*pc & mask]);
+            if (*s == 'F') *pc = (*pc + 1) & mask;
             break;
-        case 'P': if (pc) bprintf(o, "0x%04X", *pc); else bprintf(o, "c->pc"); break;
+        case 'P': if (pc) bprintf(o, "0x%04X", (unsigned)(*pc & mask)); else bprintf(o, "c->pc"); break;
         case 'J': if (jump) *jump = 1; /* fall through */
         case 'B': bprintf(o, "c->pc ="); break;
         case 'I': bprintf(o, "c->pc++"); break;
@@ -57,6 +58,6 @@ void template_expand(Buf *o, const char *s, uint16_t *pc, const uint8_t *mem, ui
 
 void template_plain(Buf *o, const char *indent, const char *line) {
     bprintf(o, "%s", indent);
-    template_expand(o, line, NULL, NULL, 0, NULL, NULL);
+    template_expand(o, line, NULL, NULL, 0, 0, NULL, NULL);
     bprintf(o, "\n");
 }

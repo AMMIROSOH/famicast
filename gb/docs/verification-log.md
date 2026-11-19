@@ -5,6 +5,15 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.md).
 
+## 2026-11-19 · Game Boy: stereo sound
+- 30 s of one game recorded with `gb_headless --wav` (now stereo): the mean
+  of left and right has, per 5 s, exactly the RMS the mono output had in
+  the G4 entry (0.028, 0.085, 0.071, 0.062, 0.068, 0.064). In the first
+  10 s left and right differ (the title music pans, |L-R| RMS 0.024-0.034),
+  after that they are equal.
+- The GB suites (ROMs, acid2, states, the recompiled cpu_instrs in
+  lockstep) pass.
+
 ## 2026-11-19 · Game Boy G6: Game Boy Color
 - **cgb-acid2**: 0 of 23,040 pixels differ from the reference
   (`tests/gb/test_ppu.py`, the paletted PNG decoded there; 5-bit

@@ -14,6 +14,8 @@
 #define APP_NAME "nes"
 #endif
 
+const char SYS_ID[] = "nes";
+
 const char SYS_SETTINGS[] =
     "# overscan: 1 = hide the top and bottom 8 lines, as a TV did (games\n"
     "# leave scrolling leftovers there that nobody saw); 0 = all 240 lines\n"
@@ -164,6 +166,7 @@ int sys_open(const char *rom_path, const Settings *settings, SysInfo *info, char
     info->aspect = nes.cart.region == REGION_NTSC ? 8.0 / 7 : 1.3862;
     info->fps = nes_frame_rate(&nes);
     info->sample_rate = APU_SAMPLE_RATE;
+    info->channels = 1;
     SDL_strlcpy(info->tag, nes.cart.disk ? "FDS" : nes.cart.region == REGION_PAL ? "PAL"
                          : nes.cart.region == REGION_DENDY ? "Dendy" : "NTSC", sizeof info->tag);
     return 0;
@@ -172,8 +175,8 @@ int sys_open(const char *rom_path, const Settings *settings, SysInfo *info, char
 void sys_reset(void) { nes_reset(&nes); }
 
 int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
-    nes.pad[0] = in->pad[0];
-    nes.pad[1] = in->pad[1];
+    nes.pad[0] = (uint8_t)in->pad[0];  /* the NES pad: the low byte */
+    nes.pad[1] = (uint8_t)in->pad[1];
     nes_run_frame(&nes);
     for (int i = 0; i < 256 * 240; i++) rgb[i] = palette[nes.ppu.fb[i] & 0x1FF];
     return apu_take_samples(&nes.apu, samples, max);
