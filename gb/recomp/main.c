@@ -66,7 +66,9 @@ static void load_hints(const char *path, Region **regions, const GbCart *cart, i
     FILE *f = fopen(path, "rb");
     if (!f) return;
     char *text = calloc(1, 1 << 20);
-    if (!text || (fread(text, 1, (1 << 20) - 1, f), ferror(f))) { perror(path); exit(2); }
+    size_t n = text ? fread(text, 1, (1 << 20) - 1, f) : 0;
+    if (!text || ferror(f)) { perror(path); exit(2); }
+    (void)n;  /* NUL-terminated by calloc */
     fclose(f);
     for (char *p = text; (p = strchr(p, '#'));)  /* comments (no '#' inside the strings we use) */
         while (*p && *p != '\n') *p++ = ' ';
