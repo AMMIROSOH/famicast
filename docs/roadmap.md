@@ -16,6 +16,17 @@ against independent tests, the system and its test ROMs, the window
 program behind `core/frontend/system.h`, then the recompiler and the
 lockstep diff. Code moves to `core/` when a second system needs it.
 
+## Later
+- One program for every system: a `retrocast` window program (the system
+  picked from the file's extension, `--system` to override, `--headless`
+  without a window) and a `retrocast-recomp` recompiler, in place of
+  `nes`/`gb`, the headless programs and `nesrecomp`/`gbrecomp`. Each
+  program now carries its own copy of SDL3 (about 2 MB of its 2.2).
+  Needs `core/frontend/system.h` as a table per system instead of global
+  functions; keep an SDL-free headless build for tests and CI. Decide once
+  more systems are in: a system that does not fit one shared frontend
+  keeps its own program.
+
 ## Stretch
 - JIT for code in RAM or found at run time. With play-to-recompile and auto
   hints, ROM code is above 99.9% recompiled in the test games and FDS RAM
