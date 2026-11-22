@@ -40,8 +40,10 @@ Details: [docs/architecture.md](docs/architecture.md); plans:
 ## Downloads
 [Releases](https://github.com/Viper-Bit/retrocast/releases) have builds for
 Windows (x64, arm64), Linux (x64, arm64; glibc 2.35+) and macOS (arm64):
-per system a program that plays a game in the interpreter (`nes`, `gb`), its
-headless twin and its recompiler, and a **kit** that recompiles your games
+`retrocast`, which plays a game of any system in the interpreter; per
+system a headless program (`nes_headless`, `gb_headless`, `genesis_headless`,
+`atari2600_headless`) and a recompiler (`nesrecomp`, `gbrecomp`, `mdrecomp`,
+`atari2600recomp`); and a **kit** that recompiles your games
 into native programs with only CMake and a C compiler installed (SDL3 comes
 prebuilt). `README.txt` in the archive explains both. Archives are made by
 `tools/make_release.py` (`.github/workflows/release.yml`: push a tag `v*`

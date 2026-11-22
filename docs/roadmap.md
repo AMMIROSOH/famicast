@@ -18,8 +18,7 @@ against independent tests, the system and its test ROMs, the window
 program behind `core/frontend/system.h`, then the recompiler and the
 lockstep diff. Code moves to `core/` when a second system needs it.
 CPUs live in `cpu/<name>/`, one folder per CPU, shared by every system
-with that CPU; the 68000 and the Z80 will go there
-([cpu/README.md](../cpu/README.md)).
+with that CPU (the list: [cpu/README.md](../cpu/README.md)).
 
 ## Later
 - **One program for every system: done for playing.** `retrocast` plays a

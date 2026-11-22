@@ -46,6 +46,33 @@ def tiny_rom(path):
         f.write(b"NES\x1a\x01\x01\x00\x00" + bytes(8) + prg + bytes(0x2000))
 
 
+GB_LOGO = bytes.fromhex("CEED6666CC0D000B03730083000C000D0008111F8889000EDCCC6EE6DDDDD999"
+                        "BBBB67636E0EECCCDDDC999FBBB9333E")
+
+
+def tiny_gb_rom(path):
+    """A 32 KB Game Boy cartridge: the logo and header checksum the boot ROM
+    checks (and detection reads), then "Passed" sent on the serial port, the
+    way test ROMs report (gb_headless exits 0 on it), then a loop."""
+    rom = bytearray(0x8000)
+    rom[0x100:0x104] = bytes([0x00, 0xC3, 0x50, 0x01])  # NOP; JP $0150
+    rom[0x104:0x134] = GB_LOGO
+    rom[0x134:0x13C] = b"KITCHECK"
+    x = 0
+    for b in rom[0x134:0x14D]:
+        x = (x - b - 1) & 0xFF
+    rom[0x14D] = x
+    rom[0x150:0x167] = bytes([0x21, 0x70, 0x01,  # LD HL,$0170
+                              0x2A, 0xB7, 0x28, 0x0E,  # next: LD A,(HL+); OR A; JR Z,done
+                              0xE0, 0x01, 0x3E, 0x81, 0xE0, 0x02,  # LDH (SB),A; LD A,$81; LDH (SC),A
+                              0xF0, 0x02, 0xCB, 0x7F, 0x20, 0xFA,  # wait: LDH A,(SC); BIT 7,A; JR NZ,wait
+                              0x18, 0xEE,  # JR next
+                              0x18, 0xFE])  # done: JR done
+    rom[0x170:0x176] = b"Passed"  # then 0: the ROM is zeroed
+    with open(path, "wb") as f:
+        f.write(rom)
+
+
 def tiny_md_rom(path):
     """A Genesis cartridge: vectors, the "SEGA" header, the TMSS unlock, one VDP
     register write (the headless program and the build's trace count a game
@@ -109,14 +136,18 @@ def main():
     # 4. kit check: recompile a ROM with the staged kit, then run it
     rom = os.path.join(work, "kit_check.nes")
     tiny_rom(rom)
+    gb_rom = os.path.join(work, "kit_check_gb.gb")
+    tiny_gb_rom(gb_rom)
     md_rom = os.path.join(work, "kit_check_md.md")
     tiny_md_rom(md_rom)
     atari_rom = os.path.join(work, "kit_check_atari.a26")
     tiny_atari_rom(atari_rom)
     kit_build = os.path.join(work, "kit-build")
-    cmake_build(kit, kit_build, "-DROMS=" + rom + ";" + md_rom + ";" + atari_rom)
+    cmake_build(kit, kit_build, "-DROMS=" + ";".join((rom, gb_rom, md_rom, atari_rom)))
     run(os.path.join(kit_build, "kit_check_headless" + EXE), "--frames", "30")
     run(os.path.join(stage, "nes_headless" + EXE), rom, "--frames", "30")
+    run(os.path.join(kit_build, "kit_check_gb_headless" + EXE), gb_rom, "--frames", "30", "--diff")
+    run(os.path.join(stage, "gb_headless" + EXE), gb_rom, "--frames", "30")
     run(os.path.join(kit_build, "kit_check_md_headless" + EXE), md_rom, "--frames", "30", "--diff")
     run(os.path.join(stage, "genesis_headless" + EXE), md_rom, "--frames", "30")
     run(os.path.join(kit_build, "kit_check_atari_headless" + EXE), "--frames", "2", "--diff")
