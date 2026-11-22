@@ -40,8 +40,7 @@ def read_ppm(path):
     return pixels[:256 * 240 * 3]
 
 
-def write_sheet(path, frames, cols=6, scale=1):
-    w, h = 256, 240
+def write_sheet(path, frames, cols=6, scale=1, w=256, h=240):
     rows = (len(frames) + cols - 1) // cols
     W, H = cols * w, rows * h
     img = bytearray(W * H * 3)

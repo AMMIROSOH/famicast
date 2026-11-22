@@ -9,11 +9,11 @@ recompiler. A milestone is done when its exit test passes in CI.
 |---|---|---|
 | [C1](#c1--z80-cpuz80) | Z80 templates and interpreter (`cpu/z80`) | done |
 | [C2](#c2--68000-cpum68k) | 68000 templates and interpreter (`cpu/m68k`) | done (MOVE.l address-error flags open) |
-| [D1](#d1--the-machine) | memory map, I/O, Z80 bus arbitration, cartridges | open |
-| [D2](#d2--vdp) | the VDP: planes, window, sprites, DMA, interrupts | open |
-| [D3](#d3--window-program) | the window program, pads, save states | open |
-| [D4](#d4--sound) | SN76489 and YM2612 | open |
-| [D5](#d5--recompiler) | the 68000 recompiler, lockstep `--diff` | open |
+| [D1](#d1--the-machine) | memory map, I/O, Z80 bus arbitration, cartridges | done but the public test ROMs |
+| [D2](#d2--vdp) | the VDP: planes, window, sprites, DMA, interrupts | done but the public test ROMs |
+| [D3](#d3--window-program) | the window program, pads, save states | done |
+| [D4](#d4--sound) | SN76489 and YM2612 | done but the reference recording |
+| [D5](#d5--recompiler) | the 68000 recompiler, lockstep `--diff` | done |
 
 ## The hardware
 Facts the milestones build on (NTSC; PAL where it differs). Sources:
@@ -85,40 +85,107 @@ corrects this list where they disagree.
   cleared, or N and Z of the first word written), not yet modelled.
 
 ## D1 · The machine
-- [ ] The memory maps above, the I/O ports (3- and 6-button pads), the
+- [x] The memory maps above, the I/O ports (3- and 6-button pads), the
   version register, Z80 bus request and reset, the Z80 bank, cartridge
-  ROM and battery RAM from the header, TMSS.
-- [ ] Both CPUs on one master-clock timeline.
-- [ ] **Exit:** public test ROMs for the memory map and the CPUs on the
-  machine (to be chosen, pinned with their hash, licence checked); a
-  sample of the licensed set boots to its first VDP writes.
+  ROM and battery RAM from the header, TMSS (`genesis/runtime/md.c`).
+  Also the SSF2 bank registers (ROMs over 4 MB) and the region from the
+  header (the Americas when allowed, else Japan, else Europe at 50 Hz).
+  The console is a version 0 one (before TMSS): 14 early games (launch
+  carts, After Burner II, Super Daisenryaku...) touch the VDP before
+  writing "SEGA" and lock on a TMSS console, as on the real one; TMSS is
+  enforced when the version register says 1.
+- [x] Both CPUs on one master-clock timeline: the Z80 runs up to the
+  68000's clock after each 68000 instruction; its INT at vertical blank.
+- [x] **Exit, part 1:** a sample of the licensed set boots to its first
+  VDP writes (`tests/genesis/test_boot.py`, local: every 40th game);
+  the machine's self-checks (`genesis/tests/md_tests.c`, CI). The whole
+  set, once: 1,555 of 1,566 (verification-log.md).
+- [ ] Open: Triple Play 96 and Triple Play Gold (a cartridge with its own
+  ROM mapping), Phantasy Star Fukkokuban (halts on a double fault).
+- [ ] **Exit, part 2:** public test ROMs for the memory map and the CPUs
+  on the machine. None found yet that reports without a picture: the
+  candidates (240p Test Suite's Z80 RAM and pad tests, flamewing's
+  68k-bcd-verifier) show their results on screen; with D2 in, what is
+  left is checking their licences and pinning them.
+- Left out: EEPROM saves, wait states of the Z80's window into the
+  68000's space, the open bus (the queued opcode word).
 
 ## D2 · VDP
-- [ ] Registers, the data and control ports, VRAM/CRAM/VSRAM, the three
-  DMA kinds with their timing, the H/V counter, the interrupts.
-- [ ] Rendering: planes A and B with full and per-cell or per-line
-  scrolling, the window, sprites with their limits, priorities,
-  shadow/highlight; H32/H40.
-- [ ] **Exit:** public VDP test ROMs pixel for pixel (to be chosen and
-  pinned); a contact sheet of a sample of the licensed set reaches title
-  or play screens.
+- [x] Registers, the data and control ports, VRAM/CRAM/VSRAM, the three
+  DMA kinds with their timing, the H/V counter, the interrupts
+  (`genesis/runtime/vdp.c`). DMA runs at once: a 68000-to-VDP transfer
+  stops the 68000 for the time it takes at the line's rate (18 or 205
+  words a line in H40, 16 or 167 in H32); a fill or copy keeps the status'
+  DMA bit set for its time.
+- [x] Rendering, a line at a time once the CPUs have run through it:
+  planes A and B with full and per-cell or per-line scrolling, per-column
+  vertical scrolling, the window, sprites with their limits (20 or 16 a
+  line, a line's worth of sprite pixels, 80 or 64 in the list) and x = 0
+  masking, priorities, shadow/highlight with the operator colours, the
+  left column blank; H32/H40, V28/V30.
+- [x] **Exit, part 2:** a contact sheet of a sample of the licensed set
+  reaches title or play screens (`tools/genesis_sheet.py`, local; looked
+  at: verification-log.md); the VDP's self-checks (`genesis/tests/md_tests.c`).
+- [ ] **Exit, part 1:** public VDP test ROMs pixel for pixel. Candidates:
+  Nemesis' Sprite Masking and Overflow Test ROM, the 240p Test Suite's
+  patterns; neither has a licence we could check yet, and pixel checks
+  need reference pictures from a console.
+- Not modelled yet: changes in the middle of a line (a line is drawn from
+  the state at its end), the FIFO and its waits, the HV counter latch,
+  interlace (double-height tiles, the counters), mode 4, the sprite
+  attribute cache, the uneven H counter, the console's colour levels
+  (a linear scale for now), CRAM dots.
 
 ## D3 · Window program
-- [ ] `genesis` behind `core/frontend/system.h`: picture, pads (3 and 6
-  buttons on the 16-bit input), save states, recordings.
+- [x] `genesis` behind `core/frontend/system.h` (`genesis/frontend.c`):
+  picture, pads (3 and 6 buttons on the 16-bit input, the `pad` setting),
+  save states (`md_state_save`: the machine and the battery RAM, checked
+  against the ROM's hash), recordings (system "md"), battery saves
+  (`ROM.sav`), the reset button. H32 is stretched to H40's width (nearest
+  pixel); NTSC shows 224 lines, PAL 240.
 
 ## D4 · Sound
-- [ ] SN76489, then YM2612 (6 FM channels, channel 6 as DAC), stereo.
-- [ ] **Exit:** test ROMs where they exist; the output of a sample
-  checked against a reference recording.
+- [x] SN76489, then YM2612 (6 FM channels, channel 6 as DAC), stereo
+  (`genesis/runtime/sound.c`): the PSG's tones, noise (Sega's 16-bit
+  LFSR) and 2 dB volume steps; the YM2612's phase (detune, multiple),
+  envelopes (rates with key scaling, the increment tables), the eight
+  algorithms with feedback, the LFO's AM and PM, timers A and B,
+  channel 3's special mode, the DAC, panning. One sample every 144 YM2612
+  clocks (53,267 Hz NTSC), on the master clock; the PSG averaged over each
+  sample; the output's DC blocked as by the console's capacitors. The
+  YM2612 resets with the Z80's reset line; a Z80 access through its window
+  waits 3 T-states.
+- [x] **Exit, part 1:** self-checks with known answers
+  (`genesis/tests/md_tests.c`): the PSG's and the YM2612's pitch to
+  0.5 Hz of the formulas, a full-level operator's peak, the release,
+  timer A to the sample, the DAC. Games' music on the A440 grid
+  (verification-log.md). No public sound test ROM found.
+- [ ] **Exit, part 2:** the output of a sample checked against a reference
+  recording from a console: none at hand.
+- Not modelled: SSG-EG, CSM, the busy flag, the DAC's ladder effect and
+  9-bit steps, the console's low-pass filter, the 68000's wait on Z80
+  window accesses; LFO PM is a smooth scale, not the chip's table; the
+  PSG's level against the FM is an estimate.
 
 ## D5 · Recompiler
-- [ ] 68000 code from the cartridge recompiled (regions, the trace from
-  the interpreter, hints and play misses as on the other systems); the
-  Z80 runs from its RAM (the sound driver the 68000 copies there), so it
-  stays interpreted.
-- [ ] **Exit:** `genesis_headless --diff` in lockstep on a sample, with
-  the share of 68000 cycles recompiled.
+- [x] 68000 code from the cartridge recompiled (`genesis/recomp/main.c`,
+  `mdrecomp`): one region, the ROM that is always mapped (`md_code_end`:
+  not the SSF2 banks, not where battery RAM can be switched in); entries
+  from the vectors, the interpreter's trace (AUTO_HINTS) and play misses
+  (`NAME.misses`); static flow through Bcc, BRA, BSR, DBcc and absolute or
+  PC-relative JMP/JSR. Each instruction is the interpreter's handler body
+  with `op` a constant (the 68000's templates hold two-path instructions
+  such as DBcc, where the expander's straight-line PC constants would be
+  wrong, so the PC stays a run-time value). A block ends after any
+  instruction whose template can change the PC. Instruction lengths come
+  from `m68k_ext_words`, checked at build time against the 39,853 templates
+  without a branch. The Z80 runs from its RAM (the sound driver the 68000
+  copies there), so it stays interpreted. Not done: per-game hint files.
+- [x] **Exit:** `genesis_headless --diff` in lockstep on a sample, with
+  the share of 68000 cycles recompiled: 8 games (every 200th of the
+  licensed set), 3,000 frames each, no difference, 94.33-99.97% of the
+  68000's clocks recompiled; in CI, a ROM of random instructions
+  (`genesis/tests/random_rom.c`, 100%).
 
 ## Later
 - The Master System and Game Gear: the same Z80, a small machine, a
