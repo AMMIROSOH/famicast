@@ -1,4 +1,4 @@
-"""Konami VRC6 sound (nes/runtime/apu.c): two pulses with 16-step duty and a
+"""Konami VRC6 sound (systems/nes/runtime/apu.c): two pulses with 16-step duty and a
 sawtooth, read back from nes_headless --wav (after the NES's own high-pass
 filters: a constant level fades to 0)."""
 import math

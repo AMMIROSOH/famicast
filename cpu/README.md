@@ -26,7 +26,7 @@ calls, so every system with the same CPU uses the same code.
   `m68k_gen.c`), which writes the interpreter's opcode switch into
   `build/gen/` at build time.
 - The CPU test runner (`sm83_tests.c`, `z80_tests.c`, `m68k_tests.c`). The 6502's runner is
-  `nes/tests/cpu_tests.c`, because it also runs nestest and recompiled code.
+  `systems/nes/tests/cpu_tests.c`, because it also runs nestest and recompiled code.
 - `CMakeLists.txt`: the library and generator targets.
 
 ## How a system uses a CPU

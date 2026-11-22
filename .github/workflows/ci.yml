@@ -6,10 +6,10 @@
 # kept in the Actions cache; it is never committed. No game ROMs: the tests of recompiled
 # games skip. The required check is ci-ok, which sums up the rest.
 name: ci
-# main and pull requests only: tags and PR branches were tested twice
+# main, ci/** branches and pull requests: tags and PR branches were tested twice
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/**']
   pull_request:
 
 jobs:

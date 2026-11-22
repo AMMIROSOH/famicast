@@ -63,7 +63,7 @@ first-hand yet; check them before relying on the detail.
 
 ## Corrections to the earlier version of this file
 The first draft of these docs was produced by another AI model and contained
-errors. Fixed here and in [the NES verification log](../nes/docs/verification-log.md):
+errors. Fixed here and in [the NES verification log](../systems/nes/docs/verification-log.md):
 - The 2A03 has **no** PHX/PHY/PLX/PLY. `$0A` is `ASL A`. (Those are 65C02
   opcodes.)
 - The 6502 has **no** half-carry (H) flag.

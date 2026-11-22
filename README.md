@@ -12,14 +12,14 @@ own.
 
 | System | Status | Details |
 |---|---|---|
-| NES and Famicom Disk System | 74 mappers (99.7% of licensed releases load), FDS, expansion sound, NTSC/PAL/Dendy; recompiled | [nes/README.md](nes/README.md) |
-| Game Boy and Game Boy Color | ROM only, MBC1/2/3/5 (MBC3 clock), DMG and CGB mode; recompiled | [gb/README.md](gb/README.md) |
-| Sega Genesis / Mega Drive | 68000, Z80, VDP, PSG and YM2612, 3- and 6-button pads, battery saves; recompiled (68000) | [genesis/README.md](genesis/README.md) |
-| Atari 2600 | 2K/4K/F8/F6/F4 cartridges, TIA picture and sound, NTSC and PAL, joystick; recompiled; no Superchip RAM or other schemes, paddles or SECAM | [atari2600/README.md](atari2600/README.md) |
+| NES and Famicom Disk System | 74 mappers (99.7% of licensed releases load), FDS, expansion sound, NTSC/PAL/Dendy; recompiled | [systems/nes/README.md](systems/nes/README.md) |
+| Game Boy and Game Boy Color | ROM only, MBC1/2/3/5 (MBC3 clock), DMG and CGB mode; recompiled | [systems/gb/README.md](systems/gb/README.md) |
+| Sega Genesis / Mega Drive | 68000, Z80, VDP, PSG and YM2612, 3- and 6-button pads, battery saves; recompiled (68000) | [systems/genesis/README.md](systems/genesis/README.md) |
+| Atari 2600 | 2K/4K/F8/F6/F4 cartridges, TIA picture and sound, NTSC and PAL, joystick; recompiled; no Superchip RAM or other schemes, paddles or SECAM | [systems/atari2600/README.md](systems/atari2600/README.md) |
 
 ## How it works
-1. Each system has a recompiler (`nes/recomp/` → `nesrecomp`, `gb/recomp/`
-   → `gbrecomp`, `genesis/recomp/` → `mdrecomp`; C, built and run by CMake). It finds the reachable code and
+1. Each system has a recompiler (`systems/nes/recomp/` → `nesrecomp`, `systems/gb/recomp/`
+   → `gbrecomp`, `systems/genesis/recomp/` → `mdrecomp`; C, built and run by CMake). It finds the reachable code and
    emits one C function per basic block, plus the ROM itself. Before that,
    the build plays the game for a while in the interpreter to find code
    static analysis cannot.
@@ -27,7 +27,7 @@ own.
    under `cpu/` (the PC markers are in `core/recomp/`), and both the
    interpreter and the recompiled code are made from them: the same bus
    accesses, the same cycles.
-3. Each system's runtime (`nes/runtime/`, `gb/runtime/`) provides the
+3. Each system's runtime (`systems/nes/runtime/`, `systems/gb/runtime/`) provides the
    hardware around the CPU; `core/frontend/` (SDL3) is the window, sound,
    gamepads, settings, save states and recordings for all of them.
 4. Anything the recompiler did not see (jump tables, code in RAM) falls back
@@ -164,8 +164,8 @@ kept in the Actions cache. The required check is `ci-ok`.
 | [docs/verification-log.md](docs/verification-log.md) | Checks of the shared parts |
 | [docs/prior-art.md](docs/prior-art.md) | Other recompilers and emulators, and what we take from them |
 | [docs/sources.md](docs/sources.md) | Every external source we used, with license notes |
-| [nes/docs/](nes/docs/) | NES: architecture, roadmap, verification log, 6502 traps, timing constants, the first prototype |
-| [gb/docs/](gb/docs/) | Game Boy: architecture, roadmap, verification log |
+| [systems/nes/docs/](systems/nes/docs/) | NES: architecture, roadmap, verification log, 6502 traps, timing constants, the first prototype |
+| [systems/gb/docs/](systems/gb/docs/) | Game Boy: architecture, roadmap, verification log |
 
 ## ROMs
 No ROMs, disk images or BIOS files are included or will ever be committed.

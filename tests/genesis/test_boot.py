@@ -1,5 +1,5 @@
 """A sample of the licensed Genesis set boots to its first VDP writes
-(genesis/docs/roadmap.md D1). Local only: needs the No-Intro set as .7z
+(systems/genesis/docs/roadmap.md D1). Local only: needs the No-Intro set as .7z
 files in roms/Sega - Mega Drive - Genesis/ (or $GENESIS_ROMS_DIR) and 7z;
 skips without them. The sample: every 40th game, by name, leaving out
 prototypes, betas, demos, pirate and unlicensed dumps, and BIOS images.

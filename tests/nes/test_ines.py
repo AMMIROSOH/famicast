@@ -1,4 +1,4 @@
-"""iNES loading as the recompiler sees it (nes/runtime/cart.c, via nesrecomp --info)."""
+"""iNES loading as the recompiler sees it (systems/nes/runtime/cart.c, via nesrecomp --info)."""
 import os
 import tempfile
 import unittest

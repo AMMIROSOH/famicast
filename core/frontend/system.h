@@ -1,5 +1,5 @@
 /* What a console gives the SDL3 frontend (sdl3_main.c). Each program links
- * one system (the NES: nes/frontend.c); the frontend owns the window, sound,
+ * one system (the NES: systems/nes/frontend.c); the frontend owns the window, sound,
  * input, pacing, settings file and state keys, the system everything else.
  * The frontend calls sys_frame, sys_reset, sys_key and the state functions
  * from its emulator thread or under its lock, never at the same time. */

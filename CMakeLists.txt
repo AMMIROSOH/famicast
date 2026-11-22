@@ -20,7 +20,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 set(GEN_DIR ${CMAKE_BINARY_DIR}/gen)
-set(NES_DIR ${CMAKE_SOURCE_DIR}/nes)
+set(NES_DIR ${CMAKE_SOURCE_DIR}/systems/nes)
 
 # Shared by every system: input recordings and the pad bits (core/).
 add_library(core STATIC core/input_log.c)
@@ -74,7 +74,7 @@ if(FRONTEND)
 endif()
 
 # ---- Recompiled programs ----
-# Options for every system's recompile function (nes/CMakeLists.txt:
+# Options for every system's recompile function (systems/nes/CMakeLists.txt:
 # nes_recompile): AUTO_HINTS traces each game in the interpreter first,
 # EMBED_ROM puts the ROM in the program.
 option(AUTO_HINTS "Trace each game in the interpreter before recompiling it" ON)
@@ -84,7 +84,7 @@ set(AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by AUTO_
 # Your own games (never committed): -DROMS="a.nes;b.fds;c.gb;d.gbc;e.md" (.fds needs FDS_BIOS).
 # Target name = file name without "(...)"/"[...]" tags, lower case,
 # non-alphanumerics -> '_' (e.g. "Arkista's Ring (U) [!].nes" -> arkista_s_ring);
-# hints are read from nes/games/<name>.toml or gb/games/<name>.toml when present.
+# hints are read from systems/nes/games/<name>.toml or systems/gb/games/<name>.toml when present.
 set(ROMS "" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .md, .gen, .bin, .a26) to recompile (semicolon-separated)")
 # Relative paths are relative to the folder cmake was run from (for the
 # release kit that is the archive folder, not kit/), else to this source
@@ -150,7 +150,7 @@ foreach(cpu IN LISTS cpus)
     add_subdirectory(cpu/${cpu} ${CMAKE_BINARY_DIR}/cpu_${cpu})
 endforeach()
 foreach(sys IN LISTS SYSTEMS)
-    add_subdirectory(${sys} ${CMAKE_BINARY_DIR}/sys_${sys})  # not build/<sys>: that is the program (no .exe off Windows)
+    add_subdirectory(systems/${sys} ${CMAKE_BINARY_DIR}/sys_${sys})  # not build/<sys>: that is the program (no .exe off Windows)
 endforeach()
 
 foreach(rom IN LISTS ROMS)
@@ -183,9 +183,9 @@ foreach(rom IN LISTS ROMS)
     elseif(sys STREQUAL "genesis")
         genesis_recompile(${name} "${rom}")
     elseif(sys STREQUAL "gb")
-        gb_recompile(${name} "${rom}" ${CMAKE_SOURCE_DIR}/gb/games/${name}.toml)
+        gb_recompile(${name} "${rom}" ${CMAKE_SOURCE_DIR}/systems/gb/games/${name}.toml)
     elseif(sys STREQUAL "atari2600")
-        atari2600_recompile(${name} "${rom}" ${CMAKE_SOURCE_DIR}/atari2600/games/${name}.toml)
+        atari2600_recompile(${name} "${rom}" ${CMAKE_SOURCE_DIR}/systems/atari2600/games/${name}.toml)
     else()
         nes_recompile(${name} "${rom}" ${NES_DIR}/games/${name}.toml)
         list(APPEND game_names ${name})

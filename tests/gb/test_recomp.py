@@ -1,4 +1,4 @@
-"""Game Boy recompiler (gb/recomp): the blocks gbrecomp makes from a small\nmade-up ROM, and blargg's cpu_instrs recompiled (gb/CMakeLists.txt\ngbtest_cpu_instrs): it must pass and match the interpreter in lockstep."""
+"""Game Boy recompiler (systems/gb/recomp): the blocks gbrecomp makes from a small\nmade-up ROM, and blargg's cpu_instrs recompiled (systems/gb/CMakeLists.txt\ngbtest_cpu_instrs): it must pass and match the interpreter in lockstep."""
 import os
 import re
 import subprocess
@@ -86,7 +86,7 @@ class TestBlocks(unittest.TestCase):
 
 @built(GBRECOMP, "build gbrecomp first")
 class TestHints(unittest.TestCase):
-    """Hint files (gb/games/NAME.toml) and the misses file of a program's own play."""
+    """Hint files (systems/gb/games/NAME.toml) and the misses file of a program's own play."""
 
     def rom(self):  # bank 1 holds INC A / RET at $4000 and $4100; bank 0 at $0200: NOP / RET (not reachable)
         rom = bytearray(make_rom())

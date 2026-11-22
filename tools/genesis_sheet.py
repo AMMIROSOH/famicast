@@ -6,7 +6,7 @@ Runs every Nth game of the licensed No-Intro set (.7z files, as
 tests/genesis/test_boot.py picks them) in genesis_headless with Start
 pressed now and then, and writes the last frames as one PNG, 320 x 240 per
 game (H32 and 224-line pictures padded with black), for a look at whether
-they reach title or play screens (genesis/docs/roadmap.md D2).
+they reach title or play screens (systems/genesis/docs/roadmap.md D2).
 """
 import argparse
 import os

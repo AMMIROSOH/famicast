@@ -1,7 +1,7 @@
-"""The Genesis machine's self-checks (genesis/tests/md_tests.c): version
+"""The Genesis machine's self-checks (systems/genesis/tests/md_tests.c): version
 register, work RAM, Z80 reset, bus request and bank, its vertical blank
 interrupt, 3- and 6-button pads, battery RAM, TMSS. They check the code
-against the hardware facts in genesis/docs/roadmap.md, not a console.
+against the hardware facts in systems/genesis/docs/roadmap.md, not a console.
 """
 import os
 import subprocess

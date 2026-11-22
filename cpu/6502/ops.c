@@ -4,7 +4,7 @@
  * shape as the nesdev wiki "CPU unofficial opcodes" matrix, so it can be
  * checked by eye. Checked by tests/nes/test_ops.py against radare2's tables
  * (tests/nes/data/r2_6502.json); cycle counts against nestest.log and the
- * SingleStepTests suite (nes/docs/verification-log.md, M2).
+ * SingleStepTests suite (systems/nes/docs/verification-log.md, M2).
  *
  * Unofficial names follow nesdev/nestest: SLO RLA SRE RRA SAX LAX DCP ISB ANC
  * ALR ARR XAA AXS AHX SHY SHX TAS LAS KIL. */

@@ -1,4 +1,4 @@
-"""Sunsoft 5B sound (nes/runtime/apu.c): registers through $C000 (select) and
+"""Sunsoft 5B sound (systems/nes/runtime/apu.c): registers through $C000 (select) and
 $E000 (data) on mapper 69, read back from nes_headless --wav (after the
 NES's own high-pass filters: a constant level fades to 0)."""
 import math

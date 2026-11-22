@@ -1,4 +1,4 @@
-"""Controller input and input recordings (nes/docs/roadmap.md M4). Uses Battle City when
+"""Controller input and input recordings (systems/nes/docs/roadmap.md M4). Uses Battle City when
 available locally (tests/games.py), since no fetched test ROM reads the pads."""
 import os
 import struct

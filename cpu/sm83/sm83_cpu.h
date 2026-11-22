@@ -1,7 +1,7 @@
 /* SM83 (the Game Boy CPU) core: state, bus interface, interpreter.
  * Timing is counted in M-cycles (4 clocks): every bus access is one, and so
  * is every internal cycle (Pan Docs "CPU instruction set"; checked cycle by
- * cycle against SingleStepTests sm83, gb/docs/verification-log.md). */
+ * cycle against SingleStepTests sm83, systems/gb/docs/verification-log.md). */
 #ifndef SM83_CPU_H
 #define SM83_CPU_H
 

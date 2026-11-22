@@ -1,5 +1,5 @@
 /* SDL3 frontend: runs a game on the system the program links (system.h;
- * the NES: nes/frontend.c), recompiled code where linked, else interpreted.
+ * the NES: systems/nes/frontend.c), recompiled code where linked, else interpreted.
  * Usage: PROGRAM ROM [--frames N] [--record FILE] [--replay FILE]
  *   ROM may be left out in recompiled builds: the ROM they embed is used.
  *   --frames N   quit after N frames (smoke tests)

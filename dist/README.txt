@@ -24,7 +24,7 @@ WHAT IS IN HERE
                   --wav FILE, --diff, --coverage).
   mdrecomp        The Genesis recompiler (68000 code into C source).
   atari2600       Atari 2600 interpreter in development. Accepts raw .a26 files.
-                  See kit/atari2600/README.md.
+                  See kit/systems/atari2600/README.md.
   atari2600_headless  Atari 2600 interpreter without a window.
   atari2600recomp Atari 2600 recompiler.
   kit/            Everything needed to build a recompiled game into a
@@ -88,7 +88,7 @@ recompiles disk games like the others, given the BIOS:
 The program carries the BIOS too (and build/fds, which plays any .fds
 image with only the BIOS recompiled). Do not share them either.
 
-Supported mappers and more: nes/README.md on the project page.
+Supported mappers and more: systems/nes/README.md on the project page.
 
 
 GAME BOY AND GAME BOY COLOR
@@ -97,7 +97,7 @@ Color games run as on a Game Boy Color, the others as on the original
 Game Boy (palette = green or gray in gb.ini; model = cgb runs those in the
 Color's compatibility mode, with its colours). Battery saves are kept in
 game.gb.sav next to the game, with the cartridge clock where there is one.
-More: gb/README.md on the project page.
+More: systems/gb/README.md on the project page.
 
 
 GENESIS / MEGA DRIVE
@@ -107,7 +107,7 @@ allows it, else Japan, else Europe at 50 Hz). pad = 6 (six buttons) or 3 in
 genesis.ini: a few early games misread a six-button pad. Battery saves are
 kept in game.md.sav next to the game. Code the Z80 runs is always
 interpreted (the 68000 copies it into the Z80's RAM). More:
-genesis/README.md on the project page.
+systems/genesis/README.md on the project page.
 
 
 LICENSES

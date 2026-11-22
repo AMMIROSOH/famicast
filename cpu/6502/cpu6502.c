@@ -1,4 +1,4 @@
-/* Reference 2A03 interpreter: one bus access per cycle (nes/docs/architecture.md). */
+/* Reference 2A03 interpreter: one bus access per cycle (systems/nes/docs/architecture.md). */
 #include "cpu6502_ops.h"
 
 /* NMI/IRQ entry. An NMI seen in the first four cycles takes over an IRQ's

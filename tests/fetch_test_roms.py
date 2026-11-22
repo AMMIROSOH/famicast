@@ -64,7 +64,7 @@ def _pack_state(st):
 
 def fetch_sst(opcode):
     """Return the path of the binary form of one SingleStepTests file
-    (format: see nes/tests/cpu_tests.c), downloading it if needed."""
+    (format: see systems/nes/tests/cpu_tests.c), downloading it if needed."""
     path = os.path.join(ROMS, "sst", "%02x.bin" % opcode)
     if os.path.exists(path):
         return path

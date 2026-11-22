@@ -6,7 +6,7 @@
    installed into the staged kit/sdl3.
 2. NES, Game Boy, Genesis and Atari 2600 programs, Release, linked against that SDL3.
 3. Stage: the programs, the recompile kit (this project's CMakeLists.txt, cmake/,
-   core/, cpu/, the system folders and the prebuilt SDL3), README.txt, licenses.
+   core/, cpu/, systems/ and the prebuilt SDL3), README.txt, licenses.
 4. Kit check: recompile tiny generated ROMs with the staged kit, as a user
    would, and run the result headless.
 5. Archive: NAME.zip on Windows, NAME.tar.gz elsewhere, in --out.
@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SDL_TAG = "release-3.4.20"  # as in CMakeLists.txt
 WIN = os.name == "nt"
 EXE = ".exe" if WIN else ""
-KIT_FILES = ["CMakeLists.txt", "cmake", "core", "cpu", "nes", "gb", "genesis", "atari2600"]
+KIT_FILES = ["CMakeLists.txt", "cmake", "core", "cpu", "systems"]
 
 
 def run(*cmd, cwd=None):

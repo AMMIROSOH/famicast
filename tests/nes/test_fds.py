@@ -1,4 +1,4 @@
-"""Famicom Disk System (nes/runtime/fds.c, the FDS sound in nes/runtime/apu.c),
+"""Famicom Disk System (systems/nes/runtime/fds.c, the FDS sound in systems/nes/runtime/apu.c),
 without the real BIOS: a stand-in "BIOS" assembled here runs at $E000 with
 a minimal disk image (disk info block and a file count of 0).
 Expected values: nesdev "FDS disk format", "FDS audio" (wave pitch = CPU *

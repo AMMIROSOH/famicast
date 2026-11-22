@@ -1,5 +1,5 @@
 /* The SM83 instruction templates (sm83.c), for the interpreter's opcode
- * switch (sm83_gen) and for recompiled blocks (gb/recomp/recomp.c). */
+ * switch (sm83_gen) and for recompiled blocks (systems/gb/recomp/recomp.c). */
 #ifndef SM83_H
 #define SM83_H
 

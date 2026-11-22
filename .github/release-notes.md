@@ -17,4 +17,4 @@ Windows (x64, arm64), Linux (x64, arm64; glibc 2.35+), macOS (Apple Silicon). Ea
 
 **Do not share recompiled programs: they contain the game.**
 
-Supported cartridges and known limitations: [NES](https://github.com/Viper-Bit/retrocast/blob/main/nes/README.md#mappers), [Game Boy](https://github.com/Viper-Bit/retrocast/blob/main/gb/README.md#not-yet).
+Supported cartridges and known limitations: [NES](https://github.com/Viper-Bit/retrocast/blob/main/systems/nes/README.md#mappers), [Game Boy](https://github.com/Viper-Bit/retrocast/blob/main/systems/gb/README.md#not-yet).

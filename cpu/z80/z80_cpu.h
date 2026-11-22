@@ -2,7 +2,7 @@
  * Timing is counted in T-states: every bus access and every internal cycle
  * adds its T-states to z->tstates before it happens (M1 4, memory 3, port 4;
  * checked T-state by T-state against SingleStepTests z80,
- * genesis/docs/verification-log.md). */
+ * systems/genesis/docs/verification-log.md). */
 #ifndef Z80_CPU_H
 #define Z80_CPU_H
 

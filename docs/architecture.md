@@ -1,7 +1,7 @@
 # Architecture
 
 How the project is built, for every system. Each system's own details:
-[NES](../nes/docs/architecture.md), [Game Boy](../gb/docs/architecture.md).
+[NES](../systems/nes/docs/architecture.md), [Game Boy](../systems/gb/docs/architecture.md).
 
 ## Goals
 1. Run games as native executables built from their recompiled CPU code.
@@ -25,26 +25,29 @@ retrocast/
     README.md        what cpu/ holds and how a system uses a CPU
     6502/            the 6502 (NES): opcode table, templates, interpreter, switch generator
     sm83/            the SM83 (Game Boy): templates, interpreter, switch generator, test runner
-  nes/               the NES and the Famicom Disk System
-    README.md, docs/ its status, mappers, roadmap, verification log
-    CMakeLists.txt   nes_recompile(), nes, nes_headless, nesrecomp
-    recomp/          nesrecomp: analysis, emitter
-    runtime/         bus, PPU, APU, mappers, disk drive; recomp_rt.h
-    frontend.c       the NES behind core/frontend/system.h
-    tests/           C test runners (cpu_tests.c, nes_headless.c)
-    games/           per-game hints (<name>.toml)
-  gb/                the Game Boy and Game Boy Color, laid out the same way
-    README.md, docs/
-    CMakeLists.txt   gb_recompile(), gb, gb_headless, gbrecomp
-    recomp/          gbrecomp: recomp.c (regions, blocks), main.c
-    runtime/         bus (gb.c), PPU, APU, cartridges; recomp_rt.h
-    frontend.c, tests/
+  systems/           one folder per system
+    nes/               the NES and the Famicom Disk System
+      README.md, docs/ its status, mappers, roadmap, verification log
+      CMakeLists.txt   nes_recompile(), nes, nes_headless, nesrecomp
+      recomp/          nesrecomp: analysis, emitter
+      runtime/         bus, PPU, APU, mappers, disk drive; recomp_rt.h
+      frontend.c       the NES behind core/frontend/system.h
+      tests/           C test runners (cpu_tests.c, nes_headless.c)
+      games/           per-game hints (<name>.toml)
+    gb/                the Game Boy and Game Boy Color, laid out the same way
+      README.md, docs/
+      CMakeLists.txt   gb_recompile(), gb, gb_headless, gbrecomp
+      recomp/          gbrecomp: recomp.c (regions, blocks), main.c
+      runtime/         bus (gb.c), PPU, APU, cartridges; recomp_rt.h
+      frontend.c, tests/
+    genesis/           the Sega Genesis / Mega Drive (68000 and Z80), the same parts
+    atari2600/         the Atari 2600 (6507), the same parts
   tests/             Python unittest suite: nes/, gb/ per system; fetch_test_roms.py, shared helpers
   tools/             bench.py, smoke_games.py, make_release.py, ci_systems.py, ...
   dist/              README.txt for the release archives
   docs/              this: what is shared
 ```
-A new system is a new folder beside `nes/` and `gb/` with the same parts.
+A new system is a new folder in `systems/`, beside `nes/` and `gb/` with the same parts.
 A new CPU is a new folder in `cpu/` (see [cpu/README.md](../cpu/README.md)).
 `tools/ci_systems.py` has the table of which systems use each CPU, so a
 change under `cpu/6502/` tests the NES. Code moves to `core/` once a
@@ -105,7 +108,7 @@ jumps, code in RAM). The interpreter runs what was missed, and
 every instruction executed, so one interpreter run is a complete trace of
 that session. With `AUTO_HINTS` (on by default) the build traces each game
 with scripted input before recompiling it. The NES also keeps hints per
-game and the misses of your own play (`nes/README.md`).
+game and the misses of your own play (`systems/nes/README.md`).
 
 ## The interpreter
 Every system has a reference interpreter, sharing the CPU struct and the

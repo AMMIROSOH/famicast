@@ -2,7 +2,7 @@
  *
  * Used for both the interpreter's switch (cpu6502_gen) and the
  * recompiler's block functions, so the instruction semantics exist once and
- * are verified once (nestest + SingleStepTests, nes/docs/verification-log.md).
+ * are verified once (nestest + SingleStepTests, systems/nes/docs/verification-log.md).
  *
  * Every rd()/wr() is one CPU cycle, including the dummy reads and writes the
  * real 2A03 performs (sequences from 6502_cpu.txt / nesdev; checked cycle by

@@ -1,9 +1,9 @@
-"""The 68000 recompiler (genesis/recomp) against the interpreter, in
+"""The 68000 recompiler (systems/genesis/recomp) against the interpreter, in
 lockstep: genesis_headless --diff compares the CPUs, the Z80 and the RAMs
 after every line and the whole machine after every frame.
 
 CI: a ROM of random instructions made at build time
-(genesis/tests/random_rom.c, mdtest_random). Locally, the games recompiled
+(systems/genesis/tests/random_rom.c, mdtest_random). Locally, the games recompiled
 through -DROMS can be diffed the same way (NAME_headless ROM --diff).
 """
 import os

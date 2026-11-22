@@ -3,9 +3,9 @@
 What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
-Checks of one system: [NES](../nes/docs/verification-log.md),
-[Game Boy](../gb/docs/verification-log.md),
-[Genesis](../genesis/docs/verification-log.md).
+Checks of one system: [NES](../systems/nes/docs/verification-log.md),
+[Game Boy](../systems/gb/docs/verification-log.md),
+[Genesis](../systems/genesis/docs/verification-log.md).
 
 ## 2026-11-22 · CPUs in cpu/
 - **Same output**: the generated interpreter switches (`cpu6502_switch.inc`,
@@ -30,12 +30,12 @@ Checks of one system: [NES](../nes/docs/verification-log.md),
   alone with gcc and `-Werror`; `nes` and `gb` (MSVC) run with a mono and a
   stereo audio device.
 
-## 2026-11-18 · Layout: core/ and nes/, the frontend behind system.h
-- **What**: the NES code moved to `nes/` (recomp/, runtime/, tests/,
+## 2026-11-18 · Layout: core/ and systems/nes/, the frontend behind system.h
+- **What**: the NES code moved to `systems/nes/` (recomp/, runtime/, tests/,
   games/, its own CMakeLists.txt); `core/` holds what other systems will
   share: input recordings and pad bits, and the SDL3 frontend, which now
   reaches the console only through `core/frontend/system.h` (the NES:
-  `nes/frontend.c`: loading, saves, frame, palette, region and overscan,
+  `systems/nes/frontend.c`: loading, saves, frame, palette, region and overscan,
   F6, the jam message, misses). Settings the frontend does not know go to
   the system (`sys_setting`).
 - **Same output**: the old (before the PC markers, 978c5b6) and the new
@@ -51,7 +51,7 @@ Checks of one system: [NES](../nes/docs/verification-log.md),
   `nes.ini` has the same lines as before (the NES keys now grouped after
   the general ones).
 - **Release kit**: `tools/make_release.py` (Windows x64) stages `core/` and
-  `nes/`; its kit check recompiles a generated ROM with the staged kit
+  `systems/nes/`; its kit check recompiles a generated ROM with the staged kit
   (window and headless program) and runs it: passes.
 - **Tests**: as before (the 3 nestest tests could not download their log).
 

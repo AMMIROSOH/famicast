@@ -1,4 +1,4 @@
-"""Game Boy test ROMs (blargg, mooneye) through gb_headless (gb/tests/gb_headless.c).
+"""Game Boy test ROMs (blargg, mooneye) through gb_headless (systems/gb/tests/gb_headless.c).
 
 The ROMs come from the c-sp/game-boy-test-roms collection, one pinned and
 hash-checked zip (tests/fetch_test_roms.py fetch_gb_test_roms). Every ROM in

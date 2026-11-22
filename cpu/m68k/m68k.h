@@ -1,5 +1,5 @@
 /* The 68000 instruction templates (m68k.c), for the interpreter's handlers
- * (m68k_gen) and recompiled blocks (genesis/recomp). */
+ * (m68k_gen) and recompiled blocks (systems/genesis/recomp). */
 #ifndef M68K_H
 #define M68K_H
 

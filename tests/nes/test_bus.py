@@ -1,4 +1,4 @@
-"""CPU bus scheduling (nes/runtime/nes.c): the lazily caught-up PPU must still
+"""CPU bus scheduling (systems/nes/runtime/nes.c): the lazily caught-up PPU must still
 raise every NMI when the CPU never touches the PPU, on a tiny hand-assembled
 ROM (helpers from tests/nes/test_mappers.py)."""
 import os

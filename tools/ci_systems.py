@@ -2,7 +2,7 @@
 
     python tools/ci_systems.py BASE HEAD   -> prints systems=["nes","gb"] and cmake=nes;gb
 
-A file under a system's folder (nes/, tests/nes/) selects that system, one
+A file under a system's folder (systems/nes/, tests/nes/) selects that system, one
 under a CPU's folder (cpu/6502/) the systems using that CPU (CPUS); docs
 (any .md, docs/, dist/, release notes and workflow) select nothing; anything
 else (core/, the root CMakeLists.txt, cmake/, shared tests and tools, the CI
@@ -23,7 +23,7 @@ def systems_for(files):
     for f in files:
         if f.endswith(".md") or f.startswith(DOCS) or f in ("LICENSE", ".gitignore"):
             continue
-        own = [s for s in SYSTEMS if f.startswith((s + "/", "tests/%s/" % s))]
+        own = [s for s in SYSTEMS if f.startswith(("systems/%s/" % s, "tests/%s/" % s))]
         parts = f.split("/")
         if parts[0] == "cpu" and len(parts) > 2:
             own = CPUS.get(parts[1], [])  # an unknown CPU: [] below selects every system

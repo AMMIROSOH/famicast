@@ -3,7 +3,7 @@
  * Timing is in clocks: a bus access takes 4, internal work the idle
  * clocks the microcode spends, in the order the CPU does them (checked
  * access by access against SingleStepTests m68000, generated from MAME's
- * microcoded 68000: cpu/README.md, genesis/docs/verification-log.md).
+ * microcoded 68000: cpu/README.md, systems/genesis/docs/verification-log.md).
  *
  * The prefetch queue is the chip's: ir holds the opcode being decoded next,
  * irc the word after it, and pc is the address the next prefetch reads
