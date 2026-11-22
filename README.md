@@ -50,6 +50,11 @@ Needs CMake ≥ 3.20 and a C11 compiler (clang/gcc/MSVC); any CMake generator
 works (Visual Studio, Ninja, Makefiles). SDL3 is downloaded and built by
 CMake, unless a prebuilt static SDL3 is found in `sdl3/` (or
 `-DSDL3_PREFIX=...`). Python ≥ 3.11 is only needed for the tests.
+
+On Linux, install the audio headers first, or SDL3 is built without sound
+(the game still runs, silent). Debian/Ubuntu:
+`sudo apt-get install libasound2-dev libpulse-dev libpipewire-0.3-dev`.
+If you built before installing them, delete `build/CMakeCache.txt` and build again.
 ```
 cmake -S . -B build
 cmake --build build --config Release
