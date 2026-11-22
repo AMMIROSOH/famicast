@@ -14,11 +14,12 @@ own.
 |---|---|---|
 | NES and Famicom Disk System | 74 mappers (99.7% of licensed releases load), FDS, expansion sound, NTSC/PAL/Dendy; recompiled | [nes/README.md](nes/README.md) |
 | Game Boy and Game Boy Color | ROM only, MBC1/2/3/5 (MBC3 clock), DMG and CGB mode; recompiled | [gb/README.md](gb/README.md) |
+| Atari 2600 | Interpreter and recompiler in development, 2K/4K/F8/F6/F4 cartridges, NTSC and PAL | [atari2600/README.md](atari2600/README.md) |
 
 ## How it works
 1. Each system has a recompiler (`nes/recomp/` → `nesrecomp`, `gb/recomp/`
    → `gbrecomp`; C, built and run by CMake). It finds the reachable code and
-   emits one C function per basic block, plus the ROM itself. Before that,
+   emits C for reachable code, plus the ROM itself. Before that,
    the build plays the game for a while in the interpreter to find code
    static analysis cannot.
 2. Each CPU's instructions are written once, as C templates in its folder
@@ -55,6 +56,7 @@ cmake -S . -B build
 cmake --build build --config Release
 build/nes path/to/game.nes      # NES and FDS games, interpreted
 build/gb path/to/game.gb        # Game Boy and Game Boy Color games, interpreted
+build/atari2600 path/to/game.7z  # Atari 2600, interpreted
 ```
 Builds are **Release**; tests, timings and full-speed play assume it. Keep
 `--config Release` with Visual Studio (the default generator with MSVC):
@@ -71,7 +73,7 @@ cmake -S . -B build -DROMS="path/to/Game One.nes;path/to/Game Two (E) [!].gb"
 cmake --build build --config Release   # -> build/game_one, build/game_two (+ _headless)
 build/game_one                         # the ROM is embedded: no path needed
 ```
-The file extension picks the system (`.nes`, `.fds`, `.gb`, `.gbc`). Before
+The file extension picks the system (`.nes`, `.fds`, `.gb`, `.gbc`, `.a26`, `.7z`). Before
 recompiling, the build runs each game in the interpreter for
 `AUTO_HINTS_FRAMES` (default 6000) frames of scripted play and recompiles
 every address it ran (`-DAUTO_HINTS=OFF` skips this). More ways to reach

@@ -81,3 +81,10 @@ detail yet.
 | Library | Used for | License |
 |---------|----------|---------|
 | [SDL3](https://libsdl.org), tag `release-3.4.20` via CMake FetchContent | Window, audio, keyboard, gamepad | zlib |
+
+## Atari 2600
+
+- Stella, `src/emucore/M6532.cxx`, GPL-2.0-or-later, consulted for RIOT register and timer behavior: https://github.com/stella-emu/stella/blob/master/src/emucore/M6532.cxx
+- Stella, `src/emucore/tia/AudioChannel.cxx`, GPL-2.0-or-later, adapted for TIA audio channel counters: https://github.com/stella-emu/stella/blob/master/src/emucore/tia/AudioChannel.cxx
+- Stella, `src/common/PaletteHandler.cxx`, GPL-2.0-or-later, standard NTSC and PAL color palettes: https://github.com/stella-emu/stella/blob/master/src/common/PaletteHandler.cxx
+- LZMA SDK 26.01, public domain, used for 7z archive decompression: https://www.7-zip.org/sdk.html

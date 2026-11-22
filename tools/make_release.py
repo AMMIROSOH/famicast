@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SDL_TAG = "release-3.4.20"  # as in CMakeLists.txt
 WIN = os.name == "nt"
 EXE = ".exe" if WIN else ""
-KIT_FILES = ["CMakeLists.txt", "cmake", "core", "cpu", "nes", "gb", "genesis"]
+KIT_FILES = ["CMakeLists.txt", "cmake", "core", "cpu", "nes", "gb", "genesis", "atari2600"]
 
 
 def run(*cmd, cwd=None):
@@ -70,7 +70,8 @@ def main():
     cmake_build(ROOT, build, "-DSDL3_PREFIX=" + os.path.join(kit, "sdl3"))
 
     # 3. stage
-    for prog in ("nes", "nes_headless", "nesrecomp", "gb", "gb_headless", "gbrecomp"):
+    for prog in ("nes", "nes_headless", "nesrecomp", "gb", "gb_headless", "gbrecomp",
+                 "atari2600", "atari2600_headless", "atari2600recomp"):
         shutil.copy2(os.path.join(build, prog + EXE), stage)
     for item in KIT_FILES:
         src = os.path.join(ROOT, item)
@@ -78,6 +79,8 @@ def main():
             shutil.copytree(src, os.path.join(kit, item))
         else:
             shutil.copy2(src, kit)
+    shutil.copytree(os.path.join(build, "_deps", "atari_lzma_sdk-src", "C"),
+                    os.path.join(kit, "third_party", "lzma", "C"))
     shutil.copy2(os.path.join(ROOT, "dist", "README.txt"), stage)
     shutil.copy2(os.path.join(ROOT, "LICENSE"), stage)
     shutil.copy2(os.path.join(sdl_src, "LICENSE.txt"), os.path.join(stage, "LICENSE-SDL3.txt"))

@@ -10,7 +10,7 @@ import subprocess
 import unittest
 
 from tests.nes.nesrecomp import BUILT, ops
-from tests.fetch_test_roms import ROMS, fetch
+from tests.fetch_test_roms import ROMS, fetch, fetch_sst_nmos
 
 from tests.games import ROOT  # noqa: E402
 from tests.games import built
@@ -61,6 +61,16 @@ class TestSingleStep(unittest.TestCase):
                     continue
                 r = run("sst", path)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+
+@built(RUNNER, "build the C runtime first (see module docstring)")
+class TestNmosDecimal(unittest.TestCase):
+    def test_decimal_instructions_and_bus_cycles(self):
+        # ADC, SBC, ARR, RRA and ISB exercise all decimal arithmetic helpers.
+        for opcode in (0x69, 0xE9, 0x6B, 0x67, 0xE7):
+            with self.subTest(opcode=f"${opcode:02X}"):
+                result = run("sst-nmos", fetch_sst_nmos(opcode))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":
