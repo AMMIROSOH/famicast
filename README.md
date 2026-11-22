@@ -14,11 +14,12 @@ own.
 |---|---|---|
 | NES and Famicom Disk System | 74 mappers (99.7% of licensed releases load), FDS, expansion sound, NTSC/PAL/Dendy; recompiled | [nes/README.md](nes/README.md) |
 | Game Boy and Game Boy Color | ROM only, MBC1/2/3/5 (MBC3 clock), DMG and CGB mode; recompiled | [gb/README.md](gb/README.md) |
+| Sega Genesis / Mega Drive | 68000, Z80, VDP, PSG and YM2612, 3- and 6-button pads, battery saves; recompiled (68000) | [genesis/README.md](genesis/README.md) |
 | Atari 2600 | Interpreter and recompiler in development, 2K/4K/F8/F6/F4 cartridges, NTSC and PAL | [atari2600/README.md](atari2600/README.md) |
 
 ## How it works
 1. Each system has a recompiler (`nes/recomp/` → `nesrecomp`, `gb/recomp/`
-   → `gbrecomp`; C, built and run by CMake). It finds the reachable code and
+   → `gbrecomp`, `genesis/recomp/` → `mdrecomp`; C, built and run by CMake). It finds the reachable code and
    emits one C function per basic block, plus the ROM itself. Before that,
    the build plays the game for a while in the interpreter to find code
    static analysis cannot.
@@ -51,11 +52,17 @@ Needs CMake ≥ 3.20 and a C11 compiler (clang/gcc/MSVC); any CMake generator
 works (Visual Studio, Ninja, Makefiles). SDL3 is downloaded and built by
 CMake, unless a prebuilt static SDL3 is found in `sdl3/` (or
 `-DSDL3_PREFIX=...`). Python ≥ 3.11 is only needed for the tests.
+
+On Linux, install the audio headers first, or SDL3 is built without sound
+(the game still runs, silent). Debian/Ubuntu:
+`sudo apt-get install libasound2-dev libpulse-dev libpipewire-0.3-dev`.
+If you built before installing them, delete `build/CMakeCache.txt` and build again.
 ```
 cmake -S . -B build
 cmake --build build --config Release
 build/nes path/to/game.nes      # NES and FDS games, interpreted
 build/gb path/to/game.gb        # Game Boy and Game Boy Color games, interpreted
+build/genesis path/to/game.md   # Genesis / Mega Drive games, interpreted (.md, .bin, .gen)
 build/atari2600 path/to/game.a26 # Atari 2600, interpreted
 ```
 Builds are **Release**; tests, timings and full-speed play assume it. Keep
@@ -64,7 +71,7 @@ without it `cmake --build` builds Debug, which is too slow to play.
 Ninja and Makefiles ignore the flag and build Release anyway. Programs are
 put in `build/` with every generator (no `Release/` or `Debug/` subfolder).
 Headless (no SDL3): add `-DFRONTEND=OFF`. Only some systems:
-`-DSYSTEMS=gb` (default `nes;gb`). Warnings as errors: `-DWERROR=ON`. On Windows the game programs open
+`-DSYSTEMS=gb` (default `nes;gb;genesis`). Warnings as errors: `-DWERROR=ON`. On Windows the game programs open
 no console window; use the `_headless` programs for text output.
 
 ## Recompiling a game
@@ -73,7 +80,7 @@ cmake -S . -B build -DROMS="path/to/Game One.nes;path/to/Game Two (E) [!].gb"
 cmake --build build --config Release   # -> build/game_one, build/game_two (+ _headless)
 build/game_one                         # the ROM is embedded: no path needed
 ```
-The file extension picks the system (`.nes`, `.fds`, `.gb`, `.gbc`, `.a26`). Before
+The file extension picks the system (`.nes`, `.fds`, `.gb`, `.gbc`, `.md`, `.gen`, `.bin`, `.a26`). Before
 recompiling, the build runs each game in the interpreter for
 `AUTO_HINTS_FRAMES` (default 6000) frames of scripted play and recompiles
 every address it ran (`-DAUTO_HINTS=OFF` skips this). More ways to reach
@@ -101,7 +108,8 @@ Enter = Start, Right Shift = Select, F5 = reset, Esc = quit. Gamepads:
 first = player 1, second = player 2, hot-plug; D-pad or left stick, East =
 A, South = B, North = X, West = Y, shoulders = L and R, Back = Select,
 Start. Each system reads the buttons its pad has (the NES and Game Boy:
-A, B, Select, Start and the directions).
+A, B, Select, Start and the directions; the Genesis: A on Y, B on B, C on
+A, X on L, Y on X, Z on R, Mode on Select).
 
 | Key | Action |
 |-----|--------|

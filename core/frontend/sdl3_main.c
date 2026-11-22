@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO)) {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         SDL_Log("SDL_Init: %s", SDL_GetError());
         return 1;
     }
@@ -298,9 +298,12 @@ int main(int argc, char **argv) {
      * the playback rate is nudged (+-0.5%) to keep about 3 frames queued, so
      * the two clocks never drift apart (no crackle, no growing latency). */
     const SDL_AudioSpec spec = {SDL_AUDIO_F32, info.channels, info.sample_rate};
-    SDL_AudioStream *audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
-    if (audio) SDL_ResumeAudioStreamDevice(audio);
-    else SDL_Log("no audio: %s", SDL_GetError());
+    /* no audio device is not fatal: play silent */
+    SDL_AudioStream *audio = NULL;
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) &&
+        (audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL)))
+        SDL_ResumeAudioStreamDevice(audio);
+    else SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "no audio, playing without sound: %s", SDL_GetError());
 
     static Emu emu;
     emu.lock = SDL_CreateMutex();

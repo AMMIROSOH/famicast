@@ -29,6 +29,7 @@ typedef struct M68k {
     uint16_t op;          /* the instruction being executed (the frames' IR) */
     uint8_t stopped;      /* STOP: waiting for an interrupt */
     uint8_t halted;       /* double bus fault */
+    uint8_t group0;       /* an address error's frame is being built: another one halts */
     uint8_t ipl;          /* interrupt level the system presents (0-7) */
     uint8_t ipl_seen;     /* level 7 is taken on its edge */
     uint8_t trace;        /* T was set when the instruction began */
