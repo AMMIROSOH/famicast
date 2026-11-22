@@ -8,6 +8,26 @@
 
 #include <stdint.h>
 
+/* Two systems with this CPU in one program (the Genesis and the Master
+ * System in retrocast) each get their own copy of the interpreter: Z80_PREFIX
+ * (z80_library() in CMakeLists.txt) renames its functions and the bus it
+ * calls, so the calls stay direct. */
+#ifdef Z80_PREFIX
+#define Z80_CAT2(p, n) p##n
+#define Z80_CAT(p, n) Z80_CAT2(p, n)
+#define z80_fetch Z80_CAT(Z80_PREFIX, z80_fetch)
+#define z80_read Z80_CAT(Z80_PREFIX, z80_read)
+#define z80_write Z80_CAT(Z80_PREFIX, z80_write)
+#define z80_in Z80_CAT(Z80_PREFIX, z80_in)
+#define z80_out Z80_CAT(Z80_PREFIX, z80_out)
+#define z80_idle Z80_CAT(Z80_PREFIX, z80_idle)
+#define z80_irq_ack Z80_CAT(Z80_PREFIX, z80_irq_ack)
+#define z80_reset Z80_CAT(Z80_PREFIX, z80_reset)
+#define z80_step Z80_CAT(Z80_PREFIX, z80_step)
+#define z80_nmi Z80_CAT(Z80_PREFIX, z80_nmi)
+#define z80_interrupt Z80_CAT(Z80_PREFIX, z80_interrupt)
+#endif
+
 /* F */
 enum { Z80_FLAG_S = 0x80, Z80_FLAG_Z = 0x40, Z80_FLAG_Y = 0x20, Z80_FLAG_H = 0x10,
        Z80_FLAG_X = 0x08, Z80_FLAG_PV = 0x04, Z80_FLAG_N = 0x02, Z80_FLAG_C = 0x01 };

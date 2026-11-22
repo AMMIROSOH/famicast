@@ -1,9 +1,9 @@
 retrocast - static recompiler for NES, Famicom Disk System, Game Boy, Game Boy Color,
-Genesis / Mega Drive and Atari 2600 games
+Genesis / Mega Drive and Atari 2600 games; plays Master System games too
 https://github.com/Viper-Bit/retrocast
 
 No games are included. Use your own legally dumped games (.nes, .fds, .gb, .gbc,
-.md, .a26).
+.md, .a26, .sms).
 
 
 WHAT IS IN HERE
@@ -11,8 +11,9 @@ WHAT IS IN HERE
   retrocast       Plays a game of any of these systems in the built-in
                   interpreter. Usage: retrocast path/to/game
                   The system is read from the file itself (its header);
-                  --system nes|gb|md|a26 picks one when the file does not
-                  say (Atari 2600 games have no header: name them .a26).
+                  --system nes|gb|md|a26|sms picks one when the file does not
+                  say (Atari 2600 games have no header: name them .a26;
+                  Master System games without one: .sms).
   nes_headless    The same without a window, for scripts and checks
                   (--frames N, --record/--replay, --diff, --coverage, ...).
   nesrecomp       The recompiler: turns a ROM into C source.
@@ -24,6 +25,9 @@ WHAT IS IN HERE
   mdrecomp        The Genesis recompiler (68000 code into C source).
   atari2600_headless  Atari 2600 interpreter without a window.
   atari2600recomp Atari 2600 recompiler.
+  sms_headless    Master System interpreter without a window (--frames N,
+                  --ppm FILE, --wav FILE). Master System games are not
+                  recompiled yet.
   kit/            Everything needed to build a recompiled game into a
                   native program (see below), with SDL3 prebuilt.
 
@@ -40,7 +44,9 @@ F10 = TV frame, F11 or Alt+Enter = fullscreen, Esc = quit.
 Gamepads work too (first = player 1, second = player 2).
 Genesis pad: A, B, C = keyboard A, Z, X (gamepad West, South, East);
 X, Y, Z = Q, S, W (left shoulder, North, right shoulder); Mode = Right Shift.
-Settings are in nes.ini / gb.ini / genesis.ini / atari2600.ini next to
+Master System pad: button 1 = Z, button 2 = X, Pause = Enter.
+Settings are in nes.ini / gb.ini / genesis.ini / atari2600.ini /
+mastersystem.ini next to
 retrocast, one per system, created on first run.
 
 
@@ -104,6 +110,14 @@ genesis.ini: a few early games misread a six-button pad. Battery saves are
 kept in game.md.sav next to the game. Code the Z80 runs is always
 interpreted (the 68000 copies it into the Z80's RAM). More:
 systems/genesis/README.md on the project page.
+
+
+MASTER SYSTEM / MARK III
+
+Sega's and Codemasters' cartridges. NTSC unless the file name says
+(Europe), or region = pal in mastersystem.ini. Games with cartridge RAM
+keep it in game.sms.sav next to the game. More: systems/mastersystem/README.md
+on the project page.
 
 
 LICENSES
