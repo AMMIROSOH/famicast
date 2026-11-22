@@ -6,15 +6,15 @@ No games are included: bring your own legally dumped ROMs and disk images (disk 
 
 ## Downloads
 
-Windows (x64, arm64), Linux (x64, arm64; glibc 2.35+), macOS (Apple Silicon). Each archive has, per system:
+Windows (x64, arm64), Linux (x64, arm64; glibc 2.35+), macOS (Apple Silicon). Each archive has:
 
-- `nes`, `gb`, `genesis`, `atari2600`: play a game in the interpreter
-- `nes_headless`, `gb_headless`, `genesis_headless`, `atari2600_headless`: the same without a window, for scripts and checks
-- `nesrecomp`, `gbrecomp`: the recompilers (ROM to C)
+- `retrocast`: plays a game of any system in the interpreter; the system is read from the file (`--system` picks one when the file does not say)
+- `nes_headless`, `gb_headless`, `genesis_headless`, `atari2600_headless`: the same without a window, one per system, for scripts and checks
+- `nesrecomp`, `gbrecomp`, `mdrecomp`, `atari2600recomp`: the recompilers (ROM to C)
 - `kit/`: recompiles your own ROMs into native programs with only CMake and a C compiler installed (SDL3 comes prebuilt)
 
 `README.txt` in the archive explains how to play and how to recompile. macOS builds are unsigned: run `xattr -dr com.apple.quarantine retrocast-*` once after unpacking.
 
 **Do not share recompiled programs: they contain the game.**
 
-Supported cartridges and known limitations: [NES](https://github.com/Viper-Bit/retrocast/blob/main/systems/nes/README.md#mappers), [Game Boy](https://github.com/Viper-Bit/retrocast/blob/main/systems/gb/README.md#not-yet).
+Supported cartridges and known limitations: [NES](https://github.com/Viper-Bit/retrocast/blob/main/systems/nes/README.md#mappers), [Game Boy](https://github.com/Viper-Bit/retrocast/blob/main/systems/gb/README.md#not-yet), [Genesis](https://github.com/Viper-Bit/retrocast/blob/main/systems/genesis/README.md#status), [Atari 2600](https://github.com/Viper-Bit/retrocast/blob/main/systems/atari2600/README.md#status).
