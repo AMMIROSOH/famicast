@@ -7,7 +7,7 @@ import unittest
 
 from tests.games import ROOT, built
 
-BUILD = os.environ.get("ATARI2600_BUILD", os.path.join(ROOT, "build"))
+BUILD = os.environ.get("NES_BUILD", os.path.join(ROOT, "build"))
 EXE = ".exe" if os.name == "nt" else ""
 FIXED = os.path.join(BUILD, "a26_fixed_headless" + EXE)
 BANKED = os.path.join(BUILD, "a26_banked_headless" + EXE)

@@ -7,7 +7,7 @@ import unittest
 from tests.games import ROOT, built
 
 
-RUNNER = os.path.join(os.environ.get("ATARI2600_BUILD", os.path.join(ROOT, "build")),
+RUNNER = os.path.join(os.environ.get("NES_BUILD", os.path.join(ROOT, "build")),
                       "atari2600_cart_tests.exe" if os.name == "nt" else "atari2600_cart_tests")
 
 
