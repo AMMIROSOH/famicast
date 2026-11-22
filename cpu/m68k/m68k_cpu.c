@@ -45,6 +45,11 @@ uint32_t m68k_privilege(M68k *c) { return m68k_exception(c, 8, c->pc - 4, 4); }
 /* Group 0: the access is dropped, a 7-word frame (status: the opcode's
  * upper bits, read/write, function code; the address; IR; SR; PC). */
 void m68k_address_error(M68k *c, uint32_t a, int write, int prog, unsigned strobe) {
+    if (c->group0) {  /* a double fault (an odd vector 3 or stack): the CPU halts */
+        c->halted = 1;
+        longjmp(c->abort, 1);
+    }
+    c->group0 = 1;
     unsigned fc = prog ? fcp(c) : fcd(c);
     c->cycles += 4;
     m68k_aborted(c, a & 0xFFFFFF, fc, strobe, write);
@@ -64,12 +69,13 @@ void m68k_address_error(M68k *c, uint32_t a, int write, int prog, unsigned strob
     bus_w(c, sp + 2, (uint16_t)(a >> 16), 5, 3);
     c->ae_adj = -2;
     (void)vector_jump(c, 3);
+    c->group0 = 0;
     longjmp(c->abort, 1);
 }
 
 void m68k_reset(M68k *c) {
     c->sr = 0x2700;
-    c->stopped = c->halted = 0;
+    c->stopped = c->halted = c->group0 = 0;
     uint32_t hi = bus_r(c, 0, 6, 3);
     c->a[7] = c->ssp = hi << 16 | bus_r(c, 2, 6, 3);
     hi = bus_r(c, 4, 6, 3);
@@ -85,18 +91,21 @@ static int interrupt(M68k *c) {
     int nmi = level == 7 && !c->ipl_seen;
     c->ipl_seen = level == 7;
     if (level <= mask && !nmi) return 0;
+    /* the return address: the next instruction, pc - 4 with the queue full;
+     * STOP leaves its immediate word in the queue, so after it that is pc */
+    uint32_t ret = c->stopped ? c->pc : c->pc - 4;
     c->stopped = 0;
     uint16_t sr = enter(c);
     c->sr = (uint16_t)((c->sr & ~0x700) | level << 8);
     idle(c, 6);
     c->a[7] -= 6;
-    bus_w(c, c->a[7] + 4, (uint16_t)(c->pc - 4), 5, 3);
+    bus_w(c, c->a[7] + 4, (uint16_t)ret, 5, 3);
     int vector = m68k_iack(c, level);
     c->cycles += 4;
     if (vector < 0) vector = 24 + level;
     idle(c, 4);
     bus_w(c, c->a[7], sr, 5, 3);
-    bus_w(c, c->a[7] + 2, (uint16_t)((c->pc - 4) >> 16), 5, 3);
+    bus_w(c, c->a[7] + 2, (uint16_t)(ret >> 16), 5, 3);
     (void)vector_jump(c, vector);
     return 1;
 }
