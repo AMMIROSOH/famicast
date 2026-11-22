@@ -25,6 +25,8 @@ class TestCiSystems(unittest.TestCase):
         self.assertEqual(systems_for(["cpu/6502/c6502.c"]), ["nes"])
         self.assertEqual(systems_for(["cpu/sm83/sm83_ops.h", "gb/runtime/gb.c"]), ["gb"])
         self.assertEqual(systems_for(["cpu/6502/ops.c", "cpu/sm83/sm83.c"]), ["nes", "gb"])
+        self.assertEqual(systems_for(["cpu/z80/z80.c"]), ["genesis"])
+        self.assertEqual(systems_for(["cpu/z80/z80_ops.h", "cpu/sm83/sm83.c"]), ["gb", "genesis"])
         self.assertEqual(systems_for(["cpu/README.md"]), [])
 
     def test_unknown_cpu_selects_every_system(self):

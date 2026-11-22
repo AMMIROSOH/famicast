@@ -136,7 +136,7 @@ set(SYSTEMS "nes;gb;genesis" CACHE STRING "Systems to build (semicolon-separated
 # The CPUs they use (cpu/): added once each, before the systems.
 set(CPU_nes 6502)
 set(CPU_gb sm83)
-set(CPU_genesis "")  # the 68000 and the Z80 (cpu/m68k, cpu/z80) as they are added
+set(CPU_genesis "z80")
 set(cpus "")
 foreach(sys IN LISTS SYSTEMS)
     if(NOT sys MATCHES "^(nes|gb|genesis)$")
