@@ -2,10 +2,10 @@
  * code: bus cycles, register pairs, ALU and flags. Flag rules: Pan Docs "CPU
  * instruction set" and gbdev's opcode table (docs/sources.md); all checked against
  * SingleStepTests sm83. */
-#ifndef GB_CPU_OPS_H
-#define GB_CPU_OPS_H
+#ifndef SM83_OPS_H
+#define SM83_OPS_H
 
-#include "cpu.h"
+#include "sm83_cpu.h"
 
 static inline uint8_t rd(GbCpu *c, uint16_t a) { c->cycles++; return gb_read(c, a); }
 static inline void wr(GbCpu *c, uint16_t a, uint8_t v) { c->cycles++; gb_write(c, a, v); }

@@ -2,8 +2,8 @@
  * Timing is counted in M-cycles (4 clocks): every bus access is one, and so
  * is every internal cycle (Pan Docs "CPU instruction set"; checked cycle by
  * cycle against SingleStepTests sm83, gb/docs/verification-log.md). */
-#ifndef GB_CPU_H
-#define GB_CPU_H
+#ifndef SM83_CPU_H
+#define SM83_CPU_H
 
 #include <stdint.h>
 

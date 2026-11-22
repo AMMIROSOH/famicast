@@ -3,7 +3,6 @@
  *   nesrecomp ROM -o OUT.c [--hints GAME.toml]... [--misses RUN.txt]... [--save-hints OUT.toml]
  *             [--no-rom]               do not embed the ROM (the program then needs the file)
  *             [--bios disksys.rom]     ROM is a Famicom Disk System image (.fds)
- *   nesrecomp --cpu-switch OUT.inc     the interpreter's opcode switch (runtime/cpu.c)
  *   nesrecomp --ops                    the opcode table, one line per opcode (tests)
  *   nesrecomp --info ROM               iNES header summary (tests)
  *
@@ -412,18 +411,13 @@ static void summary(const Cart *c, char *out, size_t len) {
 static int usage(void) {
     fprintf(stderr, "usage: nesrecomp ROM -o OUT.c [--hints GAME.toml]... [--misses RUN.txt]... [--save-hints OUT.toml]\n"
                     "                 [--no-rom] [--bios disksys.rom]\n"
-                    "       nesrecomp --cpu-switch OUT.inc | --ops | --info ROM\n");
+                    "       nesrecomp --ops | --info ROM\n");
     return 2;
 }
 
 int main(int argc, char **argv) {
     ops_init();
     Buf o = {0};
-    if (argc == 3 && !strcmp(argv[1], "--cpu-switch")) {
-        emit_cpu_switch(&o);
-        buf_write_file(argv[2], &o);
-        return 0;
-    }
     if (argc == 2 && !strcmp(argv[1], "--ops")) {
         for (int i = 0; i < 256; i++)
             printf("%02X %s %s %d %d %d %d\n", i, OPS[i].mn, OPS[i].mode, OPS[i].size, OPS[i].cycles,

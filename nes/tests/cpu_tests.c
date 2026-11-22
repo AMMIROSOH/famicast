@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cpu.h"
+#include "cpu6502.h"
 #include "recomp_rt.h"
 
 static uint8_t mem[0x10000];

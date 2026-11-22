@@ -1,6 +1,6 @@
 /* 2A03 CPU core: state, bus interface, interpreter entry points. */
-#ifndef NES_CPU_H
-#define NES_CPU_H
+#ifndef CPU6502_H
+#define CPU6502_H
 
 #include <stdint.h>
 

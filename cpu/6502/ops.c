@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "recomp.h"
+#include "c6502.h"
 
 static const char MNEMONICS[] =
     "BRK ORA KIL SLO NOP ORA ASL SLO PHP ORA ASL ANC NOP ORA ASL SLO "

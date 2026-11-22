@@ -133,10 +133,21 @@ endif()
 
 # The systems to build (CI builds the ones a change touches): nes, gb.
 set(SYSTEMS "nes;gb" CACHE STRING "Systems to build (semicolon-separated): nes, gb")
+# The CPUs they use (cpu/): added once each, before the systems.
+set(CPU_nes 6502)
+set(CPU_gb sm83)
+set(cpus "")
 foreach(sys IN LISTS SYSTEMS)
     if(NOT sys MATCHES "^(nes|gb)$")
         message(FATAL_ERROR "SYSTEMS: unknown system ${sys} (nes, gb)")
     endif()
+    list(APPEND cpus ${CPU_${sys}})
+endforeach()
+list(REMOVE_DUPLICATES cpus)
+foreach(cpu IN LISTS cpus)
+    add_subdirectory(cpu/${cpu} ${CMAKE_BINARY_DIR}/cpu_${cpu})
+endforeach()
+foreach(sys IN LISTS SYSTEMS)
     add_subdirectory(${sys} ${CMAKE_BINARY_DIR}/sys_${sys})  # not build/<sys>: that is the program (no .exe off Windows)
 endforeach()
 

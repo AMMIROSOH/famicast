@@ -1,4 +1,4 @@
-"""Game Boy SM83 interpreter vs SingleStepTests sm83 (gb/tests/cpu_tests.c).
+"""Game Boy SM83 interpreter vs SingleStepTests sm83 (cpu/sm83/sm83_tests.c).
 
 Needs the C build (gb_cpu_tests) and the tests: python tests/fetch_test_roms.py
 --sst-sm83 (files not downloaded are skipped; set GB_SST_REQUIRED=1 to fail

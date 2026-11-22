@@ -6,6 +6,16 @@ reproducible check is not "verified".
 Checks of one system: [NES](../nes/docs/verification-log.md),
 [Game Boy](../gb/docs/verification-log.md).
 
+## 2026-11-22 · CPUs in cpu/
+- **Same output**: the generated interpreter switches (`cpu6502_switch.inc`,
+  `sm83_switch.inc`) and the recompiled nestest and cpu_instrs code are
+  byte for byte the same as before the move; the only differences are the
+  generator's name in the switch's header comment and the renamed CPU ops
+  header in the recompiled game files.
+- **Tests**: the strict suite (`RETROCAST_STRICT=1`) passes, 132 tests.
+- **Builds**: each system with MinGW gcc and with Linux gcc, `-DWERROR=ON`;
+  both systems with MSVC; the window programs build.
+
 ## 2026-11-19 · Frontend: sound channels, 16-bit buttons, recordings v2, 32-bit template addresses
 - **Recordings**: `tests/nes/test_recording.py`, a made-up ROM reading pad 1
   through $4016: a version 1 and a version 2 recording of A + Start (with

@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "cpu.h"
+#include "cpu6502.h"
 
 /* Runs from c->pc (any instruction start in its block) until the block ends
  * or an interrupt is due; leaves c->pc at the next instruction. */

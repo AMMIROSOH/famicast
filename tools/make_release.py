@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SDL_TAG = "release-3.4.20"  # as in CMakeLists.txt
 WIN = os.name == "nt"
 EXE = ".exe" if WIN else ""
-KIT_FILES = ["CMakeLists.txt", "cmake", "core", "nes", "gb"]
+KIT_FILES = ["CMakeLists.txt", "cmake", "core", "cpu", "nes", "gb"]
 
 
 def run(*cmd, cwd=None):

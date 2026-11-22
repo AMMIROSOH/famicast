@@ -1,32 +1,19 @@
 # The Game Boy (included from ../CMakeLists.txt, which sets GEN_DIR; the
 # root calls gb_recompile for the Game Boy games in ROMS). gbrecomp is the
-# recompiler; it also writes the interpreter's opcode switch from the same
-# instruction templates (recomp/sm83.c), as nesrecomp does for the 6502.
-add_executable(gbrecomp recomp/main.c recomp/sm83.c recomp/recomp.c runtime/cart.c)
+# recompiler, on the SM83's instruction templates (cpu/sm83), which also
+# make the interpreter's switch.
+add_executable(gbrecomp recomp/main.c recomp/recomp.c runtime/cart.c)
 target_include_directories(gbrecomp PRIVATE runtime)
-target_link_libraries(gbrecomp PRIVATE recomp_template)
-
-add_custom_command(
-    OUTPUT ${GEN_DIR}/gb_cpu_switch.inc
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN_DIR}
-    COMMAND gbrecomp --cpu-switch ${GEN_DIR}/gb_cpu_switch.inc
-    DEPENDS gbrecomp
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Generating the Game Boy interpreter's opcode switch")
-
-add_library(gbcpu STATIC runtime/cpu.c ${GEN_DIR}/gb_cpu_switch.inc)
-target_include_directories(gbcpu PUBLIC runtime PRIVATE ${GEN_DIR})
-
-# SingleStepTests sm83 on a flat bus (tests/gb/test_cpu.py)
-add_executable(gb_cpu_tests tests/cpu_tests.c)
-target_link_libraries(gb_cpu_tests PRIVATE gbcpu)
+target_link_libraries(gbrecomp PRIVATE sm83_templates)
 
 # The Game Boy system (bus, timer, interrupts, PPU, sound, cartridges).
 add_library(gbcore STATIC runtime/gb.c runtime/ppu.c runtime/apu.c runtime/cart.c runtime/cgb_compat.c)
-target_link_libraries(gbcore PUBLIC gbcpu core)
+target_include_directories(gbcore PUBLIC runtime)
+target_link_libraries(gbcore PUBLIC sm83 core)
 # Programs without recompiled code link this (gb_recomp_program = NULL).
 add_library(gb_recomp_none STATIC runtime/recomp_none.c)
 target_include_directories(gb_recomp_none PUBLIC runtime)
+target_link_libraries(gb_recomp_none PUBLIC sm83)
 
 # Test ROMs report on the serial port (tests/gb/test_roms.py)
 add_executable(gb_headless tests/gb_headless.c)

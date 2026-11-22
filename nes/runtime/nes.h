@@ -6,7 +6,7 @@
 
 #include "apu.h"
 #include "cart.h"
-#include "cpu.h"
+#include "cpu6502.h"
 #include "input_log.h"  /* PAD_* */
 #include "ppu.h"
 #include "recomp_rt.h"

@@ -21,19 +21,23 @@ retrocast/
     input_log.c      input recordings, pad bits
     frontend/        sdl3_main.c settings.c tv_frame.c; system.h: a system's interface
     recomp/          template.c: instruction templates and their PC markers
+  cpu/               CPUs, one folder each, shared by every system with that CPU
+    README.md        what cpu/ holds and how a system uses a CPU
+    6502/            the 6502 (NES): opcode table, templates, interpreter, switch generator
+    sm83/            the SM83 (Game Boy): templates, interpreter, switch generator, test runner
   nes/               the NES and the Famicom Disk System
     README.md, docs/ its status, mappers, roadmap, verification log
     CMakeLists.txt   nes_recompile(), nes, nes_headless, nesrecomp
-    recomp/          nesrecomp: opcode table, C per opcode, analysis, emitter
-    runtime/         CPU, bus, PPU, APU, mappers, disk drive; recomp_rt.h
+    recomp/          nesrecomp: analysis, emitter
+    runtime/         bus, PPU, APU, mappers, disk drive; recomp_rt.h
     frontend.c       the NES behind core/frontend/system.h
     tests/           C test runners (cpu_tests.c, nes_headless.c)
     games/           per-game hints (<name>.toml)
   gb/                the Game Boy and Game Boy Color, laid out the same way
     README.md, docs/
     CMakeLists.txt   gb_recompile(), gb, gb_headless, gbrecomp
-    recomp/          gbrecomp: sm83.c (C per opcode), recomp.c (regions, blocks)
-    runtime/         CPU, bus (gb.c), PPU, APU, cartridges; recomp_rt.h
+    recomp/          gbrecomp: recomp.c (regions, blocks), main.c
+    runtime/         bus (gb.c), PPU, APU, cartridges; recomp_rt.h
     frontend.c, tests/
   tests/             Python unittest suite: nes/, gb/ per system; fetch_test_roms.py, shared helpers
   tools/             bench.py, smoke_games.py, make_release.py, ci_systems.py, ...
@@ -41,7 +45,10 @@ retrocast/
   docs/              this: what is shared
 ```
 A new system is a new folder beside `nes/` and `gb/` with the same parts.
-Code moves to `core/` once a second system needs it.
+A new CPU is a new folder in `cpu/` (see [cpu/README.md](../cpu/README.md)).
+`tools/ci_systems.py` has the table of which systems use each CPU, so a
+change under `cpu/6502/` tests the NES. Code moves to `core/` once a
+second system needs it.
 
 ## The pipeline
 ```
@@ -58,10 +65,11 @@ ROM ─► trace: <sys>_headless --play --misses (interpreter) ─┐
 
 ## Instruction templates
 Each CPU's instructions are written once, as a few lines of C per opcode
-(`nes/recomp/c6502.c`, `gb/recomp/sm83.c`). The recompiler generates the
-interpreter's opcode switch from them (`--cpu-switch`) and builds the
-recompiled blocks from the same lines, so bus traffic and cycle counts of
-both are identical by construction. The templates never name the PC in C:
+(`cpu/6502/c6502.c`, `cpu/sm83/sm83.c`; see [cpu/README.md](../cpu/README.md)).
+The generator in each CPU folder writes that CPU's interpreter switch from
+them (`cpu6502_gen`, `sm83_gen`), and the recompilers build the recompiled
+blocks from the same lines, so bus traffic and cycle counts of both are
+identical by construction. The templates never name the PC in C:
 every use is a marker (`core/recomp/template.h`: operand fetch, read at the
 PC, its value, step, jump, branch), which the interpreter expands to
 run-time C and the recompiler to constants (the code bytes and addresses

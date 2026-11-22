@@ -16,11 +16,12 @@ Exit tests and results: [verification-log.md](verification-log.md).
 | [G6](#g6--game-boy-color) | Game Boy Color | done |
 
 ## G1 · SM83 CPU
-- [x] Instruction templates from the opcode bit fields (`gb/recomp/sm83.c`),
+- [x] Instruction templates from the opcode bit fields (`cpu/sm83/sm83.c`),
   with the NES's PC markers, now in `core/recomp/template.c` (the NES
   recompiler uses them from there too).
-- [x] `gbrecomp --cpu-switch`: the interpreter's switch (both tables, CB
-  nested); `gb/runtime/cpu.c`, one M-cycle per bus access or internal cycle.
+- [x] The interpreter's switch (both tables, CB nested), written by
+  `sm83_gen` (first `gbrecomp --cpu-switch`); `cpu/sm83/sm83_cpu.c`, one
+  M-cycle per bus access or internal cycle.
 - [x] **Exit:** SingleStepTests sm83, all 500 opcode files (registers, RAM,
   every M-cycle; HALT and STOP registers and RAM only). Met.
 

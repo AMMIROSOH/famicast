@@ -1,9 +1,9 @@
 # Build and test the systems a change touches (tools/ci_systems.py: a
-# system's own folders select it, shared code selects every system, docs
-# none), each with GCC, Clang and MSVC, warnings as errors. Test data
-# (public test ROMs, nestest, SingleStepTests 2A03 and sm83) is fetched
-# once per version of tests/fetch_test_roms.py and kept in the Actions
-# cache; it is never committed. No game ROMs: the tests of recompiled
+# system's own folders and its CPU's (cpu/<cpu>/) select it, shared code
+# selects every system, docs none), each with GCC, Clang and MSVC,
+# warnings as errors. Test data (public test ROMs, nestest, SingleStepTests
+# 2A03 and sm83) is fetched once per version of tests/fetch_test_roms.py and
+# kept in the Actions cache; it is never committed. No game ROMs: the tests of recompiled
 # games skip. The required check is ci-ok, which sums up the rest.
 name: ci
 # main and pull requests only: tags and PR branches were tested twice
