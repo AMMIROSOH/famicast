@@ -4,7 +4,8 @@
 
 1. SDL3 (release-3.4.20), static, with the frontend's options (cmake/sdl3_options.cmake),
    installed into the staged kit/sdl3.
-2. NES, Game Boy, Genesis and Atari 2600 programs, Release, linked against that SDL3.
+2. retrocast (the window program for every system), the headless programs and
+   the recompilers, Release, linked against that SDL3.
 3. Stage: the programs, the recompile kit (this project's CMakeLists.txt, cmake/,
    core/, cpu/, systems/ and the prebuilt SDL3), README.txt, licenses.
 4. Kit check: recompile tiny generated ROMs with the staged kit, as a user
@@ -92,9 +93,8 @@ def main():
     cmake_build(ROOT, build, "-DSDL3_PREFIX=" + os.path.join(kit, "sdl3"))
 
     # 3. stage
-    for prog in ("nes", "nes_headless", "nesrecomp", "gb", "gb_headless", "gbrecomp",
-                 "genesis", "genesis_headless", "mdrecomp",
-                 "atari2600", "atari2600_headless", "atari2600recomp"):
+    for prog in ("retrocast", "nes_headless", "nesrecomp", "gb_headless", "gbrecomp",
+                 "genesis_headless", "mdrecomp", "atari2600_headless", "atari2600recomp"):
         shutil.copy2(os.path.join(build, prog + EXE), stage)
     for item in KIT_FILES:
         src = os.path.join(ROOT, item)

@@ -7,6 +7,28 @@ Checks of one system: [NES](../systems/nes/docs/verification-log.md),
 [Game Boy](../systems/gb/docs/verification-log.md),
 [Genesis](../systems/genesis/docs/verification-log.md).
 
+## 2026-11-22 · One program for every system: retrocast, system detection
+- **Same output**: every generated file of a build of all systems (the
+  four CPU switches, recompiled nestest, cpu_instrs, the Genesis random
+  ROM and the seven Atari fixtures, 21 files) is byte-identical to main's.
+- **Same speed**: the NES interpreter on a real game, 20,000 frames with
+  input, the same frame hash and 8.7-8.9 s before and after (3 runs each);
+  the Atari 2600 interpreter (now its own copy of the 6502, prefixed) on a
+  real cartridge, 20,000 frames, the same cycle count and 21.1-21.3 s
+  before and after.
+- **Detection** (`tests/test_detect.py`): made-up files for every rule
+  (NES, FDS header and raw disk, Game Boy with and without a good header
+  checksum, Genesis "SEGA" and " SEGA", Atari 2600 by size and vector, a
+  file with two headers, an unknown file, a file too short): the C
+  detectors (`system_detect`) and the CMake rules give the same answers.
+- **Real games**: one licensed game per system, extracted from a local set:
+  `retrocast` picks the right system with its extension and with the
+  extension removed, and plays 120 frames; the same four given to the
+  build's `ROMS` list are recompiled, open their window and run 600 frames
+  in lockstep with no difference.
+- **Builds and suite**: all systems with `-DWERROR=ON` (MinGW gcc), the
+  strict suite (153 tests, then 155 with detection).
+
 ## 2026-11-22 · CPUs in cpu/
 - **Same output**: the generated interpreter switches (`cpu6502_switch.inc`,
   `sm83_switch.inc`) and the recompiled nestest and cpu_instrs code are

@@ -1,7 +1,10 @@
-/* SDL3 frontend: runs a game on the system the program links (system.h;
- * the NES: systems/nes/frontend.c), recompiled code where linked, else interpreted.
- * Usage: PROGRAM ROM [--frames N] [--record FILE] [--replay FILE]
+/* SDL3 frontend: runs a game on one of the systems the program links
+ * (system.h: retrocast every system built, a recompiled game its own one),
+ * recompiled code where linked, else interpreted.
+ * Usage: PROGRAM ROM [--system ID] [--frames N] [--record FILE] [--replay FILE]
  *   ROM may be left out in recompiled builds: the ROM they embed is used.
+ *   --system ID  the system (nes, gb, md, a26) when the file's bytes do not
+ *                tell it (core/detect.h)
  *   --frames N   quit after N frames (smoke tests)
  *   --record     save the input of every frame (core/input_log.h)
  *   --replay     play a recording back; live input resumes when it ends
@@ -10,7 +13,8 @@
  * pad has), F5 = reset, Esc = quit. F2 = save state, F4 = load state,
  * F10 = TV frame on/off, F11 or Alt+Enter = fullscreen on/off; other keys
  * go to the system (NES: F6 = next disk side).
- * Settings: <program>.ini next to the program (settings.c).
+ * Settings: <program>.ini next to the program (settings.c); in retrocast
+ * one per system (nes.ini, gb.ini, genesis.ini, atari2600.ini).
  * Gamepads: first connected = player 1, second = player 2; hot-plug works.
  * D-pad or left stick; East = A, South = B (NES layout: B left of A),
  * North = X, West = Y, shoulders = L and R, Back = Select, Start = Start. */
@@ -26,12 +30,13 @@
 #include "tv_frame.h"
 
 #ifndef APP_NAME
-#define APP_NAME "nes"  /* CMake sets the program's name: the settings file is NAME.ini */
+#define APP_NAME "retrocast"  /* CMake sets the program's name */
 #endif
 
 enum { MAX_W = 512, MAX_H = 480, MAX_FRAMES = 8192, STICK_DEADZONE = 16000 };  /* MAX_FRAMES: sample frames */
 
 static SysInfo info;
+static const System *sys;
 
 static SDL_Gamepad *gamepads[2];
 
@@ -156,7 +161,7 @@ typedef struct {
     SDL_Mutex *lock;          /* the system, fb, fb_new, halt */
     uint32_t fb[MAX_W * MAX_H];
     int fb_new;
-    char halt[256];           /* why the game stopped (sys_halted), or "" */
+    char halt[256];           /* why the game stopped (System.halted), or "" */
     SDL_AtomicInt pads, reset, quit, done;  /* pads: player 1 | player 2 << 16 */
     SDL_AudioStream *audio;
     double fps;
@@ -183,11 +188,11 @@ static int emu_thread(void *arg) {
         if (u->record) input_log_write(u->record, in);
 
         SDL_LockMutex(u->lock);
-        if (in.flags & INPUT_RESET) sys_reset();
-        int ns = sys_frame(&in, u->fb, samples, MAX_FRAMES);  /* sample frames */
+        if (in.flags & INPUT_RESET) sys->reset();
+        int ns = sys->frame(&in, u->fb, samples, MAX_FRAMES);  /* sample frames */
         u->fb_new = 1;
         char halt[256];
-        const char *h = sys_halted(halt, sizeof halt);
+        const char *h = sys->halted(halt, sizeof halt);
         SDL_strlcpy(u->halt, h ? h : "", sizeof u->halt);
         SDL_UnlockMutex(u->lock);
 
@@ -225,21 +230,50 @@ static int fail(const char *fmt, ...) {
     return 1;
 }
 
+/* The system to run: --system, the only one linked, or the one the file's
+ * bytes name (core/detect.h). NULL with a message in err. */
+static const System *pick_system(const char *rom_path, const char *wanted, char *err, size_t errlen) {
+    int n = 0;
+    while (system_list[n]) n++;
+    if (wanted) {
+        for (int i = 0; i < n; i++)
+            if (!strcmp(wanted, system_list[i]->detector->id) || !strcmp(wanted, system_list[i]->app))
+                return system_list[i];
+        SDL_snprintf(err, errlen, "--system %s: not one of", wanted);
+        for (int i = 0; i < n; i++) SDL_strlcat(err, i ? ", " : " ", errlen), SDL_strlcat(err, system_list[i]->detector->id, errlen);
+        return NULL;
+    }
+    if (n == 1) return system_list[0];
+    if (!rom_path) return SDL_snprintf(err, errlen, "usage: %s ROM [--system ID] [--frames N] [--record FILE] [--replay FILE]", APP_NAME), NULL;
+    size_t size;
+    void *data = SDL_LoadFile(rom_path, &size);
+    if (!data) return SDL_snprintf(err, errlen, "%s: %s", rom_path, SDL_GetError()), NULL;
+    const SystemDetector *dets[16];
+    for (int i = 0; i < n && i < 16; i++) dets[i] = system_list[i]->detector;
+    int k = detect_system(dets, n < 16 ? n : 16, data, size, rom_path, err, errlen);
+    SDL_free(data);
+    if (k < 0) return NULL;
+    SDL_Log("%s: %s (--system %s)", rom_path, system_list[k]->detector->name, system_list[k]->detector->id);
+    return system_list[k];
+}
+
 int main(int argc, char **argv) {
     const char *rom_path = argc > 1 && argv[1][0] != '-' ? argv[1] : NULL;
     long max_frames = 0;
-    const char *record = NULL, *replay = NULL;
+    const char *record = NULL, *replay = NULL, *wanted = NULL;
     for (int i = rom_path ? 2 : 1; i + 1 < argc; i++) {
         if (!strcmp(argv[i], "--frames")) max_frames = atol(argv[++i]);
         else if (!strcmp(argv[i], "--record")) record = argv[++i];
         else if (!strcmp(argv[i], "--replay")) replay = argv[++i];
+        else if (!strcmp(argv[i], "--system")) wanted = argv[++i];
     }
-    char ini_path[1024];
-    SDL_snprintf(ini_path, sizeof ini_path, "%s%s.ini", SDL_GetBasePath(), APP_NAME);
-    Settings cfg;
-    settings_load(&cfg, ini_path);
     char err[1024];
-    int opened = sys_open(rom_path, &cfg, &info, err, sizeof err);
+    if (!(sys = pick_system(rom_path, wanted, err, sizeof err))) return rom_path ? fail("%s", err) : (SDL_Log("%s", err), 2);
+    char ini_path[1024];
+    SDL_snprintf(ini_path, sizeof ini_path, "%s%s.ini", SDL_GetBasePath(), sys->app);
+    Settings cfg;
+    settings_load(&cfg, ini_path, sys->settings, sys->setting);
+    int opened = sys->open(rom_path, &cfg, &info, err, sizeof err);
     if (opened == 2) return SDL_Log("%s", err), 2;  /* usage */
     if (opened) return fail("%s", err);
     if (info.width > MAX_W || info.height > MAX_H) return fail("picture too large: %dx%d", info.width, info.height);
@@ -249,12 +283,12 @@ int main(int argc, char **argv) {
         SDL_Log("%s: not an input recording", replay);
         return 1;
     }
-    if (replay && strcmp(replay_log.system, SYS_ID)) {
-        SDL_Log("%s: recorded on another system (%s), this is %s", replay, replay_log.system, SYS_ID);
+    if (replay && strcmp(replay_log.system, sys->detector->id)) {
+        SDL_Log("%s: recorded on another system (%s), this is %s", replay, replay_log.system, sys->detector->id);
         return 1;
     }
     FILE *record_file = NULL;
-    if (record && !(record_file = input_log_create(record, SYS_ID))) {
+    if (record && !(record_file = input_log_create(record, sys->detector->id))) {
         SDL_Log("%s: cannot create", record);
         return 1;
     }
@@ -335,12 +369,12 @@ int main(int argc, char **argv) {
                     else frame_tex = make_tv_frame(ren, width, lines);
                 }
                 SDL_LockMutex(emu.lock);
-                if (e.key.key == SDLK_F2) msg = sys_state_save(info.state_path) == 0 ? "state saved" : "could not save state";
+                if (e.key.key == SDLK_F2) msg = sys->state_save(info.state_path) == 0 ? "state saved" : "could not save state";
                 if (e.key.key == SDLK_F4) {
-                    if (sys_state_load(info.state_path, err, sizeof err) == 0) msg = "state loaded";
+                    if (sys->state_load(info.state_path, err, sizeof err) == 0) msg = "state loaded";
                     else SDL_snprintf(text, sizeof text, "no state loaded (%s)", err), msg = text;
                 }
-                if (!msg) msg = sys_key(e.key.key, text, sizeof text);
+                if (!msg) msg = sys->key(e.key.key, text, sizeof text);
                 SDL_UnlockMutex(emu.lock);
                 if (msg) {
                     SDL_snprintf(title, sizeof title, "%s - %s", heading, msg);
@@ -385,7 +419,7 @@ int main(int argc, char **argv) {
     input_log_free(&replay_log);
     for (int i = 0; i < 2; i++)
         if (gamepads[i]) SDL_CloseGamepad(gamepads[i]);
-    sys_close();
+    sys->close();
     if (audio) SDL_DestroyAudioStream(audio);
     SDL_DestroyTexture(tex);
     if (frame_tex) SDL_DestroyTexture(frame_tex);

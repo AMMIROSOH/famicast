@@ -110,7 +110,7 @@ uint8_t apu_read(Gb *g, uint16_t a) {
     return IO(a & 0x7F) | MASK[a - 0xFF10];
 }
 
-void apu_write(Gb *g, uint16_t a, uint8_t v) {
+void gb_apu_write(Gb *g, uint16_t a, uint8_t v) {
     GbApu *p = &g->apu;
     int r = a & 0x7F;
     if (a >= 0xFF30) {
@@ -233,7 +233,7 @@ void apu_boot(Gb *g) {
     p->timer[0] = p->timer[1] = p->timer[2] = p->timer[3] = 1;
 }
 
-int apu_take_samples(Gb *g, float *out, int max) {
+int gb_apu_take_samples(Gb *g, float *out, int max) {
     GbApu *p = &g->apu;
     int n = p->buf_len < max ? p->buf_len : max;
     memcpy(out, p->buf, (size_t)n * 2 * sizeof *out);

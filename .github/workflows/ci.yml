@@ -100,7 +100,9 @@ jobs:
       - name: Test
         run: python -m unittest discover -s tests/${{ matrix.system }} -t . -v
 
-  # The window programs (SDL3, built from source) for the touched systems: MSVC.
+  # The window program (retrocast, SDL3 built from source) with the touched
+  # systems: MSVC; and the system detection over the same build (its C part
+  # needs every system: it runs when shared code changed).
   frontend:
     needs: changes
     if: needs.changes.outputs.systems != '[]'
@@ -114,6 +116,10 @@ jobs:
           call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
           cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DWERROR=ON "-DSYSTEMS=${{ needs.changes.outputs.cmake }}" || exit /b 1
           cmake --build build
+      - name: Test system detection
+        env:
+          RETROCAST_STRICT: "1"
+        run: python -m unittest tests.test_detect -v
 
   ci-ok:
     if: always()

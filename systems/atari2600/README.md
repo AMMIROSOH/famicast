@@ -1,6 +1,6 @@
 # Atari 2600
 
-The Atari 2600 part of [retrocast](../../README.md): `atari2600` plays a raw
+The Atari 2600 part of [retrocast](../../README.md): `retrocast` plays a raw
 `.a26` cartridge in the interpreter, `atari2600_headless` runs one without
 a window, `atari2600recomp` recompiles one (through `-DROMS`, see the
 [root README](../../README.md#recompiling-a-game)).
@@ -34,7 +34,7 @@ a window, `atari2600recomp` recompiles one (through `-DROMS`, see the
 ```
 cmake -S . -B build -DSYSTEMS=atari2600
 cmake --build build --config Release
-build/atari2600 path/to/game.a26
+build/retrocast path/to/game.a26
 build/atari2600_headless path/to/game.a26 --frames 120
 ```
 

@@ -186,7 +186,7 @@ int main(int argc, char **argv) {
         else if (frame_diff(&g, &ref, i) != 0) return 1;
         ref.apu.buf_len = 0;  /* drained as g is below */
         float buf[GB_APU_BUF * 2];
-        int n = 2 * apu_take_samples(&g, buf, GB_APU_BUF);  /* floats: left, right, ... */
+        int n = 2 * gb_apu_take_samples(&g, buf, GB_APU_BUF);  /* floats: left, right, ... */
         for (int k = 0; w && k < n; k++) {
             float x = buf[k] < -1 ? -1 : buf[k] > 1 ? 1 : buf[k];
             int16_t v = (int16_t)(x * 32767);

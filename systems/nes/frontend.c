@@ -14,9 +14,7 @@
 #define APP_NAME "nes"
 #endif
 
-const char SYS_ID[] = "nes";
-
-const char SYS_SETTINGS[] =
+static const char SETTINGS[] =
     "# overscan: 1 = hide the top and bottom 8 lines, as a TV did (games\n"
     "# leave scrolling leftovers there that nobody saw); 0 = all 240 lines\n"
     "overscan = 1\n"
@@ -50,7 +48,7 @@ static struct {
     char fds_bios[512];
 } cfg = {1, 0, 1, -1, 1, "disksys.rom"};
 
-int sys_setting(const char *key, const char *val) {
+static int sys_setting(const char *key, const char *val) {
     if (!strcmp(key, "overscan")) return settings_bool(val, &cfg.overscan);
     if (!strcmp(key, "overscan_sides")) return settings_bool(val, &cfg.overscan_sides);
     if (!strcmp(key, "sprite_limit")) return settings_bool(val, &cfg.sprite_limit);
@@ -104,7 +102,7 @@ static void *load_fds_bios(const char *name, const char *image_path) {
     return NULL;
 }
 
-int sys_open(const char *rom_path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
+static int sys_open(const char *rom_path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
     /* FDS builds embed the BIOS; -DFDS_BIOS's fds (or EMBED_ROM=OFF) no disk */
     const int bios_build = recomp_program && recomp_program->bios && !recomp_program->rom;
     const int embedded = !rom_path && recomp_program && recomp_program->rom;
@@ -172,9 +170,9 @@ int sys_open(const char *rom_path, const Settings *settings, SysInfo *info, char
     return 0;
 }
 
-void sys_reset(void) { nes_reset(&nes); }
+static void sys_reset(void) { nes_reset(&nes); }
 
-int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
+static int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
     nes.pad[0] = (uint8_t)in->pad[0];  /* the NES pad: the low byte */
     nes.pad[1] = (uint8_t)in->pad[1];
     nes_run_frame(&nes);
@@ -186,7 +184,7 @@ int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
  * picture: the window stays open on it, so F5 or F4 can recover.
  * shortcut: the PPU and APU stop too (on hardware they run on, so a held
  * note drones); fine for a game that is dead anyway */
-const char *sys_halted(char *buf, size_t len) {
+static const char *sys_halted(char *buf, size_t len) {
     if (!nes.cpu.jammed) return jam_logged = 0, NULL;
     if (!jam_logged) SDL_Log("CPU jammed at $%04X", nes.cpu.pc), jam_logged = 1;
     SDL_snprintf(buf, len, "CPU jammed at $%04X\nF5 reset, F4 load state%s", nes.cpu.pc,
@@ -194,10 +192,10 @@ const char *sys_halted(char *buf, size_t len) {
     return buf;
 }
 
-int sys_state_save(const char *path) { return nes_state_save(&nes, path); }
-int sys_state_load(const char *path, char *err, size_t errlen) { return nes_state_load(&nes, path, err, errlen); }
+static int sys_state_save(const char *path) { return nes_state_save(&nes, path); }
+static int sys_state_load(const char *path, char *err, size_t errlen) { return nes_state_load(&nes, path, err, errlen); }
 
-const char *sys_key(int key, char *buf, size_t len) {
+static const char *sys_key(int key, char *buf, size_t len) {
     if (key != SDLK_F6 || !nes.cart.disk) return NULL;
     /* FDS: the next side, after half a second out */
     int cur = nes.cart.disk_side >= 0 ? nes.cart.disk_side : nes.cart.disk_next;
@@ -207,7 +205,7 @@ const char *sys_key(int key, char *buf, size_t len) {
     return buf;
 }
 
-void sys_close(void) {
+static void sys_close(void) {
     if (nes.cart.battery && !SDL_SaveFile(sav_path, nes.cart.prg_ram, nes.cart.prg_ram_size))
         SDL_Log("%s: %s", sav_path, SDL_GetError());
     if (disk_size && nes.cart.disk_dirty && !SDL_SaveFile(sav_path, nes.cart.disk, disk_size))
@@ -222,3 +220,7 @@ void sys_close(void) {
     SDL_free(nes.misses);
     cart_free(&nes.cart);
 }
+
+extern const SystemDetector nes_detector;
+const System nes_system = {&nes_detector, APP_NAME, SETTINGS, sys_setting, sys_open, sys_reset, sys_frame,
+    sys_halted, sys_state_save, sys_state_load, sys_key, sys_close};

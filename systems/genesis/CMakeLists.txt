@@ -2,7 +2,7 @@
 # are in cpu/m68k and cpu/z80, listed in the root CMakeLists.txt (CPU_genesis).
 
 # The machine: memory maps, I/O, Z80 control, cartridge, timeline (D1); the VDP (D2); sound (D4).
-add_library(mdcore STATIC runtime/md.c runtime/vdp.c runtime/sound.c)
+add_library(mdcore STATIC runtime/md.c runtime/vdp.c runtime/sound.c runtime/detect.c)
 target_include_directories(mdcore PUBLIC runtime)
 target_link_libraries(mdcore PUBLIC m68k z80 core)
 if(NOT MSVC)
@@ -27,9 +27,7 @@ add_executable(md_tests tests/md_tests.c)
 target_link_libraries(md_tests PRIVATE mdcore md_recomp_none)
 
 if(FRONTEND)
-    # genesis: plays a Genesis / Mega Drive ROM in the interpreter (core/frontend + frontend.c)
-    frontend(genesis ${CMAKE_CURRENT_SOURCE_DIR}/frontend.c)
-    target_link_libraries(genesis PRIVATE mdcore md_recomp_none)
+    frontend_system(genesis mdcore md_recomp_none)  # in retrocast
 endif()
 
 # genesis_recompile(NAME ROM) generates ${GEN_DIR}/NAME.c with mdrecomp and
@@ -77,7 +75,7 @@ function(genesis_recompile name rom)
     add_executable(${name}_headless ${CMAKE_SOURCE_DIR}/systems/genesis/tests/genesis_headless.c)
     target_link_libraries(${name}_headless PRIVATE mdcore ${name}_code)
     if(FRONTEND)
-        frontend(${name} ${CMAKE_SOURCE_DIR}/systems/genesis/frontend.c)
+        frontend(${name} genesis)
         target_link_libraries(${name} PRIVATE mdcore ${name}_code)
     endif()
 endfunction()

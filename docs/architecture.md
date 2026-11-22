@@ -15,11 +15,12 @@ Non-goals for now: netplay.
 ## Layout
 ```
 retrocast/
-  CMakeLists.txt     build defaults, SDL3, frontend(), ROMS / FDS_BIOS / AUTO_HINTS / EMBED_ROM
-  cmake/             SDL3 build options
+  CMakeLists.txt     build defaults, SDL3, retrocast, frontend(), ROMS / FDS_BIOS / AUTO_HINTS / EMBED_ROM
+  cmake/             SDL3 build options; detect_system.cmake: the system of a ROM, for ROMS
   core/              shared by every system
     input_log.c      input recordings, pad bits
-    frontend/        sdl3_main.c settings.c tv_frame.c; system.h: a system's interface
+    detect.c         which system a file is for, from its bytes; system_detect.c: the same as a program
+    frontend/        sdl3_main.c settings.c tv_frame.c; system.h: a system's interface (System)
     recomp/          template.c: instruction templates and their PC markers
   cpu/               CPUs, one folder each, shared by every system with that CPU
     README.md        what cpu/ holds and how a system uses a CPU
@@ -28,7 +29,7 @@ retrocast/
   systems/           one folder per system
     nes/               the NES and the Famicom Disk System
       README.md, docs/ its status, mappers, roadmap, verification log
-      CMakeLists.txt   nes_recompile(), nes, nes_headless, nesrecomp
+      CMakeLists.txt   nes_recompile(), nes_headless, nesrecomp
       recomp/          nesrecomp: analysis, emitter
       runtime/         bus, PPU, APU, mappers, disk drive; recomp_rt.h
       frontend.c       the NES behind core/frontend/system.h
@@ -36,7 +37,7 @@ retrocast/
       games/           per-game hints (<name>.toml)
     gb/                the Game Boy and Game Boy Color, laid out the same way
       README.md, docs/
-      CMakeLists.txt   gb_recompile(), gb, gb_headless, gbrecomp
+      CMakeLists.txt   gb_recompile(), gb_headless, gbrecomp
       recomp/          gbrecomp: recomp.c (regions, blocks), main.c
       runtime/         bus (gb.c), PPU, APU, cartridges; recomp_rt.h
       frontend.c, tests/
@@ -113,7 +114,7 @@ game and the misses of your own play (`systems/nes/README.md`).
 ## The interpreter
 Every system has a reference interpreter, sharing the CPU struct and the
 bus with the recompiled code. It runs what the recompiler did not see and
-interrupt entry; it runs whole games on its own (`build/nes`, `build/gb`);
+interrupt entry; it runs whole games on its own (`build/retrocast`);
 and it is the **oracle**: validated against independent tests (per-opcode
 suites, test ROMs), then the recompiled code is diffed against it.
 
@@ -139,6 +140,22 @@ system. A system plugs in through `core/frontend/system.h`: it loads the
 game and its saves, runs a frame (input in, picture and sound out), saves
 and loads states, says why a game halted, and takes the keys and settings
 that are its own. The frontend does the rest.
+- **One program, every system**: each `systems/<sys>/frontend.c` exports
+  one `System` table (static functions behind it, no global names), and
+  CMake writes the list of the systems a program links (`system_list`):
+  `retrocast` gets every system in `SYSTEMS`, a recompiled game its own one.
+- **Which system** (`core/detect.h`): each system has a detector over the
+  file's bytes, scoring it 0-100: 100 for a header the console itself
+  checks (NES and FDS headers or a raw FDS disk side, the Game Boy's logo
+  and header checksum, the Genesis "SEGA" at $100), a guess for the Atari
+  2600 (no header: a cartridge size and a reset vector into the cartridge
+  window). The best score wins; the extension only breaks ties (+20); two
+  sure answers or none is an error, and `--system` decides. The build's
+  `ROMS` list uses the same rules (`cmake/detect_system.cmake`;
+  `tests/test_detect.py` runs both on the same files).
+- **Two systems on one CPU**: the NES and the Atari 2600 both run the
+  shared 6502 with their own bus functions; each gets its own copy of the
+  interpreter (`cpu/README.md`).
 - **Sound**: the system names its rate and channels (`SysInfo`: the NES
   mono, the Game Boy stereo) and returns sample frames, interleaved.
 - **Input**: one set of 16-bit buttons per player for every system (A, B,
@@ -149,7 +166,8 @@ that are its own. The frontend does the rest.
 
 The emulator runs on its own
 thread, so window moves and device changes do not stall the sound.
-Settings come from `<program>.ini` next to the program (`settings.c`).
+Settings come from `<program>.ini` next to the program (`settings.c`);
+`retrocast` keeps one per system (`nes.ini`, `gb.ini`, ...).
 Scaling is done by the frontend (fit, integer or stretch), so the optional
 TV frame (`tv_frame.c`) and the picture scale together.
 

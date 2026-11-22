@@ -22,15 +22,19 @@ with that CPU; the 68000 and the Z80 will go there
 ([cpu/README.md](../cpu/README.md)).
 
 ## Later
-- One program for every system: a `retrocast` window program (the system
-  picked from the file's extension, `--system` to override, `--headless`
-  without a window) and a `retrocast-recomp` recompiler, in place of
-  `nes`/`gb`, the headless programs and `nesrecomp`/`gbrecomp`. Each
-  program now carries its own copy of SDL3 (about 2 MB of its 2.2).
-  Needs `core/frontend/system.h` as a table per system instead of global
-  functions; keep an SDL-free headless build for tests and CI. Decide once
-  more systems are in: a system that does not fit one shared frontend
-  keeps its own program.
+- **One program for every system: done for playing.** `retrocast` plays a
+  game of any system, picked from the file's bytes (`core/detect.h`,
+  `--system` to override); it replaced the `nes`, `gb`, `genesis` and
+  `atari2600` window programs (one copy of SDL3 instead of four). The
+  headless programs stay one per system: SDL-free, and the tests and CI
+  run them.
+- **One recompiler** (`retrocast-recomp` in place of `nesrecomp`,
+  `gbrecomp`, `mdrecomp`, `atari2600recomp`): open. The four `main.c`
+  share names (`fnv1a`, `explore`, `emit_program`, `Region`, ...) and the
+  6502's templates are unprefixed (`Op`, `OPS`, `body`): each recompiler
+  needs its names made static or prefixed, then one `main` picks the
+  system as `retrocast` does. They are build-time tools, one per system
+  in the release, so this saves little.
 
 ## Stretch
 - JIT for code in RAM or found at run time. With play-to-recompile and auto

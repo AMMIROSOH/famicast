@@ -1,6 +1,6 @@
 # Game Boy and Game Boy Color
 
-The Game Boy part of [retrocast](../../README.md): `gb` plays a game in the
+The Game Boy part of [retrocast](../../README.md): `retrocast` plays a game in the
 interpreter, `gb_headless` runs one without a window, `gbrecomp`
 recompiles one (through `-DROMS`, see the [root README](../../README.md#recompiling-a-game)).
 

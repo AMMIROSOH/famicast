@@ -15,16 +15,14 @@
 #define APP_NAME "genesis"
 #endif
 
-const char SYS_ID[] = "md";
-
-const char SYS_SETTINGS[] =
+static const char SETTINGS[] =
     "# pad: 6 = the six-button pad (X, Y, Z, Mode on L, North, R, Select), 3 = the original three-button one\n"
     "# (for the few early games that misread a six-button pad)\n"
     "pad = 6\n";
 
 static int six = 1;
 
-int sys_setting(const char *key, const char *val) {
+static int sys_setting(const char *key, const char *val) {
     if (strcmp(key, "pad")) return 0;
     if (!strcmp(val, "6")) return six = 1, 1;
     if (!strcmp(val, "3")) return six = 0, 1;
@@ -38,7 +36,7 @@ static void save_sav(void) {
     if (md.sram && !SDL_SaveFile(sav_path, md.sram, md.sram_size)) SDL_Log("%s: %s", sav_path, SDL_GetError());
 }
 
-int sys_open(const char *path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
+static int sys_open(const char *path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
     const int embedded = !path && md_recomp_program && md_recomp_program->rom;
     if (!path && !embedded) return SDL_snprintf(err, errlen, "usage: %s ROM [--frames N] [--record FILE] [--replay FILE]", APP_NAME), 2;
     char msg[128], base[1024];
@@ -81,9 +79,9 @@ int sys_open(const char *path, const Settings *settings, SysInfo *info, char *er
     return 0;
 }
 
-void sys_reset(void) { md_reset(&md); }
+static void sys_reset(void) { md_reset(&md); }
 
-int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
+static int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
     md.pad[0] = in->pad[0], md.pad[1] = in->pad[1];
     md_run_frame(&md);
     const Vdp *v = &md.vdp;
@@ -98,16 +96,16 @@ int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
     return snd_take(&md.snd, samples, max);
 }
 
-const char *sys_halted(char *buf, size_t len) {
+static const char *sys_halted(char *buf, size_t len) {
     if (md.tmss_locked) SDL_snprintf(buf, len, "The game used the VDP before unlocking it (TMSS)\nF5 reset");
     else if (md.cpu.halted) SDL_snprintf(buf, len, "68000 halted (double fault) at $%06X\nF5 reset, F4 load state", md.cpu.pc & 0xFFFFFF);
     else return NULL;
     return buf;
 }
 
-int sys_state_save(const char *path) { return md_state_save(&md, path); }
-int sys_state_load(const char *path, char *err, size_t errlen) { return md_state_load(&md, path, err, errlen); }
-const char *sys_key(int key, char *buf, size_t len) { (void)key, (void)buf, (void)len; return NULL; }
+static int sys_state_save(const char *path) { return md_state_save(&md, path); }
+static int sys_state_load(const char *path, char *err, size_t errlen) { return md_state_load(&md, path, err, errlen); }
+static const char *sys_key(int key, char *buf, size_t len) { (void)key, (void)buf, (void)len; return NULL; }
 
 /* NAME.misses: the file's lines and this session's; rewritten only when the
  * session found new code, so the next build does not recompile for nothing. */
@@ -130,10 +128,14 @@ static void save_misses(void) {
     fclose(f);
 }
 
-void sys_close(void) {
+static void sys_close(void) {
     save_sav();
     if (md.misses) save_misses();
     SDL_free(md.misses);
     md.misses = NULL;
     md_free(&md);
 }
+
+extern const SystemDetector md_detector;
+const System genesis_system = {&md_detector, APP_NAME, SETTINGS, sys_setting, sys_open, sys_reset, sys_frame,
+    sys_halted, sys_state_save, sys_state_load, sys_key, sys_close};

@@ -43,19 +43,25 @@ calls, so every system with the same CPU uses the same code.
 `tools/ci_systems.py` has the same table, so a change under a CPU's folder
 makes CI test the systems that use it.
 
-## Before two CPUs share one program
-Each CPU is its own library, but the names are not all separate yet. These
-clash today and are fine only while one CPU is linked into a program:
-- The `FLAG_*` enums in both state headers (`cpu6502.h`, `sm83_cpu.h`).
-- Static helpers in the ops headers: `rd`, `wr`, `fetch_k`, `op_ADC`,
-  `op_SBC`, `op_AND`, `op_INC`, `op_DEC`, `op_BIT`, `push`, `pull`, `nz`,
-  `idle`, `zf`.
-- The 6502's link symbols without a prefix: `Op`, `OPS`, `ops_init`,
-  `is_branch`, `page_penalty`, `body`, `emit_cpu_switch`, `cpu_reset`,
-  `cpu_step`, `cpu_read`, `cpu_write`, and its type name `Cpu`.
+## Several CPUs and systems in one program
+`retrocast` links every system, so every CPU and, on the 6502, two systems
+share one program. What makes that work:
+- **Link symbols** are separate: the Z80 and 68000 prefix everything
+  (`z80_*`, `m68k_*`), the SM83's interpreter is `gb_cpu_*`.
+- **The 6502 on two systems** (the NES and the Atari 2600): each system
+  implements the bus the interpreter calls (`cpu_read`, `cpu_write`), so
+  each gets its own copy of the interpreter. `cpu6502_library(NAME PREFIX)`
+  (`6502/CMakeLists.txt`) builds one with `CPU6502_PREFIX` defined, which
+  renames `cpu_reset`, `cpu_step`, `cpu_read` and `cpu_write` (`cpu6502.h`);
+  the Atari's code is compiled with the same prefix. Calls stay direct:
+  the copies cost nothing at run time, and the generated switch and
+  recompiled code are the same bytes for both.
+- **Names inside one file** still clash and do not need to: the `FLAG_*`
+  enums of `cpu6502.h` and `sm83_cpu.h`, the static helpers of the ops
+  headers (`rd`, `wr`, `fetch_k`, `op_ADC`, ...) and the 6502's template
+  names (`Op`, `OPS`, `body`, ...) live in different translation units
+  (each system's runtime and recompiler). Only a file including two CPUs'
+  headers, or a tool linking two CPUs' templates (a combined recompiler),
+  would need them prefixed.
 
-The Z80 is already prefixed (`z80_*`, `Z80_*`, `Z80`), apart from the two
-helper names the template markers expand to (`rd`, `fetch_k`, static
-inline in `z80_ops.h`, like the SM83's). A new CPU prefixes all of its
-names (`m68k_*`). The 6502 gets a
-prefix when a program first needs it alongside another CPU.
+A new CPU prefixes all of its names, as the Z80 and the 68000 do.

@@ -166,7 +166,7 @@ static void io_write(Gb *g, uint16_t a, uint8_t v) {
     case 0xFF4A: g->wy = v; return;
     case 0xFF4B: g->wx = v; return;
     }
-    if (a >= 0xFF10 && a < 0xFF40) apu_write(g, a, v);
+    if (a >= 0xFF10 && a < 0xFF40) gb_apu_write(g, a, v);
     else if (a >= 0xFF47 && a <= 0xFF49) g->io[a & 0x7F] = v;
     if (!g->cgb) return;
     switch (a) {  /* CGB */

@@ -8,23 +8,20 @@ No games are included. Use your own legally dumped games (.nes, .fds, .gb, .gbc,
 
 WHAT IS IN HERE
 
-  nes             Plays a game in the built-in 6502 interpreter.
-                  Usage: nes path/to/game.nes (or .fds, see below)
+  retrocast       Plays a game of any of these systems in the built-in
+                  interpreter. Usage: retrocast path/to/game
+                  The system is read from the file itself (its header);
+                  --system nes|gb|md|a26 picks one when the file does not
+                  say (Atari 2600 games have no header: name them .a26).
   nes_headless    The same without a window, for scripts and checks
                   (--frames N, --record/--replay, --diff, --coverage, ...).
   nesrecomp       The recompiler: turns a ROM into C source.
-  gb              Plays a Game Boy or Game Boy Color game in the built-in
-                  interpreter. Usage: gb path/to/game.gb (or .gbc)
   gb_headless     The same without a window, for test ROMs (--frames N,
                   --wav FILE to record the sound).
   gbrecomp        The Game Boy recompiler: turns a ROM into C source.
-  genesis         Plays a Genesis / Mega Drive game in the built-in
-                  interpreter, with sound. Usage: genesis path/to/game.md
   genesis_headless  The same without a window (--frames N, --ppm FILE,
                   --wav FILE, --diff, --coverage).
   mdrecomp        The Genesis recompiler (68000 code into C source).
-  atari2600       Atari 2600 interpreter in development. Accepts raw .a26 files.
-                  See kit/systems/atari2600/README.md.
   atari2600_headless  Atari 2600 interpreter without a window.
   atari2600recomp Atari 2600 recompiler.
   kit/            Everything needed to build a recompiled game into a
@@ -43,8 +40,8 @@ F10 = TV frame, F11 or Alt+Enter = fullscreen, Esc = quit.
 Gamepads work too (first = player 1, second = player 2).
 Genesis pad: A, B, C = keyboard A, Z, X (gamepad West, South, East);
 X, Y, Z = Q, S, W (left shoulder, North, right shoulder); Mode = Right Shift.
-Settings are in nes.ini / gb.ini / genesis.ini next to the program,
-created on first run.
+Settings are in nes.ini / gb.ini / genesis.ini / atari2600.ini next to
+retrocast, one per system, created on first run.
 
 
 RECOMPILING A GAME (the kit)
@@ -63,9 +60,8 @@ From the folder this file is in:
 
 The program is build/my_game (build/my_game.exe on Windows), plus
 build/my_game_headless. Several games: separate the paths with ";".
-A relative path is relative to the folder you run cmake from. The file's
-extension picks the system: .nes, .fds, .gb, .gbc, .md (or .gen; .bin when
-it has a Genesis header), .a26.
+A relative path is relative to the folder you run cmake from. The system
+is read from each file, as retrocast does.
 
 Code the recompiler cannot find on its own runs in the interpreter. Two
 things recompile more of it:
@@ -81,7 +77,7 @@ DO NOT SHARE RECOMPILED PROGRAMS: they contain the game.
 NES AND FAMICOM DISK SYSTEM
 
 Famicom Disk System: .fds images need the FDS BIOS (8 KB, not included):
-put it next to nes as disksys.rom, or set fds_bios in nes.ini. Disk sides
+put it next to retrocast as disksys.rom, or set fds_bios in nes.ini. Disk sides
 are swapped by themselves when a game asks (F6 by hand). The kit
 recompiles disk games like the others, given the BIOS:
   cmake -S kit -B build -DROMS="/path/to/Disk Game.fds" -DFDS_BIOS="/path/to/disksys.rom"

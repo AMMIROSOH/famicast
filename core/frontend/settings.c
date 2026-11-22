@@ -4,8 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "system.h"
-
 static const char HEAD[] =
     "# retrocast settings. Edit, then restart the game.\n"
     "# While playing: F11 or Alt+Enter = fullscreen, F10 = TV frame (not saved here).\n"
@@ -43,13 +41,14 @@ int settings_bool(const char *v, int *out) {
     return 0;
 }
 
-void settings_load(Settings *s, const char *path) {
+void settings_load(Settings *s, const char *path, const char *sys_text,
+                   int (*sys_setting)(const char *key, const char *value)) {
     *s = (Settings){.scale = SCALE_FIT, .window_scale = 3, .record_misses = 1, .aspect_tv = 1};
     FILE *f = fopen(path, "r");
     if (!f) {
         if ((f = fopen(path, "w"))) {
             fputs(HEAD, f);
-            fputs(SYS_SETTINGS, f);
+            fputs(sys_text, f);
             fputs(TAIL, f);
             fclose(f);
         }

@@ -1,17 +1,22 @@
-add_library(atari2600_cart STATIC runtime/cart.c)
+# The 6507: the shared 6502 interpreter, its own copy (bus functions a26_cpu_read,
+# ...) so a program with the NES too (retrocast) links both (cpu/6502).
+cpu6502_library(atari2600_cpu a26_)
+
+add_library(atari2600_cart STATIC runtime/cart.c runtime/detect.c)
 target_include_directories(atari2600_cart PUBLIC runtime)
+target_link_libraries(atari2600_cart PUBLIC core)
 
 add_library(atari2600_loader STATIC runtime/loader.c)
 target_include_directories(atari2600_loader PUBLIC runtime)
 
 add_library(atari2600_bus STATIC runtime/bus.c runtime/riot.c)
-target_link_libraries(atari2600_bus PUBLIC atari2600_cart cpu6502)
+target_link_libraries(atari2600_bus PUBLIC atari2600_cart atari2600_cpu)
 
 add_library(atari2600_core STATIC runtime/atari.c runtime/tia.c runtime/palette.c)
 target_link_libraries(atari2600_core PUBLIC atari2600_bus core)
 
 add_library(atari2600_none STATIC runtime/recomp_none.c)
-target_link_libraries(atari2600_none PUBLIC cpu6502)
+target_link_libraries(atari2600_none PUBLIC atari2600_cpu)
 
 add_executable(atari2600recomp recomp/main.c)
 target_link_libraries(atari2600recomp PRIVATE atari2600_loader atari2600_cart cpu6502_templates)
@@ -20,8 +25,7 @@ add_executable(atari2600_headless tests/headless.c)
 target_link_libraries(atari2600_headless PRIVATE atari2600_core atari2600_loader atari2600_none)
 
 if(FRONTEND)
-    frontend(atari2600 ${CMAKE_CURRENT_SOURCE_DIR}/frontend.c)
-    target_link_libraries(atari2600 PRIVATE atari2600_core atari2600_loader atari2600_none)
+    frontend_system(atari2600 atari2600_core atari2600_loader atari2600_none)  # in retrocast
 endif()
 
 add_executable(atari2600_cart_tests tests/cart_tests.c)
@@ -73,7 +77,7 @@ function(atari2600_recompile name rom hints)
     add_executable(${name}_headless ${CMAKE_SOURCE_DIR}/systems/atari2600/tests/headless.c ${out})
     target_link_libraries(${name}_headless PRIVATE atari2600_core atari2600_loader)
     if(FRONTEND AND NOT ARGV3 STREQUAL "HEADLESS_ONLY")
-        frontend(${name} ${CMAKE_SOURCE_DIR}/systems/atari2600/frontend.c)
+        frontend(${name} atari2600)
         target_sources(${name} PRIVATE ${out})
         target_link_libraries(${name} PRIVATE atari2600_core atari2600_loader)
     endif()

@@ -20,10 +20,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 set(GEN_DIR ${CMAKE_BINARY_DIR}/gen)
+include(cmake/detect_system.cmake)  # detect_system(): which system a ROM is for
 set(NES_DIR ${CMAKE_SOURCE_DIR}/systems/nes)
 
 # Shared by every system: input recordings and the pad bits (core/).
-add_library(core STATIC core/input_log.c)
+add_library(core STATIC core/input_log.c core/detect.c)
 target_include_directories(core PUBLIC core)
 # Instruction templates for the recompilers (build-time tools).
 add_library(recomp_template STATIC core/recomp/template.c)
@@ -61,15 +62,41 @@ if(FRONTEND)
             GIT_SHALLOW TRUE)
         FetchContent_MakeAvailable(SDL3)
     endif()
-    # A game window (no console window on Windows) running the system in
-    # `system_src` (core/frontend/system.h); settings are read from
-    # TARGET.ini next to the program, created on first run.
-    function(frontend target system_src)
+    # A game window (no console window on Windows) for the systems listed
+    # (core/frontend/system.h: each systems/<sys>/frontend.c exports
+    # <sys>_system; system_list is written here).
+    function(frontend_window target)
+        set(list ${GEN_DIR}/system_list_${target}.c)
+        set(text "#include \"system.h\"
+")
+        set(items "")
+        foreach(sys IN LISTS ARGN)
+            string(APPEND text "extern const System ${sys}_system;
+")
+            string(APPEND items "&${sys}_system, ")
+        endforeach()
+        string(APPEND text "const System *const system_list[] = {${items}NULL};
+")
+        file(CONFIGURE OUTPUT ${list} CONTENT "${text}")
         add_executable(${target} WIN32 ${CMAKE_SOURCE_DIR}/core/frontend/sdl3_main.c
-            ${CMAKE_SOURCE_DIR}/core/frontend/settings.c ${CMAKE_SOURCE_DIR}/core/frontend/tv_frame.c ${system_src})
+            ${CMAKE_SOURCE_DIR}/core/frontend/settings.c ${CMAKE_SOURCE_DIR}/core/frontend/tv_frame.c ${list})
         target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/core/frontend)
         target_compile_definitions(${target} PRIVATE APP_NAME="${target}")
         target_link_libraries(${target} PRIVATE core SDL3::SDL3-static)
+    endfunction()
+    # A recompiled game's window: its one system (the caller links the
+    # system's libraries and the game's code); settings in TARGET.ini.
+    function(frontend target sys)
+        frontend_window(${target} ${sys})
+        target_sources(${target} PRIVATE ${CMAKE_SOURCE_DIR}/systems/${sys}/frontend.c)
+    endfunction()
+    # A system in retrocast, the window program for every system in
+    # SYSTEMS: its frontend.c (settings in <sys>.ini) with its libraries.
+    function(frontend_system sys)
+        add_library(${sys}_window OBJECT ${CMAKE_SOURCE_DIR}/systems/${sys}/frontend.c)
+        target_include_directories(${sys}_window PRIVATE ${CMAKE_SOURCE_DIR}/core/frontend)
+        target_link_libraries(${sys}_window PUBLIC ${ARGN} core SDL3::SDL3-static)
+        set_property(GLOBAL APPEND PROPERTY RETROCAST_SYSTEMS ${sys})
     endfunction()
 endif()
 
@@ -85,7 +112,7 @@ set(AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by AUTO_
 # Target name = file name without "(...)"/"[...]" tags, lower case,
 # non-alphanumerics -> '_' (e.g. "Arkista's Ring (U) [!].nes" -> arkista_s_ring);
 # hints are read from systems/nes/games/<name>.toml or systems/gb/games/<name>.toml when present.
-set(ROMS "" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .md, .gen, .bin, .a26) to recompile (semicolon-separated)")
+set(ROMS "" CACHE STRING "ROM files to recompile (semicolon-separated); the system is read from each file")
 # Relative paths are relative to the folder cmake was run from (for the
 # release kit that is the archive folder, not kit/), else to this source
 # folder. CMake has no variable for the former, but a cmake -P child sees it
@@ -122,7 +149,7 @@ if(ROMS)
             message(FATAL_ERROR "ROMS: not found: ${rom} (looked in ${cwd} and ${CMAKE_SOURCE_DIR})")
         endif()
     endforeach()
-    set(ROMS "${absolute_roms}" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .md, .gen, .bin, .a26) to recompile (semicolon-separated)" FORCE)
+    set(ROMS "${absolute_roms}" CACHE STRING "ROM files to recompile (semicolon-separated); the system is read from each file" FORCE)
 endif()
 
 # Warnings as errors (CI): our code only, SDL3 above is not affected.
@@ -152,6 +179,41 @@ endforeach()
 foreach(sys IN LISTS SYSTEMS)
     add_subdirectory(systems/${sys} ${CMAKE_BINARY_DIR}/sys_${sys})  # not build/<sys>: that is the program (no .exe off Windows)
 endforeach()
+# system_detect FILE: the system a file is for, from its bytes (core/detect.h;
+# each system's detector and the library it is in)
+set(DETECTOR_nes nes_detector nescore)
+set(DETECTOR_gb gb_detector gbcore)
+set(DETECTOR_genesis md_detector mdcore)
+set(DETECTOR_atari2600 a26_detector atari2600_cart)
+set(text "#include \"detect.h\"
+")
+set(items "")
+set(libs "")
+foreach(sys IN LISTS SYSTEMS)
+    list(GET DETECTOR_${sys} 0 det)
+    list(GET DETECTOR_${sys} 1 lib)
+    string(APPEND text "extern const SystemDetector ${det};
+")
+    string(APPEND items "&${det}, ")
+    list(APPEND libs ${lib})
+endforeach()
+list(LENGTH SYSTEMS count)
+string(APPEND text "const SystemDetector *const detector_list[] = {${items}};
+const int detector_count = ${count};
+")
+file(CONFIGURE OUTPUT ${GEN_DIR}/detector_list.c CONTENT "${text}")
+add_executable(system_detect core/system_detect.c ${GEN_DIR}/detector_list.c)
+target_link_libraries(system_detect PRIVATE ${libs} core)
+
+if(FRONTEND)
+    # retrocast: plays a game of any system above, picked from the file's
+    # bytes (core/detect.h) or --system
+    get_property(window_systems GLOBAL PROPERTY RETROCAST_SYSTEMS)
+    frontend_window(retrocast ${window_systems})
+    foreach(sys IN LISTS window_systems)
+        target_link_libraries(retrocast PRIVATE ${sys}_window)
+    endforeach()
+endif()
 
 foreach(rom IN LISTS ROMS)
     get_filename_component(stem "${rom}" NAME_WLE)
@@ -159,25 +221,7 @@ foreach(rom IN LISTS ROMS)
     string(TOLOWER "${stem}" name)
     string(REGEX REPLACE "[^a-z0-9]+" "_" name "${name}")
     string(REGEX REPLACE "^_+|_+$" "" name "${name}")
-    get_filename_component(ext "${rom}" LAST_EXT)
-    string(TOLOWER "${ext}" ext)
-    set(sys nes)
-    if(ext STREQUAL ".gb" OR ext STREQUAL ".gbc")
-        set(sys gb)
-    elseif(ext STREQUAL ".md" OR ext STREQUAL ".gen")
-        set(sys genesis)
-    elseif(ext STREQUAL ".bin")
-        # .bin is used by many systems: a Genesis game says "SEGA" at $100
-        # (some " SEGA"), as the console's TMSS checks
-        file(READ "${rom}" head OFFSET 256 LIMIT 5)
-        if(NOT head MATCHES "^ ?SEGA")
-            message(FATAL_ERROR "ROMS: ${rom}: a .bin without a Genesis header (\"SEGA\" at $100); "
-                                "Genesis games may also be named .md or .gen")
-        endif()
-        set(sys genesis)
-    elseif(ext STREQUAL ".a26")
-        set(sys atari2600)
-    endif()
+    detect_system("${rom}" sys)  # from the file's bytes, as retrocast does
     if(NOT sys IN_LIST SYSTEMS)
         message(FATAL_ERROR "ROMS: ${rom} is a ${sys} game, but SYSTEMS is ${SYSTEMS}")
     elseif(sys STREQUAL "genesis")

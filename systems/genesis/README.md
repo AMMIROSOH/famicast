@@ -1,7 +1,7 @@
 # Sega Genesis / Mega Drive
 
 The Genesis part of [retrocast](../../README.md). Playable in the
-interpreter, with sound (`build/genesis game.md`), or recompiled (`-DROMS=game.md`,
+interpreter, with sound (`build/retrocast game.md`), or recompiled (`-DROMS=game.md`,
 as in the [README](../../README.md#recompiling-a-game)).
 
 ## Status
@@ -20,7 +20,8 @@ as in the [README](../../README.md#recompiling-a-game)).
   shadow/highlight, DMA, interrupts, drawn a line at a time; samples of
   the licensed set reach title and play screens (`genesis_headless
   --ppm`, `tools/genesis_sheet.py`).
-- **The window program** (roadmap D3): `genesis`, the picture (H32 shown
+- **The window program** (roadmap D3): `retrocast` (settings in
+  `genesis.ini`), the picture (H32 shown
   as wide as H40, as on a TV), both pads, battery saves (`ROM.sav`),
   save states (F2/F4), the reset button (F5), recordings.
 - **Sound** (roadmap D4): the PSG and the YM2612 (6 FM channels, the DAC,

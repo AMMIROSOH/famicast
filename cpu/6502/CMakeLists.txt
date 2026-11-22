@@ -23,6 +23,16 @@ add_custom_command(
     COMMENT "Generating the 6502 interpreter's opcode switch")
 
 # The interpreter (cpu6502.c) and the instruction helpers recompiled code
-# uses (cpu6502_ops.h).
-add_library(cpu6502 STATIC cpu6502.c ${GEN_DIR}/cpu6502_switch.inc)
-target_include_directories(cpu6502 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${GEN_DIR})
+# uses (cpu6502_ops.h). cpu6502_library(NAME PREFIX): another copy, its
+# functions and the bus it calls renamed PREFIXcpu_step, PREFIXcpu_read, ...
+# (cpu6502.h), for a second system with this CPU in the same program.
+set(CPU6502_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE INTERNAL "")  # seen from the systems' folders
+function(cpu6502_library name prefix)
+    add_library(${name} STATIC ${CPU6502_DIR}/cpu6502.c ${GEN_DIR}/cpu6502_switch.inc)
+    target_include_directories(${name} PUBLIC ${CPU6502_DIR} PRIVATE ${GEN_DIR})
+    if(prefix)
+        target_compile_definitions(${name} PUBLIC CPU6502_PREFIX=${prefix})
+        add_dependencies(${name} cpu6502)  # the switch's rule belongs to this folder's target
+    endif()
+endfunction()
+cpu6502_library(cpu6502 "")

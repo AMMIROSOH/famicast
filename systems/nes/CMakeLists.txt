@@ -18,7 +18,7 @@ target_link_libraries(cpu_tests PRIVATE cpu6502 recomp_none)
 
 # The NES system: bus, PPU, cartridge (implements cpu_read/cpu_write).
 add_library(nescore STATIC runtime/nes.c runtime/ppu.c runtime/apu.c runtime/cart.c runtime/fds.c
-    runtime/palette.c)
+    runtime/palette.c runtime/detect.c)
 target_include_directories(nescore PUBLIC runtime)
 target_link_libraries(nescore PUBLIC cpu6502 core)
 if(NOT MSVC)
@@ -31,10 +31,10 @@ target_link_libraries(nes_headless PRIVATE nescore recomp_none)
 if(FRONTEND)
     # A game window (core/frontend) with the NES as its system (frontend.c).
     function(nes_frontend target code)
-        frontend(${target} ${NES_DIR}/frontend.c)
+        frontend(${target} nes)
         target_link_libraries(${target} PRIVATE nescore ${code})
     endfunction()
-    nes_frontend(nes recomp_none)
+    frontend_system(nes nescore recomp_none)  # in retrocast
 endif()
 
 # ---- Recompiled programs (M5) ----

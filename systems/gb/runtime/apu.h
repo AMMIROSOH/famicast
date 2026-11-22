@@ -33,8 +33,8 @@ struct Gb;
 void apu_tick(struct Gb *g);           /* one M-cycle */
 void apu_frame_step(struct Gb *g);     /* DIV bit 12 fell (512 Hz) */
 uint8_t apu_read(struct Gb *g, uint16_t a);
-void apu_write(struct Gb *g, uint16_t a, uint8_t v);
+void gb_apu_write(struct Gb *g, uint16_t a, uint8_t v);
 void apu_boot(struct Gb *g);           /* the state the boot ROM leaves */
-int apu_take_samples(struct Gb *g, float *out, int max);  /* drain up to max 48 kHz stereo sample frames */
+int gb_apu_take_samples(struct Gb *g, float *out, int max);  /* drain up to max 48 kHz stereo sample frames */
 
 #endif

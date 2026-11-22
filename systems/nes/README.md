@@ -1,6 +1,6 @@
 # NES and Famicom Disk System
 
-The NES part of [retrocast](../../README.md): `nes` plays a game in the
+The NES part of [retrocast](../../README.md): `retrocast` plays a game in the
 interpreter, `nes_headless` runs one without a window, `nesrecomp`
 recompiles one (through `-DROMS`, see the [root README](../../README.md#recompiling-a-game)).
 
@@ -158,7 +158,7 @@ the interpreter. Three ways to recompile it too:
   recompiles the game with those addresses.
 - **By hand**, from a recording (reaches what the script cannot):
   ```
-  build/nes game.nes --record run.rcin
+  build/retrocast game.nes --record run.rcin
   build/nes_headless game.nes --replay run.rcin --misses --out misses.txt
   build/nesrecomp game.nes --hints systems/nes/games/game.toml --misses misses.txt --save-hints systems/nes/games/game.toml
   cmake --build build --config Release

@@ -4,6 +4,19 @@
 
 #include <stdint.h>
 
+/* Two systems with this CPU in one program (the NES and the Atari 2600 in
+ * retrocast) each get their own copy of the interpreter: CPU6502_PREFIX
+ * (cpu6502_library() in CMakeLists.txt) renames its functions and the bus
+ * functions it calls, so the calls stay direct. */
+#ifdef CPU6502_PREFIX
+#define CPU6502_CAT2(p, n) p##n
+#define CPU6502_CAT(p, n) CPU6502_CAT2(p, n)
+#define cpu_read CPU6502_CAT(CPU6502_PREFIX, cpu_read)
+#define cpu_write CPU6502_CAT(CPU6502_PREFIX, cpu_write)
+#define cpu_reset CPU6502_CAT(CPU6502_PREFIX, cpu_reset)
+#define cpu_step CPU6502_CAT(CPU6502_PREFIX, cpu_step)
+#endif
+
 /* Status register bits, real 6502 layout (systems/nes/docs/6502-traps.md). B and U exist only in
  * copies pushed to the stack; the register keeps U set and B clear. */
 enum {

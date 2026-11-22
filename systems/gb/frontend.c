@@ -15,9 +15,7 @@
 #define APP_NAME "gb"
 #endif
 
-const char SYS_ID[] = "gb";
-
-const char SYS_SETTINGS[] =
+static const char SETTINGS[] =
     "# palette: the four shades: green = the original screen's tint, gray = neutral grays\n"
     "palette = green\n"
     "# model: dmg, cgb (a Game Boy game then runs in the Color's compatibility mode, with its colours) or auto\n"
@@ -26,7 +24,7 @@ const char SYS_SETTINGS[] =
 
 static int gray, model = GB_MODEL_AUTO;
 
-int sys_setting(const char *key, const char *val) {
+static int sys_setting(const char *key, const char *val) {
     if (!strcmp(key, "model")) {
         if (!strcmp(val, "auto")) return model = GB_MODEL_AUTO, 1;
         if (!strcmp(val, "dmg")) return model = GB_MODEL_DMG, 1;
@@ -80,7 +78,7 @@ static void save_sav(void) {
     if (!SDL_SaveFile(sav_path, d, n)) SDL_Log("%s: %s", sav_path, SDL_GetError());
 }
 
-int sys_open(const char *path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
+static int sys_open(const char *path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
     const int embedded = !path && gb_recomp_program && gb_recomp_program->rom;
     if (!path && !embedded) return SDL_snprintf(err, errlen, "usage: %s ROM [--frames N] [--record FILE] [--replay FILE]", APP_NAME), 2;
     if (embedded) {  /* saves and states: the ROM's file name next to the program */
@@ -118,7 +116,7 @@ int sys_open(const char *path, const Settings *settings, SysInfo *info, char *er
 }
 
 /* The power button: the same game, its cartridge RAM and clock kept. */
-void sys_reset(void) {
+static void sys_reset(void) {
     static GbCart keep;
     keep = gb.cart;
     uint8_t *misses = gb.misses;  /* gb_load clears the Gb */
@@ -131,7 +129,7 @@ void sys_reset(void) {
     memcpy(gb.cart.rtc, keep.rtc, sizeof keep.rtc);
 }
 
-int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
+static int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
     static const uint32_t GREEN[4] = {0xE0F8D0, 0x88C070, 0x346856, 0x081820};
     static const uint32_t GRAY[4] = {0xFFFFFF, 0xAAAAAA, 0x555555, 0x000000};
     const uint32_t *pal = gray ? GRAY : GREEN;
@@ -144,20 +142,20 @@ int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
         }
     else
         for (int i = 0; i < 160 * 144; i++) rgb[i] = pal[gb.frame[i] & 3];
-    return apu_take_samples(&gb, samples, max);
+    return gb_apu_take_samples(&gb, samples, max);
 }
 
-const char *sys_halted(char *buf, size_t len) {
+static const char *sys_halted(char *buf, size_t len) {
     if (!gb.cpu.jammed) return NULL;
     SDL_snprintf(buf, len, "CPU locked up at $%04X\nF5 reset, F4 load state", (uint16_t)(gb.cpu.pc - 1));
     return buf;
 }
 
-int sys_state_save(const char *path) { return gb_state_save(&gb, path); }
-int sys_state_load(const char *path, char *err, size_t errlen) { return gb_state_load(&gb, path, err, errlen); }
-const char *sys_key(int key, char *buf, size_t len) { (void)key, (void)buf, (void)len; return NULL; }
+static int sys_state_save(const char *path) { return gb_state_save(&gb, path); }
+static int sys_state_load(const char *path, char *err, size_t errlen) { return gb_state_load(&gb, path, err, errlen); }
+static const char *sys_key(int key, char *buf, size_t len) { (void)key, (void)buf, (void)len; return NULL; }
 
-void sys_close(void) {
+static void sys_close(void) {
     save_sav();
     /* rewrite the misses file only when this session found new ROM code, so
      * the next build does not rerun the recompiler for nothing */
@@ -170,3 +168,7 @@ void sys_close(void) {
     gb_free(&gb);
     SDL_free(rom);
 }
+
+extern const SystemDetector gb_detector;
+const System gb_system = {&gb_detector, APP_NAME, SETTINGS, sys_setting, sys_open, sys_reset, sys_frame,
+    sys_halted, sys_state_save, sys_state_load, sys_key, sys_close};

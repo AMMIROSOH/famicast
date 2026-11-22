@@ -7,7 +7,7 @@ target_include_directories(gbrecomp PRIVATE runtime)
 target_link_libraries(gbrecomp PRIVATE sm83_templates)
 
 # The Game Boy system (bus, timer, interrupts, PPU, sound, cartridges).
-add_library(gbcore STATIC runtime/gb.c runtime/ppu.c runtime/apu.c runtime/cart.c runtime/cgb_compat.c)
+add_library(gbcore STATIC runtime/gb.c runtime/ppu.c runtime/apu.c runtime/cart.c runtime/cgb_compat.c runtime/detect.c)
 target_include_directories(gbcore PUBLIC runtime)
 target_link_libraries(gbcore PUBLIC sm83 core)
 # Programs without recompiled code link this (gb_recomp_program = NULL).
@@ -20,9 +20,7 @@ add_executable(gb_headless tests/gb_headless.c)
 target_link_libraries(gb_headless PRIVATE gbcore gb_recomp_none)
 
 if(FRONTEND)
-    # gb: plays a Game Boy ROM in the interpreter (core/frontend + frontend.c)
-    frontend(gb ${CMAKE_CURRENT_SOURCE_DIR}/frontend.c)
-    target_link_libraries(gb PRIVATE gbcore gb_recomp_none)
+    frontend_system(gb gbcore gb_recomp_none)  # in retrocast
 endif()
 
 # gb_recompile(NAME ROM) generates ${GEN_DIR}/NAME.c with gbrecomp and builds
@@ -74,7 +72,7 @@ function(gb_recompile name rom)
     add_executable(${name}_headless ${CMAKE_SOURCE_DIR}/systems/gb/tests/gb_headless.c)
     target_link_libraries(${name}_headless PRIVATE gbcore ${name}_code)
     if(FRONTEND)
-        frontend(${name} ${CMAKE_SOURCE_DIR}/systems/gb/frontend.c)
+        frontend(${name} gb)
         target_link_libraries(${name} PRIVATE gbcore ${name}_code)
     endif()
 endfunction()

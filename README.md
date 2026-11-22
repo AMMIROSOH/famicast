@@ -60,18 +60,22 @@ If you built before installing them, delete `build/CMakeCache.txt` and build aga
 ```
 cmake -S . -B build
 cmake --build build --config Release
-build/nes path/to/game.nes      # NES and FDS games, interpreted
-build/gb path/to/game.gb        # Game Boy and Game Boy Color games, interpreted
-build/genesis path/to/game.md   # Genesis / Mega Drive games, interpreted (.md, .bin, .gen)
-build/atari2600 path/to/game.a26 # Atari 2600, interpreted
+build/retrocast path/to/game    # any system's game, interpreted
 ```
+`retrocast` reads the system from the file's bytes, not its name: the NES
+and FDS headers, the Game Boy's logo and header checksum, the Genesis
+"SEGA" at $100; the Atari 2600 has no header and is recognised by its size
+and reset vector, with the `.a26` extension to confirm. When a file is
+unclear it says so; `--system nes|gb|md|a26` picks one. Each system keeps
+its settings in its own file next to the program (`nes.ini`, `gb.ini`,
+`genesis.ini`, `atari2600.ini`).
 Builds are **Release**; tests, timings and full-speed play assume it. Keep
 `--config Release` with Visual Studio (the default generator with MSVC):
 without it `cmake --build` builds Debug, which is too slow to play.
 Ninja and Makefiles ignore the flag and build Release anyway. Programs are
 put in `build/` with every generator (no `Release/` or `Debug/` subfolder).
 Headless (no SDL3): add `-DFRONTEND=OFF`. Only some systems:
-`-DSYSTEMS=gb` (default `nes;gb;genesis`). Warnings as errors: `-DWERROR=ON`. On Windows the game programs open
+`-DSYSTEMS=gb` (default `nes;gb;genesis;atari2600`). Warnings as errors: `-DWERROR=ON`. On Windows the game programs open
 no console window; use the `_headless` programs for text output.
 
 ## Recompiling a game
@@ -80,8 +84,8 @@ cmake -S . -B build -DROMS="path/to/Game One.nes;path/to/Game Two (E) [!].gb"
 cmake --build build --config Release   # -> build/game_one, build/game_two (+ _headless)
 build/game_one                         # the ROM is embedded: no path needed
 ```
-The file extension picks the system (`.nes`, `.fds`, `.gb`, `.gbc`, `.md`, `.gen`, `.a26`;
-`.bin` only with a Genesis header). Before
+The system of each file is read from its bytes, as `retrocast` does
+(`cmake/detect_system.cmake`, the same rules). Before
 recompiling, the build runs each game in the interpreter for
 `AUTO_HINTS_FRAMES` (default 6000) frames of scripted play and recompiles
 every address it ran (`-DAUTO_HINTS=OFF` skips this). More ways to reach
@@ -118,8 +122,9 @@ A, X on L, Y on X, Z on R, Mode on Select).
 | F10 | TV frame on/off |
 | F11 or Alt+Enter | fullscreen on/off |
 
-Settings live in `<program>.ini` next to the program (`build/nes.ini`,
-`build/game_one.ini`), written with defaults and comments on first run:
+Settings live in an `.ini` file next to the program, one per system for
+`retrocast` (`build/nes.ini`, `build/gb.ini`, ...) and one per recompiled
+game (`build/game_one.ini`), written with defaults and comments on first run:
 ```
 fullscreen = 0      # 1 = fullscreen at desktop resolution
 scale = fit         # fit (keep aspect), integer (sharp pixels), stretch
@@ -130,9 +135,9 @@ window_scale = 3    # starting window size
 Each system adds its own keys and settings (its README).
 - **Save states** work across builds of the same version: a state saved by
   the interpreter program loads in the recompiled one and the reverse.
-- **Recordings**: `build/nes game.nes --record run.rcin`, then
-  `--replay run.rcin` (live input resumes at the end); the same for `gb`. A
-  recording names its system; one from another system is refused.
+- **Recordings**: `build/retrocast game.nes --record run.rcin`, then
+  `--replay run.rcin` (live input resumes at the end). A recording names its
+  system; one from another system is refused.
 - A jammed CPU (a crash on hardware too) leaves the last picture on screen
   with a message; F5 resets, F4 loads a state.
 
@@ -152,7 +157,8 @@ for the games the build was configured with and are skipped otherwise.
 CI (`.github/workflows/ci.yml`) builds and tests only the systems a change
 touches (`tools/ci_systems.py`: a change under a CPU's folder in `cpu/`
 tests the systems that use that CPU; shared code means all of them) with GCC,
-Clang and MSVC, warnings as errors, plus the window programs; test data is
+Clang and MSVC, warnings as errors, plus `retrocast` and the system
+detection (`tests/test_detect.py`); test data is
 kept in the Actions cache. The required check is `ci-ok`.
 
 ## Docs
