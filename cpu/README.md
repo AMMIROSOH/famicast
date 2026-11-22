@@ -8,16 +8,24 @@ calls, so every system with the same CPU uses the same code.
 |-----|---------|-------|--------|
 | 6502 (the NES's 2A03) | NES and Famicom Disk System | SingleStepTests 2A03, nestest | [6502/](6502/) |
 | SM83 | Game Boy and Game Boy Color | SingleStepTests sm83 | [sm83/](sm83/) |
+| Z80 | Genesis / Mega Drive (sound CPU) | SingleStepTests z80 | [z80/](z80/) |
+| 68000 | Genesis / Mega Drive (main CPU) | SingleStepTests m68000 | [m68k/](m68k/) |
 
 ## What a CPU folder holds
 - The instruction templates, written once: the opcode table and C per
-  opcode (`ops.c`, `c6502.c`; `sm83.c`). The interpreter's switch and the
-  recompiled code are both made from them.
+  opcode (`ops.c`, `c6502.c`; `sm83.c`; `z80.c`, where the DD and FD
+  tables are the base table's code made with IX or IY; `m68k.c`). The
+  interpreter's switch and the recompiled code are both made from them.
+  The 68000's templates read register numbers from `op` at run time, so
+  one body serves every register: 1,541 handlers and a 64K table instead
+  of a 64K-case switch.
 - The interpreter: `cpu6502.c`, `cpu6502.h`, `cpu6502_ops.h`; `sm83_cpu.c`,
-  `sm83_cpu.h`, `sm83_ops.h`.
-- The switch generator (`cpu6502_gen.c`, `sm83_gen.c`), which writes the
-  interpreter's opcode switch into `build/gen/` at build time.
-- The CPU test runner (`sm83_tests.c`). The 6502's runner is
+  `sm83_cpu.h`, `sm83_ops.h`; `z80_cpu.c`, `z80_cpu.h`, `z80_ops.h`;
+  `m68k_cpu.c`, `m68k_cpu.h`, `m68k_ops.h`.
+- The switch generator (`cpu6502_gen.c`, `sm83_gen.c`, `z80_gen.c`,
+  `m68k_gen.c`), which writes the interpreter's opcode switch into
+  `build/gen/` at build time.
+- The CPU test runner (`sm83_tests.c`, `z80_tests.c`, `m68k_tests.c`). The 6502's runner is
   `nes/tests/cpu_tests.c`, because it also runs nestest and recompiled code.
 - `CMakeLists.txt`: the library and generator targets.
 
@@ -28,7 +36,9 @@ calls, so every system with the same CPU uses the same code.
    `sm83`) and, for recompiled programs, the template library.
 3. The system implements the bus functions its CPU calls: `cpu_read` and
    `cpu_write` for the 6502; `gb_read`, `gb_write`, `gb_idle` and
-   `gb_irq_ack` for the SM83. The CPU's header declares them.
+   `gb_irq_ack` for the SM83; `z80_fetch`, `z80_read`, `z80_write`,
+   `z80_in`, `z80_out`, `z80_idle` and `z80_irq_ack` for the Z80. The CPU's
+   header declares them.
 
 `tools/ci_systems.py` has the same table, so a change under a CPU's folder
 makes CI test the systems that use it.
@@ -44,5 +54,8 @@ clash today and are fine only while one CPU is linked into a program:
   `is_branch`, `page_penalty`, `body`, `emit_cpu_switch`, `cpu_reset`,
   `cpu_step`, `cpu_read`, `cpu_write`, and its type name `Cpu`.
 
-A new CPU prefixes all of its names (`m68k_*`, `z80_*`). The 6502 gets a
+The Z80 is already prefixed (`z80_*`, `Z80_*`, `Z80`), apart from the two
+helper names the template markers expand to (`rd`, `fetch_k`, static
+inline in `z80_ops.h`, like the SM83's). A new CPU prefixes all of its
+names (`m68k_*`). The 6502 gets a
 prefix when a program first needs it alongside another CPU.

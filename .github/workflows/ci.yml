@@ -2,7 +2,7 @@
 # system's own folders and its CPU's (cpu/<cpu>/) select it, shared code
 # selects every system, docs none), each with GCC, Clang and MSVC,
 # warnings as errors. Test data (public test ROMs, nestest, SingleStepTests
-# 2A03 and sm83) is fetched once per version of tests/fetch_test_roms.py and
+# 2A03, sm83 and z80) is fetched once per version of tests/fetch_test_roms.py and
 # kept in the Actions cache; it is never committed. No game ROMs: the tests of recompiled
 # games skip. The required check is ci-ok, which sums up the rest.
 name: ci
@@ -49,7 +49,7 @@ jobs:
           key: ${{ steps.key.outputs.key }}
           enableCrossOsArchive: true
       - name: Fetch test data (verified, or downloaded on a cache miss)
-        run: python tests/fetch_test_roms.py --sst --sst-sm83
+        run: python tests/fetch_test_roms.py --sst --sst-sm83 --sst-z80 --sst-m68k
 
   build-test:
     needs: [changes, data]
@@ -69,6 +69,7 @@ jobs:
       RETROCAST_STRICT: "1"   # a program the build should have made fails the tests, not skips them
       NES_SST_REQUIRED: "1"
       GB_SST_REQUIRED: "1"
+      GENESIS_SST_REQUIRED: "1"   # the genesis system's tests (tests/genesis)
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
