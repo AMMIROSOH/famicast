@@ -153,6 +153,11 @@ if(ROMS)
 endif()
 
 # Warnings as errors (CI): our code only, SDL3 above is not affected.
+# -DTESTS=ON (CI, contributors): the test programs and the test ROMs'
+# recompiles the Python tests run (tests/); off, a build makes only the
+# programs, the recompilers and your games.
+option(TESTS "Build the test programs and test recompiles" OFF)
+
 option(WERROR "Treat compiler warnings as errors" OFF)
 if(WERROR)
     add_compile_options($<IF:$<C_COMPILER_ID:MSVC>,/WX,-Werror>)
@@ -179,31 +184,33 @@ endforeach()
 foreach(sys IN LISTS SYSTEMS)
     add_subdirectory(systems/${sys} ${CMAKE_BINARY_DIR}/sys_${sys})  # not build/<sys>: that is the program (no .exe off Windows)
 endforeach()
-# system_detect FILE: the system a file is for, from its bytes (core/detect.h;
-# each system's detector and the library it is in)
-set(DETECTOR_nes nes_detector nescore)
-set(DETECTOR_gb gb_detector gbcore)
-set(DETECTOR_genesis md_detector mdcore)
-set(DETECTOR_atari2600 a26_detector atari2600_cart)
-set(text "#include \"detect.h\"
-")
-set(items "")
-set(libs "")
-foreach(sys IN LISTS SYSTEMS)
-    list(GET DETECTOR_${sys} 0 det)
-    list(GET DETECTOR_${sys} 1 lib)
-    string(APPEND text "extern const SystemDetector ${det};
-")
-    string(APPEND items "&${det}, ")
-    list(APPEND libs ${lib})
-endforeach()
-list(LENGTH SYSTEMS count)
-string(APPEND text "const SystemDetector *const detector_list[] = {${items}};
-const int detector_count = ${count};
-")
-file(CONFIGURE OUTPUT ${GEN_DIR}/detector_list.c CONTENT "${text}")
-add_executable(system_detect core/system_detect.c ${GEN_DIR}/detector_list.c)
-target_link_libraries(system_detect PRIVATE ${libs} core)
+if(TESTS)
+    # system_detect FILE: the system a file is for, from its bytes (core/detect.h;
+    # each system's detector and the library it is in)
+    set(DETECTOR_nes nes_detector nescore)
+    set(DETECTOR_gb gb_detector gbcore)
+    set(DETECTOR_genesis md_detector mdcore)
+    set(DETECTOR_atari2600 a26_detector atari2600_cart)
+    set(text "#include \"detect.h\"
+    ")
+    set(items "")
+    set(libs "")
+    foreach(sys IN LISTS SYSTEMS)
+        list(GET DETECTOR_${sys} 0 det)
+        list(GET DETECTOR_${sys} 1 lib)
+        string(APPEND text "extern const SystemDetector ${det};
+    ")
+        string(APPEND items "&${det}, ")
+        list(APPEND libs ${lib})
+    endforeach()
+    list(LENGTH SYSTEMS count)
+    string(APPEND text "const SystemDetector *const detector_list[] = {${items}};
+    const int detector_count = ${count};
+    ")
+    file(CONFIGURE OUTPUT ${GEN_DIR}/detector_list.c CONTENT "${text}")
+    add_executable(system_detect core/system_detect.c ${GEN_DIR}/detector_list.c)
+    target_link_libraries(system_detect PRIVATE ${libs} core)
+endif()
 
 if(FRONTEND)
     # retrocast: plays a game of any system above, picked from the file's

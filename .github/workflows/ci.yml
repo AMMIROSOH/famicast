@@ -86,7 +86,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y ninja-build
-          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DFRONTEND=OFF -DWERROR=ON -DSYSTEMS=${{ matrix.system }}
+          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DFRONTEND=OFF -DWERROR=ON -DTESTS=ON -DSYSTEMS=${{ matrix.system }}
           cmake --build build
       - name: Configure and build (Windows, MSVC)
         if: runner.os == 'Windows'
@@ -95,7 +95,7 @@ jobs:
         run: |
           for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSDIR=%%i
           call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DFRONTEND=OFF -DWERROR=ON -DSYSTEMS=${{ matrix.system }} || exit /b 1
+          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DFRONTEND=OFF -DWERROR=ON -DTESTS=ON -DSYSTEMS=${{ matrix.system }} || exit /b 1
           cmake --build build
       - name: Test
         run: python -m unittest discover -s tests/${{ matrix.system }} -t . -v
@@ -114,7 +114,7 @@ jobs:
         run: |
           for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSDIR=%%i
           call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DWERROR=ON "-DSYSTEMS=${{ needs.changes.outputs.cmake }}" || exit /b 1
+          cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DWERROR=ON -DTESTS=ON "-DSYSTEMS=${{ needs.changes.outputs.cmake }}" || exit /b 1
           cmake --build build
       - name: Test system detection
         env:

@@ -24,6 +24,8 @@ add_custom_command(
 add_library(z80 STATIC z80_cpu.c ${GEN_DIR}/z80_switch.inc)
 target_include_directories(z80 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${GEN_DIR})
 
-# SingleStepTests z80 on a flat bus (tests/genesis/test_z80.py)
-add_executable(z80_tests z80_tests.c)
-target_link_libraries(z80_tests PRIVATE z80)
+if(TESTS)
+    # SingleStepTests z80 on a flat bus (tests/genesis/test_z80.py)
+    add_executable(z80_tests z80_tests.c)
+    target_link_libraries(z80_tests PRIVATE z80)
+endif()

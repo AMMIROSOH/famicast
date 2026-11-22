@@ -75,7 +75,7 @@ without it `cmake --build` builds Debug, which is too slow to play.
 Ninja and Makefiles ignore the flag and build Release anyway. Programs are
 put in `build/` with every generator (no `Release/` or `Debug/` subfolder).
 Headless (no SDL3): add `-DFRONTEND=OFF`. Only some systems:
-`-DSYSTEMS=gb` (default `nes;gb;genesis;atari2600`). Warnings as errors: `-DWERROR=ON`. On Windows the game programs open
+`-DSYSTEMS=gb` (default `nes;gb;genesis;atari2600`). Warnings as errors: `-DWERROR=ON`. Test programs: `-DTESTS=ON` ([Contributing](#contributing)). On Windows the game programs open
 no console window; use the `_headless` programs for text output.
 
 ## Recompiling a game
@@ -141,8 +141,14 @@ Each system adds its own keys and settings (its README).
 - A jammed CPU (a crash on hardware too) leaves the last picture on screen
   with a message; F5 resets, F4 loads a state.
 
-## Tests
+## Contributing
+Changes are checked by the Python tests, which need the test programs and
+the test ROMs' recompiles: a plain build leaves them out (they would only
+slow down recompiling a game), so configure with `-DTESTS=ON`. Build
+Release, as above.
 ```
+cmake -S . -B build -DTESTS=ON
+cmake --build build --config Release
 python tests/fetch_test_roms.py            # public test ROMs (also run by the tests on demand)
 python tests/fetch_test_roms.py --sst      # optional: ~1 GB, per-opcode CPU tests (--sst-sm83: Game Boy)
 python -m unittest discover -s tests -t .          # everything; one system: -s tests/gb
@@ -155,7 +161,7 @@ was not built (`RETROCAST_STRICT=1`: fail). Tests for recompiled games run
 for the games the build was configured with and are skipped otherwise.
 
 CI (`.github/workflows/ci.yml`) builds and tests only the systems a change
-touches (`tools/ci_systems.py`: a change under a CPU's folder in `cpu/`
+touches, with `-DTESTS=ON` (`tools/ci_systems.py`: a change under a CPU's folder in `cpu/`
 tests the systems that use that CPU; shared code means all of them) with GCC,
 Clang and MSVC, warnings as errors, plus `retrocast` and the system
 detection (`tests/test_detect.py`); test data is
