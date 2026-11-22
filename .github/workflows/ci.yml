@@ -49,7 +49,7 @@ jobs:
           key: ${{ steps.key.outputs.key }}
           enableCrossOsArchive: true
       - name: Fetch test data (verified, or downloaded on a cache miss)
-        run: python tests/fetch_test_roms.py --sst --sst-sm83 --sst-z80
+        run: python tests/fetch_test_roms.py --sst --sst-sm83 --sst-z80 --sst-m68k
 
   build-test:
     needs: [changes, data]

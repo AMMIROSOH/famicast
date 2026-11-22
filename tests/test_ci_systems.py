@@ -28,6 +28,7 @@ class TestCiSystems(unittest.TestCase):
         self.assertEqual(systems_for(["cpu/z80/z80.c"]), ["genesis"])
         self.assertEqual(systems_for(["cpu/z80/z80_ops.h", "cpu/sm83/sm83.c"]), ["gb", "genesis"])
         self.assertEqual(systems_for(["cpu/README.md"]), [])
+        self.assertEqual(systems_for(["cpu/m68k/m68k.c"]), ["genesis"])
 
     def test_unknown_cpu_selects_every_system(self):
         for f in ("cpu/arm7/arm7.c", "cpu/CMakeLists.txt"):

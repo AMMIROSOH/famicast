@@ -174,6 +174,79 @@ def fetch_sst_z80(name):
     return path
 
 
+# SingleStepTests m68000 (MIT): 2,500 single-instruction tests per family,
+# generated from MAME's microcoded 68000, with every bus transaction and idle
+# span, its clocks, function code, UDS/LDS and the aborted accesses of an
+# address error. Pinned to a commit; decoded from the documented .json.bin
+# layout (decode.py in that repo) into the form cpu/m68k/m68k_tests.c reads.
+M68K_COMMIT = "64b253116a3de04aaac4346c43680960dc9b67e5"
+M68K_URL = "https://raw.githubusercontent.com/SingleStepTests/m68000/%s/v1/%s.json.bin"
+M68K_FILES = """ABCD ADD.b ADD.l ADD.w ADDA.l ADDA.w ADDX.b ADDX.l ADDX.w AND.b AND.l
+AND.w ANDItoCCR ANDItoSR ASL.b ASL.l ASL.w ASR.b ASR.l ASR.w BCHG BCLR BSET BSR BTST Bcc
+CHK CLR.b CLR.l CLR.w CMP.b CMP.l CMP.w CMPA.l CMPA.w DBcc DIVS DIVU EOR.b EOR.l EOR.w
+EORItoCCR EORItoSR EXG EXT.l EXT.w ILLEGAL_LINEA ILLEGAL_LINEF JMP JSR LEA LINK LSL.b
+LSL.l LSL.w LSR.b LSR.l LSR.w MOVE.b MOVE.l MOVE.q MOVE.w MOVEA.l MOVEA.w MOVEM.l MOVEM.w
+MOVEP.l MOVEP.w MOVEfromSR MOVEfromUSP MOVEtoCCR MOVEtoSR MOVEtoUSP MULS MULU NBCD NEG.b
+NEG.l NEG.w NEGX.b NEGX.l NEGX.w NOP NOT.b NOT.l NOT.w OR.b OR.l OR.w ORItoCCR ORItoSR PEA
+RESET ROL.b ROL.l ROL.w ROR.b ROR.l ROR.w ROXL.b ROXL.l ROXL.w ROXR.b ROXR.l ROXR.w RTE
+RTR RTS SBCD STOP SUB.b SUB.l SUB.w SUBA.l SUBA.w SUBX.b SUBX.l SUBX.w SWAP Scc TAS TRAP
+TRAPV TST.b TST.l TST.w UNLINK""".split()
+
+
+def _m68k_state(b, p):
+    """One state record -> (p, packed): 19 registers, the two prefetch words,
+    RAM as (address, byte) pairs."""
+    _, magic = struct.unpack_from("<II", b, p)
+    assert magic == 0x01234567, hex(magic)
+    regs = struct.unpack_from("<19I", b, p + 8)
+    pf = struct.unpack_from("<2I", b, p + 84)
+    n, = struct.unpack_from("<I", b, p + 92)
+    p += 96
+    ram = []
+    for _ in range(n):
+        addr, word = struct.unpack_from("<IH", b, p)
+        p += 6
+        ram += [struct.pack("<IB", addr, word >> 8), struct.pack("<IB", addr | 1, word & 0xFF)]
+    return p, struct.pack("<19I2H I", *regs, pf[0] & 0xFFFF, pf[1] & 0xFFFF, len(ram)) + b"".join(ram)
+
+
+def fetch_sst_m68k(name):
+    """Return the path of the binary form of one m68000 family ("ADD.b", ...;
+    format: cpu/m68k/m68k_tests.c), downloading it."""
+    path = os.path.join(ROMS, "sst_m68000", name + ".bin")
+    if os.path.exists(path):
+        return path
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    req = urllib.request.Request(M68K_URL % (M68K_COMMIT, name), headers={"User-Agent": "retrocast-tests"})
+    b = urllib.request.urlopen(req, timeout=300).read()
+    magic, count = struct.unpack_from("<II", b, 0)
+    assert magic == 0x1A3F5D71, hex(magic)
+    p, out = 8, [struct.pack("<I", count)]
+    for _ in range(count):
+        assert struct.unpack_from("<II", b, p)[1] == 0xABC12367
+        assert struct.unpack_from("<II", b, p + 8)[1] == 0x89ABCDEF
+        p += 16 + 4 + struct.unpack_from("<I", b, p + 16)[0]  # the test's name: not kept
+        p, initial = _m68k_state(b, p)
+        p, final = _m68k_state(b, p)
+        assert struct.unpack_from("<II", b, p)[1] == 0x456789AB
+        length, ntx = struct.unpack_from("<II", b, p + 8)
+        p += 16
+        tx = []
+        for _ in range(ntx):
+            kind, clocks = struct.unpack_from("<BI", b, p)
+            p += 5
+            fc = addr = data = uds = lds = 0
+            if kind:
+                fc, addr, data, uds, lds = struct.unpack_from("<5I", b, p)
+                p += 20
+            tx.append(struct.pack("<BHBIHBB", kind, clocks, fc, addr & 0xFFFFFF, data & 0xFFFF, uds, lds))
+        out.append(initial + final + struct.pack("<II", length, ntx) + b"".join(tx))
+    with open(path + ".tmp", "wb") as f:
+        f.write(b"".join(out))
+    os.replace(path + ".tmp", path)
+    return path
+
+
 GB_ROMS_URL = "https://github.com/c-sp/game-boy-test-roms/releases/download/v7.0/game-boy-test-roms-v7.0.zip"
 GB_ROMS_SHA = "b9a9d7a1075aa35a3d07c07c34974048672d8520dca9e07a50178f5860c3832c"
 
@@ -300,4 +373,9 @@ if __name__ == "__main__":
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(8) as ex:
             for p in ex.map(fetch_sst_z80, Z80_FILES):
+                print(p)
+    if "--sst-m68k" in sys.argv:  # 68000 CPU: ~400 MB download, ~1 GB on disk
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(8) as ex:
+            for p in ex.map(fetch_sst_m68k, M68K_FILES):
                 print(p)

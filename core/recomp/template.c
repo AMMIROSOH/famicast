@@ -47,6 +47,18 @@ void template_expand(Buf *o, const char *s, uint32_t *pc, const uint8_t *mem, ui
             bprintf(o, "fetch_k(c, 0x%04X, 0x%02X)", (unsigned)(*pc & mask), mem[*pc & mask]);
             if (*s == 'F') *pc = (*pc + 1) & mask;
             break;
+        case 'Q':  /* the queued word, no bus access */
+            if (!pc) bprintf(o, "c->irc");
+            else bprintf(o, "0x%04X", mem[(*pc - 2) & mask] << 8 | mem[(*pc - 1) & mask]);
+            break;
+        case 'W': case 'N': {  /* 68000: a word from the prefetch queue, the next one read at the PC */
+            if (!pc) { bprintf(o, *s == 'W' ? "fetch_w(c)" : "prefetch(c)"); break; }
+            uint32_t k = (uint32_t)(*pc - 2) & mask;
+            if (*s == 'W') bprintf(o, "fetch_wk(c, 0x%06X, 0x%04X)", (unsigned)(*pc & mask), mem[k] << 8 | mem[(k + 1) & mask]);
+            else bprintf(o, "prefetch_k(c, 0x%06X)", (unsigned)(*pc & mask));
+            *pc = (*pc + 2) & mask;
+            break;
+        }
         case 'P': if (pc) bprintf(o, "0x%04X", (unsigned)(*pc & mask)); else bprintf(o, "c->pc"); break;
         case 'J': if (jump) *jump = 1; /* fall through */
         case 'B': bprintf(o, "c->pc ="); break;

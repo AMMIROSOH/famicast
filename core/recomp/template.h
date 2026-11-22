@@ -9,6 +9,11 @@
  *   @I  step the PC          c->pc++
  *   @J  jump                 c->pc =   (from the next line on the PC is a run-time value)
  *   @B  taken branch         c->pc =   (inside a condition: on the other path the PC stays known)
+ * The 68000 fetches words through its prefetch queue (the PC is the next
+ * prefetch address, two words past the opcode):
+ *   @W  extension word       fetch_w(c)   the queued word; the next one read at the PC
+ *   @N  prefetch             prefetch(c)  the instruction's last queue refill
+ *   @Q  the queued word      c->irc       without a bus access (a branch's displacement)
  * A CPU's helpers (rd, fetch_k) take the Cpu as `c`. */
 #ifndef CORE_TEMPLATE_H
 #define CORE_TEMPLATE_H
@@ -17,7 +22,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-enum { MAX_LINES = 16, LINE_LEN = 128 };
+enum { MAX_LINES = 32, LINE_LEN = 128 };
 typedef struct {
     int n;
     char s[MAX_LINES][LINE_LEN];
@@ -40,9 +45,9 @@ void buf_write_file(const char *path, const Buf *b);  /* exits on error */
  * fetches become fetch_k() with the byte from mem as a constant, the PC's
  * value a constant; *fetched gets bit k for each byte fetched at offset k
  * from `at`, and @J sets *jump. Addresses are 32 bits, wrapped by `mask`
- * (the 6502 and SM83: $FFFF; mem holds mask + 1 bytes).
- * shortcut: fetches are single bytes; a CPU that fetches 16-bit words
- * (the 68000) needs a marker for them and big-endian constants. */
+ * (the 6502 and SM83: $FFFF; the 68000: $FFFFFF; mem holds mask + 1
+ * bytes). @W gives the queued word (at PC - 2) as a big-endian constant and
+ * reads at the PC; both word markers step the PC by 2. */
 void template_expand(Buf *o, const char *s, uint32_t *pc, const uint8_t *mem, uint32_t mask, uint32_t at,
                      unsigned *fetched, int *jump);
 /* indent, the line as the interpreter's C, newline */
