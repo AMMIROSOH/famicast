@@ -9,7 +9,7 @@ test; it is "done" only when that test passes in CI.
 |---|---|---|
 | NES and Famicom Disk System | [M0-M11, speed passes](../nes/docs/roadmap.md) | done (a few test ROMs and boards open) |
 | Game Boy and Game Boy Color | [G1-G6](../gb/docs/roadmap.md) | done (timing tests and RAM code open) |
-| Sega Genesis / Mega Drive | [C1-C2 (CPUs), D1-D5](../genesis/docs/roadmap.md) | CPUs in progress |
+| Sega Genesis / Mega Drive | [C1-C2 (CPUs), D1-D5](../genesis/docs/roadmap.md) | done (public test ROMs and a console recording open) |
 | Next systems | Master System, arcade (CPS-1, Neo Geo), SNES, GBA: not started | open |
 
 A new system follows the same steps: CPU templates and interpreter
