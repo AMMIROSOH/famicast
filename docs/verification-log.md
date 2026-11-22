@@ -4,7 +4,8 @@ What was checked, how, and the result. Newest first. A claim without a
 reproducible check is not "verified".
 
 Checks of one system: [NES](../nes/docs/verification-log.md),
-[Game Boy](../gb/docs/verification-log.md).
+[Game Boy](../gb/docs/verification-log.md),
+[Genesis](../genesis/docs/verification-log.md).
 
 ## 2026-11-22 · CPUs in cpu/
 - **Same output**: the generated interpreter switches (`cpu6502_switch.inc`,

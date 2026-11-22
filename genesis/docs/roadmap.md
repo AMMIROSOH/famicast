@@ -7,7 +7,7 @@ recompiler. A milestone is done when its exit test passes in CI.
 
 | Milestone | Content | State |
 |---|---|---|
-| [C1](#c1--z80-cpuz80) | Z80 templates and interpreter (`cpu/z80`) | open |
+| [C1](#c1--z80-cpuz80) | Z80 templates and interpreter (`cpu/z80`) | done |
 | [C2](#c2--68000-cpum68k) | 68000 templates and interpreter (`cpu/m68k`) | open |
 | [D1](#d1--the-machine) | memory map, I/O, Z80 bus arbitration, cartridges | open |
 | [D2](#d2--vdp) | the VDP: planes, window, sprites, DMA, interrupts | open |
@@ -56,13 +56,13 @@ corrects this list where they disagree.
   262 lines a frame (PAL 313).
 
 ## C1 · Z80 (cpu/z80)
-- [ ] Templates for every opcode, documented and undocumented (CB, DD,
+- [x] Templates for every opcode, documented and undocumented (CB, DD,
   ED, FD, DDCB, FDCB tables), written once as for the SM83; the
   interpreter's switch generated from them (`z80_gen`); names prefixed
   `z80_` (cpu/README.md).
-- [ ] Interrupts (IM 0/1/2, NMI), HALT, the R register, the undocumented
+- [x] Interrupts (IM 0/1/2, NMI), HALT, the R register, the undocumented
   flags (bits 3 and 5, from WZ where the hardware takes them).
-- [ ] **Exit:** SingleStepTests z80 (pinned commit), every file: registers,
+- [x] **Exit:** SingleStepTests z80 (pinned commit), every file: registers,
   flags, RAM, I/O ports, and the bus cycle by cycle.
 
 ## C2 · 68000 (cpu/m68k)
