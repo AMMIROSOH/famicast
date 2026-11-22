@@ -15,7 +15,7 @@ own.
 | NES and Famicom Disk System | 74 mappers (99.7% of licensed releases load), FDS, expansion sound, NTSC/PAL/Dendy; recompiled | [nes/README.md](nes/README.md) |
 | Game Boy and Game Boy Color | ROM only, MBC1/2/3/5 (MBC3 clock), DMG and CGB mode; recompiled | [gb/README.md](gb/README.md) |
 | Sega Genesis / Mega Drive | 68000, Z80, VDP, PSG and YM2612, 3- and 6-button pads, battery saves; recompiled (68000) | [genesis/README.md](genesis/README.md) |
-| Atari 2600 | Interpreter and recompiler in development, 2K/4K/F8/F6/F4 cartridges, NTSC and PAL | [atari2600/README.md](atari2600/README.md) |
+| Atari 2600 | 2K/4K/F8/F6/F4 cartridges, TIA picture and sound, NTSC and PAL, joystick; recompiled; no Superchip RAM or other schemes, paddles or SECAM | [atari2600/README.md](atari2600/README.md) |
 
 ## How it works
 1. Each system has a recompiler (`nes/recomp/` → `nesrecomp`, `gb/recomp/`
