@@ -131,15 +131,16 @@ if(WERROR)
     add_compile_options($<IF:$<C_COMPILER_ID:MSVC>,/WX,-Werror>)
 endif()
 
-# The systems to build (CI builds the ones a change touches): nes, gb.
-set(SYSTEMS "nes;gb" CACHE STRING "Systems to build (semicolon-separated): nes, gb")
+# The systems to build (CI builds the ones a change touches): nes, gb, genesis.
+set(SYSTEMS "nes;gb;genesis" CACHE STRING "Systems to build (semicolon-separated): nes, gb, genesis")
 # The CPUs they use (cpu/): added once each, before the systems.
 set(CPU_nes 6502)
 set(CPU_gb sm83)
+set(CPU_genesis "")  # the 68000 and the Z80 (cpu/m68k, cpu/z80) as they are added
 set(cpus "")
 foreach(sys IN LISTS SYSTEMS)
-    if(NOT sys MATCHES "^(nes|gb)$")
-        message(FATAL_ERROR "SYSTEMS: unknown system ${sys} (nes, gb)")
+    if(NOT sys MATCHES "^(nes|gb|genesis)$")
+        message(FATAL_ERROR "SYSTEMS: unknown system ${sys} (nes, gb, genesis)")
     endif()
     list(APPEND cpus ${CPU_${sys}})
 endforeach()

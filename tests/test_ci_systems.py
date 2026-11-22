@@ -19,7 +19,7 @@ class TestCiSystems(unittest.TestCase):
 
     def test_shared_code_selects_every_system(self):
         for f in ("core/frontend/sdl3_main.c", "CMakeLists.txt", "tests/fetch_test_roms.py", ".github/workflows/ci.yml"):
-            self.assertEqual(systems_for([f, "gb/runtime/gb.c"]), ["nes", "gb"], f)
+            self.assertEqual(systems_for([f, "gb/runtime/gb.c"]), ["nes", "gb", "genesis"], f)
 
     def test_cpu_folder_selects_its_systems(self):
         self.assertEqual(systems_for(["cpu/6502/c6502.c"]), ["nes"])
@@ -28,8 +28,8 @@ class TestCiSystems(unittest.TestCase):
         self.assertEqual(systems_for(["cpu/README.md"]), [])
 
     def test_unknown_cpu_selects_every_system(self):
-        for f in ("cpu/z80/z80.c", "cpu/CMakeLists.txt"):
-            self.assertEqual(systems_for([f]), ["nes", "gb"], f)
+        for f in ("cpu/arm7/arm7.c", "cpu/CMakeLists.txt"):
+            self.assertEqual(systems_for([f]), ["nes", "gb", "genesis"], f)
 
     def test_two_systems(self):
         self.assertEqual(systems_for(["gb/runtime/gb.c", "nes/runtime/nes.c"]), ["nes", "gb"])
