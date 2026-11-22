@@ -10,9 +10,8 @@ as in the [README](../../README.md#recompiling-a-game)).
   all 1,604 SingleStepTests z80 files pass: 1,604,000 tests, state, ports
   and every T-state of the bus.
 - **68000** (`cpu/m68k`, the main CPU): the interpreter passes
-  SingleStepTests m68000 on 125 of its 127 instruction families, every bus
-  transaction with its clocks included (99.7% of the 317,500 tests); MOVE.l
-  misses the flags of some address errors (roadmap C2).
+  SingleStepTests m68000 on all 127 of its instruction families, every bus
+  transaction with its clocks included (317,500 tests).
 - **The machine** (roadmap D1): memory maps, I/O and pads, Z80 control,
   cartridge with battery RAM, TMSS, both CPUs on one clock; 1,556 of the
   1,566 games of the licensed set reach their first VDP writes.

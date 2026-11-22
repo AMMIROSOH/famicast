@@ -8,7 +8,7 @@ recompiler. A milestone is done when its exit test passes in CI.
 | Milestone | Content | State |
 |---|---|---|
 | [C1](#c1--z80-cpuz80) | Z80 templates and interpreter (`cpu/z80`) | done |
-| [C2](#c2--68000-cpum68k) | 68000 templates and interpreter (`cpu/m68k`) | done (MOVE.l address-error flags open) |
+| [C2](#c2--68000-cpum68k) | 68000 templates and interpreter (`cpu/m68k`) | done |
 | [D1](#d1--the-machine) | memory map, I/O, Z80 bus arbitration, cartridges | done but the public test ROMs |
 | [D2](#d2--vdp) | the VDP: planes, window, sprites, DMA, interrupts | done but the public test ROMs |
 | [D3](#d3--window-program) | the window program, pads, save states | done |
@@ -76,13 +76,10 @@ corrects this list where they disagree.
   instructions, line A/F, TRAP, TRAPV, CHK, divide by zero, trace,
   interrupts by level (the last two not in the corpus). Bus errors are not
   raised (no system needs them yet).
-- [x] **Exit:** SingleStepTests m68000 (pinned commit): 125 of 127
-  families pass every test on state and on every bus transaction with its
-  clocks; TAS and TRAPV by state only (the corpus' README: their logs are
-  not reliable), both pass.
-- [ ] Open: MOVE.l, 2,206 of 2,500: on an address error in its write the
-  flags it leaves depend on how far the microcode got (unchanged, V and C
-  cleared, or N and Z of the first word written), not yet modelled.
+- [x] **Exit:** SingleStepTests m68000 (pinned commit): all 127 families
+  pass every test on state and on every bus transaction with its clocks;
+  TAS and TRAPV by state only (the corpus' README: their logs are not
+  reliable), both pass.
 
 ## D1 · The machine
 - [x] The memory maps above, the I/O ports (3- and 6-button pads), the

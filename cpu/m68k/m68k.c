@@ -235,9 +235,23 @@ static int move(int op, int sz) {
     }
     /* a write fault pushes the prefetch address after (An) and (An)+, less 2 after the others */
     L("c->ae_adj = %d;", de == AI || de == PI ? 0 : -2);
-    /* to (An) and (An)+ a long's flags are the low word's until its write is done */
-    int early = sz == 4 && (de == AI || de == PI);
-    L("(void)f_logic(c, s, %d);", early ? 2 : sz);
+    /* A long's flags when its write faults are the state the microcode has
+     * reached. A source from a register or an immediate has not touched the
+     * flags yet: to (An)/(An)+ they are still unchanged, to d(An)/d(An,Xn)
+     * only N and Z of the first word are set (V and C kept). A memory source
+     * has set them while reading the operand: the low word's to (An)/(An)+,
+     * the full long's to the other destinations. The final long's flags are
+     * set after a successful write. */
+    int src_reg = se == DN || se == AN || se == IMM, full_before = 0;
+    if (sz == 4 && (de == AI || de == PI || de == AL)) {
+        if (!src_reg) L("(void)f_logic(c, s, 2);");
+        else if (de == AL) L("(void)f_logic(c, s, 4);"), full_before = 1;
+    } else if (sz == 4 && (de == DI || de == IX)) {
+        if (src_reg) L("ccr(c, M68K_X | M68K_V | M68K_C, nz(s >> 16, 2));");
+        else L("(void)f_logic(c, s, 4);"), full_before = 1;
+    } else {
+        L("(void)f_logic(c, s, %d);", sz), full_before = 1;
+    }
     if (de == PD) {
         L("@N;");
         L(sz == 4 ? "wr32r(c, da, s);" : "wr%d(c, da, s);", sz * 8);
@@ -246,7 +260,7 @@ static int move(int op, int sz) {
     }
     L(sz == 4 ? "wr32(c, da, s);" : "wr%d(c, da, s);", sz * 8);
     flush();
-    if (early) L("(void)f_logic(c, s, 4);");
+    if (!full_before) L("(void)f_logic(c, s, 4);");  /* the final long's flags, once written */
     if (de == AL && is_mem(se)) L("(void)@W;");
     L("@N;");
     return 1;
