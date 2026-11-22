@@ -22,9 +22,11 @@ target_link_libraries(md_recomp_none PUBLIC mdcore)
 add_executable(genesis_headless tests/genesis_headless.c)
 target_link_libraries(genesis_headless PRIVATE mdcore md_recomp_none)
 
-# The machine's self-checks (tests/genesis/test_machine.py)
-add_executable(md_tests tests/md_tests.c)
-target_link_libraries(md_tests PRIVATE mdcore md_recomp_none)
+if(TESTS)
+    # The machine's self-checks (tests/genesis/test_machine.py)
+    add_executable(md_tests tests/md_tests.c)
+    target_link_libraries(md_tests PRIVATE mdcore md_recomp_none)
+endif()
 
 if(FRONTEND)
     frontend_system(genesis mdcore md_recomp_none)  # in retrocast
@@ -80,18 +82,20 @@ function(genesis_recompile name rom)
     endif()
 endfunction()
 
-# A ROM of random 68000 instructions (tests/random_rom.c), recompiled with a
-# trace: tests/genesis/test_recomp.py runs it in lockstep with the
-# interpreter (CI has no game ROMs).
-add_executable(random_rom tests/random_rom.c)
-target_link_libraries(random_rom PRIVATE m68k_templates)
-add_custom_command(
-    OUTPUT ${GEN_DIR}/mdtest_random.md
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN_DIR}
-    COMMAND random_rom ${GEN_DIR}/mdtest_random.md
-    DEPENDS random_rom
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Making a ROM of random 68000 instructions")
-set(AUTO_HINTS ON)
-genesis_recompile(mdtest_random ${GEN_DIR}/mdtest_random.md)
-unset(AUTO_HINTS)  # the cache value again, for the games
+if(TESTS)
+    # A ROM of random 68000 instructions (tests/random_rom.c), recompiled with a
+    # trace: tests/genesis/test_recomp.py runs it in lockstep with the
+    # interpreter (CI has no game ROMs).
+    add_executable(random_rom tests/random_rom.c)
+    target_link_libraries(random_rom PRIVATE m68k_templates)
+    add_custom_command(
+        OUTPUT ${GEN_DIR}/mdtest_random.md
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN_DIR}
+        COMMAND random_rom ${GEN_DIR}/mdtest_random.md
+        DEPENDS random_rom
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Making a ROM of random 68000 instructions")
+    set(AUTO_HINTS ON)
+    genesis_recompile(mdtest_random ${GEN_DIR}/mdtest_random.md)
+    unset(AUTO_HINTS)  # the cache value again, for the games
+endif()

@@ -24,6 +24,8 @@ add_custom_command(
 add_library(m68k STATIC m68k_cpu.c ${GEN_DIR}/m68k_handlers.inc)
 target_include_directories(m68k PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${GEN_DIR})
 
-# SingleStepTests m68000 on a flat bus (tests/genesis/test_m68k.py)
-add_executable(m68k_tests m68k_tests.c)
-target_link_libraries(m68k_tests PRIVATE m68k)
+if(TESTS)
+    # SingleStepTests m68000 on a flat bus (tests/genesis/test_m68k.py)
+    add_executable(m68k_tests m68k_tests.c)
+    target_link_libraries(m68k_tests PRIVATE m68k)
+endif()

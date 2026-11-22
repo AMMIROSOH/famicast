@@ -13,8 +13,10 @@ add_library(recomp_none STATIC runtime/recomp_none.c)
 target_include_directories(recomp_none PUBLIC runtime)
 target_link_libraries(recomp_none PUBLIC cpu6502)
 
-add_executable(cpu_tests tests/cpu_tests.c)
-target_link_libraries(cpu_tests PRIVATE cpu6502 recomp_none)
+if(TESTS)
+    add_executable(cpu_tests tests/cpu_tests.c)
+    target_link_libraries(cpu_tests PRIVATE cpu6502 recomp_none)
+endif()
 
 # The NES system: bus, PPU, cartridge (implements cpu_read/cpu_write).
 add_library(nescore STATIC runtime/nes.c runtime/ppu.c runtime/apu.c runtime/cart.c runtime/fds.c
@@ -119,7 +121,7 @@ endfunction()
 # nestest (public, fetched by tests/fetch_test_roms.py): checks the recompiler
 # against nestest.log through the CPU test runner.
 set(NESTEST_ROM ${CMAKE_SOURCE_DIR}/tests/roms/nestest.nes)
-if(EXISTS ${NESTEST_ROM})
+if(TESTS AND EXISTS ${NESTEST_ROM})
     # hand-made hints only: tests/nes/test_recomp.py compares its blocks with nestest.log
     set(AUTO_HINTS OFF)
     nes_recompile(nestest ${NESTEST_ROM} ${CMAKE_SOURCE_DIR}/tests/nes/data/nestest.toml)

@@ -24,6 +24,8 @@ add_custom_command(
 add_library(sm83 STATIC sm83_cpu.c ${GEN_DIR}/sm83_switch.inc)
 target_include_directories(sm83 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${GEN_DIR})
 
-# SingleStepTests sm83 on a flat bus (tests/gb/test_cpu.py)
-add_executable(gb_cpu_tests sm83_tests.c)
-target_link_libraries(gb_cpu_tests PRIVATE sm83)
+if(TESTS)
+    # SingleStepTests sm83 on a flat bus (tests/gb/test_cpu.py)
+    add_executable(gb_cpu_tests sm83_tests.c)
+    target_link_libraries(gb_cpu_tests PRIVATE sm83)
+endif()
