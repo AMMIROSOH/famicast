@@ -117,6 +117,63 @@ def fetch_sst_sm83(name):
     return path
 
 
+# SingleStepTests z80 (MIT): 1,000 single-instruction tests per Z80 opcode
+# ("cb 46", "dd 21", "ed b0", "dd cb __ 06": the displacement is random), with
+# the bus state of every T-state. Pinned to a commit.
+Z80_COMMIT = "ebe1875d48f374bcfd4b505d8eb8ee751568b5f7"
+Z80_URL = "https://raw.githubusercontent.com/SingleStepTests/z80/%s/v1/%s.json"
+Z80_MAGIC = b"Z80S"  # the first converter dropped the cycles and had no magic: such files are fetched again
+# The 1,604 files of v1 (listed from the repository tree at the pinned commit): every
+# unprefixed opcode but the four prefixes, the CB table, DD and FD (the same 252), ED 40-7F
+# and the sixteen block instructions, DD CB and FD CB (one file per opcode, d random).
+Z80_FILES = (["%02x" % i for i in range(256) if i not in (0xCB, 0xDD, 0xED, 0xFD)]
+             + ["cb %02x" % i for i in range(256)]
+             + ["%s %02x" % (p, i) for p in ("dd", "fd") for i in range(256) if i not in (0xCB, 0xDD, 0xED, 0xFD)]
+             + ["ed %02x" % i for i in range(0x40, 0x80)]
+             + ["ed %02x" % i for i in (0xA0, 0xA1, 0xA2, 0xA3, 0xA8, 0xA9, 0xAA, 0xAB,
+                                        0xB0, 0xB1, 0xB2, 0xB3, 0xB8, 0xB9, 0xBA, 0xBB)]
+             + ["%s cb __ %02x" % (p, i) for p in ("dd", "fd") for i in range(256)])
+
+
+def _pack_z80(st):
+    out = struct.pack("<3H8B6H8BH", st["pc"], st["sp"], st["wz"],
+                      *[st[k] for k in ("a", "f", "b", "c", "d", "e", "h", "l")],
+                      st["ix"], st["iy"], st["af_"], st["bc_"], st["de_"], st["hl_"],
+                      *[st[k] for k in ("i", "r", "im", "p", "q", "iff1", "iff2", "ei")], len(st["ram"]))
+    return out + b"".join(struct.pack("<HB", a, v) for a, v in st["ram"])
+
+
+def fetch_sst_z80(name):
+    """Return the path of the binary form of one z80 file (names in Z80_FILES;
+    format: see cpu/z80/z80_tests.c), downloading it. Initial and final state,
+    RAM, the port accesses and the bus state of every T-state are kept."""
+    path = os.path.join(ROMS, "sst_z80", name.replace(" ", "_") + ".bin")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            if f.read(len(Z80_MAGIC)) == Z80_MAGIC:
+                return path
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    req = urllib.request.Request(Z80_URL % (Z80_COMMIT, name.replace(" ", "%20")),
+                                 headers={"User-Agent": "retrocast-tests"})
+    tests = json.loads(urllib.request.urlopen(req, timeout=120).read())
+    out = [Z80_MAGIC, struct.pack("<I", len(tests))]
+    for t in tests:
+        label = t["name"].encode()
+        out.append(struct.pack("<B", len(label)) + label)
+        out.append(_pack_z80(t["initial"]) + _pack_z80(t["final"]))
+        ports = t.get("ports", [])
+        out.append(struct.pack("<H", len(ports)))
+        out += [struct.pack("<HBB", a, v, k == "w") for a, v, k in ports]
+        out.append(struct.pack("<H", len(t["cycles"])))
+        # pins "rwmi" (read, write, memory, io) as a bit mask; no data (None) as -1
+        out += [struct.pack("<HhB", a, -1 if v is None else v, sum(1 << i for i, c in enumerate(pins) if c != "-"))
+                for a, v, pins in t["cycles"]]
+    with open(path + ".tmp", "wb") as f:
+        f.write(b"".join(out))
+    os.replace(path + ".tmp", path)
+    return path
+
+
 GB_ROMS_URL = "https://github.com/c-sp/game-boy-test-roms/releases/download/v7.0/game-boy-test-roms-v7.0.zip"
 GB_ROMS_SHA = "b9a9d7a1075aa35a3d07c07c34974048672d8520dca9e07a50178f5860c3832c"
 
@@ -237,4 +294,10 @@ if __name__ == "__main__":
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(8) as ex:
             for p in ex.map(fetch_sst_sm83, SM83_FILES):
+                print(p)
+
+    if "--sst-z80" in sys.argv:  # Z80: ~1.2 GB download, ~120 MB on disk
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(8) as ex:
+            for p in ex.map(fetch_sst_z80, Z80_FILES):
                 print(p)
