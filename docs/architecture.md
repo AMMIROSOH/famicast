@@ -24,8 +24,8 @@ retrocast/
     recomp/          template.c: instruction templates and their PC markers
   cpu/               CPUs, one folder each, shared by every system with that CPU
     README.md        what cpu/ holds and how a system uses a CPU
-    6502/            the 6502 (NES): opcode table, templates, interpreter, switch generator
-    sm83/            the SM83 (Game Boy): templates, interpreter, switch generator, test runner
+    6502/            e.g. the 6502: opcode table, templates, interpreter, switch generator
+    ...              one folder per CPU (the table in cpu/README.md)
   systems/           one folder per system
     nes/               the NES and the Famicom Disk System
       README.md, docs/ its status, mappers, roadmap, verification log
@@ -41,14 +41,13 @@ retrocast/
       recomp/          gbrecomp: recomp.c (regions, blocks), main.c
       runtime/         bus (gb.c), PPU, APU, cartridges; recomp_rt.h
       frontend.c, tests/
-    genesis/           the Sega Genesis / Mega Drive (68000 and Z80), the same parts
-    atari2600/         the Atari 2600 (6507), the same parts
-  tests/             Python unittest suite: nes/, gb/ per system; fetch_test_roms.py, shared helpers
+    ...                the other systems, laid out the same way
+  tests/             Python unittest suite: one folder per system; fetch_test_roms.py, shared helpers
   tools/             bench.py, smoke_games.py, make_release.py, ci_systems.py, ...
   dist/              README.txt for the release archives
   docs/              this: what is shared
 ```
-A new system is a new folder in `systems/`, beside `nes/` and `gb/` with the same parts.
+A new system is a new folder in `systems/`, beside the others, with the same parts.
 A new CPU is a new folder in `cpu/` (see [cpu/README.md](../cpu/README.md)).
 `tools/ci_systems.py` has the table of which systems use each CPU, so a
 change under `cpu/6502/` tests the NES. Code moves to `core/` once a
@@ -69,15 +68,16 @@ ROM ─► trace: <sys>_headless --play --misses (interpreter) ─┐
 
 ## Instruction templates
 Each CPU's instructions are written once, as a few lines of C per opcode
-(`cpu/6502/c6502.c`, `cpu/sm83/sm83.c`; see [cpu/README.md](../cpu/README.md)).
-The generator in each CPU folder writes that CPU's interpreter switch from
-them (`cpu6502_gen`, `sm83_gen`), and the recompilers build the recompiled
+(e.g. `cpu/6502/c6502.c`; see [cpu/README.md](../cpu/README.md)). The
+generator in each CPU folder (e.g. `cpu6502_gen`) writes that CPU's
+interpreter switch (the 68000: its handlers) from them, and the recompilers build the recompiled
 blocks from the same lines, so bus traffic and cycle counts of both are
 identical by construction. The templates never name the PC in C:
 every use is a marker (`core/recomp/template.h`: operand fetch, read at the
-PC, its value, step, jump, branch), which the interpreter expands to
-run-time C and the recompiler to constants (the code bytes and addresses
-it knows). A raw `c->pc` in a template stops the build, and so do operand
+PC, its value, step, jump, branch; for the 68000's prefetch queue also
+the extension word, the refill and the queued word), which the interpreter
+expands to run-time C and the recompiler to constants (the code bytes and
+addresses it knows). A raw `c->pc` in a template stops the build, and so do operand
 fetches that stop matching the instruction's size, so a template change
 cannot silently read the wrong bytes.
 
