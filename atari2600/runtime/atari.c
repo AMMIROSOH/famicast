@@ -137,8 +137,10 @@ int a26_save(Atari2600 *a, const char *path) {
     state.pal = a->pal;
     state.cpu = a->bus.cpu;
     state.cpu.bus = NULL;
-    memset(state.cpu.read_map, 0, sizeof state.cpu.read_map);
-    memset(state.cpu.write_map, 0, sizeof state.cpu.write_map);
+    for (unsigned i = 0; i < 32; i++) {
+        state.cpu.read_map[i] = NULL;
+        state.cpu.write_map[i] = NULL;
+    }
     state.riot = a->bus.riot;
     state.tia = a->tia;
     state.bank = a->bus.cart.bank;
@@ -185,8 +187,10 @@ int a26_load(Atari2600 *a, const char *path) {
     }
     if (pending != state.tia.pending_count) return -1;
     a->bus.cpu = state.cpu;
-    memset(a->bus.cpu.read_map, 0, sizeof a->bus.cpu.read_map);
-    memset(a->bus.cpu.write_map, 0, sizeof a->bus.cpu.write_map);
+    for (unsigned i = 0; i < 32; i++) {
+        a->bus.cpu.read_map[i] = NULL;
+        a->bus.cpu.write_map[i] = NULL;
+    }
     a->bus.riot = state.riot;
     a->tia = state.tia;
     a->bus.cart.bank = state.bank;
