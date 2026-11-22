@@ -1,6 +1,6 @@
 retrocast is a static recompiler for retro consoles: it translates a game's machine code into C and builds it into a native program, with a small runtime per system and an SDL3 window, sound and gamepads. Recompiled games are checked cycle by cycle against a built-in reference interpreter.
 
-Systems: NES and Famicom Disk System (6502), Game Boy and Game Boy Color (SM83), Genesis / Mega Drive (68000 and Z80), Atari 2600 (6507, in development).
+Systems: NES and Famicom Disk System (6502), Game Boy and Game Boy Color (SM83), Genesis / Mega Drive (68000 and Z80), Atari 2600 (6507).
 
 No games are included: bring your own legally dumped ROMs and disk images (disk games also need the FDS BIOS; Game Boy games need no BIOS).
 
