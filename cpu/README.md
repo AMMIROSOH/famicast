@@ -8,16 +8,19 @@ calls, so every system with the same CPU uses the same code.
 |-----|---------|-------|--------|
 | 6502 (the NES's 2A03) | NES and Famicom Disk System | SingleStepTests 2A03, nestest | [6502/](6502/) |
 | SM83 | Game Boy and Game Boy Color | SingleStepTests sm83 | [sm83/](sm83/) |
+| 68000 | Genesis / Mega Drive (in progress) | SingleStepTests m68000 | [m68k/](m68k/) |
 
 ## What a CPU folder holds
 - The instruction templates, written once: the opcode table and C per
-  opcode (`ops.c`, `c6502.c`; `sm83.c`). The interpreter's switch and the
-  recompiled code are both made from them.
+  opcode (`ops.c`, `c6502.c`; `sm83.c`; `m68k.c`). The interpreter's switch
+  and the recompiled code are both made from them. The 68000's templates
+  read register numbers from `op` at run time, so one body serves every
+  register: 1,541 handlers and a 64K table instead of a 64K-case switch.
 - The interpreter: `cpu6502.c`, `cpu6502.h`, `cpu6502_ops.h`; `sm83_cpu.c`,
-  `sm83_cpu.h`, `sm83_ops.h`.
-- The switch generator (`cpu6502_gen.c`, `sm83_gen.c`), which writes the
-  interpreter's opcode switch into `build/gen/` at build time.
-- The CPU test runner (`sm83_tests.c`). The 6502's runner is
+  `sm83_cpu.h`, `sm83_ops.h`; `m68k_cpu.c`, `m68k_cpu.h`, `m68k_ops.h`.
+- The switch generator (`cpu6502_gen.c`, `sm83_gen.c`, `m68k_gen.c`), which
+  writes the interpreter's opcode switch into `build/gen/` at build time.
+- The CPU test runner (`sm83_tests.c`, `m68k_tests.c`). The 6502's runner is
   `nes/tests/cpu_tests.c`, because it also runs nestest and recompiled code.
 - `CMakeLists.txt`: the library and generator targets.
 

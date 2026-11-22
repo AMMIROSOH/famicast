@@ -8,7 +8,7 @@ recompiler. A milestone is done when its exit test passes in CI.
 | Milestone | Content | State |
 |---|---|---|
 | [C1](#c1--z80-cpuz80) | Z80 templates and interpreter (`cpu/z80`) | open |
-| [C2](#c2--68000-cpum68k) | 68000 templates and interpreter (`cpu/m68k`) | open |
+| [C2](#c2--68000-cpum68k) | 68000 templates and interpreter (`cpu/m68k`) | done (MOVE.l address-error flags open) |
 | [D1](#d1--the-machine) | memory map, I/O, Z80 bus arbitration, cartridges | open |
 | [D2](#d2--vdp) | the VDP: planes, window, sprites, DMA, interrupts | open |
 | [D3](#d3--window-program) | the window program, pads, save states | open |
@@ -66,16 +66,23 @@ corrects this list where they disagree.
   flags, RAM, I/O ports, and the bus cycle by cycle.
 
 ## C2 · 68000 (cpu/m68k)
-- [ ] Templates per instruction and addressing mode, written once; the
-  interpreter generated from them; the two-word prefetch queue; names
-  prefixed `m68k_`.
-- [ ] Exceptions: address and bus errors, illegal and privileged
+- [x] Templates per instruction and addressing mode, written once
+  (`cpu/m68k/m68k.c`, markers `@W` `@N` `@Q` for the prefetch queue's
+  words); the interpreter's 1,541 handlers and its 64K table generated
+  from them (`m68k_gen`); the two-word prefetch queue; names prefixed
+  `m68k_`.
+- [x] Exceptions: address errors (the 7-word frame, the PC the microcode
+  pushes, which register steps stand), illegal and privileged
   instructions, line A/F, TRAP, TRAPV, CHK, divide by zero, trace,
-  interrupts by level.
-- [ ] **Exit:** SingleStepTests m68000 (pinned commit), all 127 families:
-  registers, SR, RAM, then every bus transaction with its cycles. The
-  corpus' README marks the transaction logs of TAS and TRAPV unreliable:
-  those two are checked by state only.
+  interrupts by level (the last two not in the corpus). Bus errors are not
+  raised (no system needs them yet).
+- [x] **Exit:** SingleStepTests m68000 (pinned commit): 125 of 127
+  families pass every test on state and on every bus transaction with its
+  clocks; TAS and TRAPV by state only (the corpus' README: their logs are
+  not reliable), both pass.
+- [ ] Open: MOVE.l, 2,206 of 2,500: on an address error in its write the
+  flags it leaves depend on how far the microcode got (unchanged, V and C
+  cleared, or N and Z of the first word written), not yet modelled.
 
 ## D1 · The machine
 - [ ] The memory maps above, the I/O ports (3- and 6-button pads), the
