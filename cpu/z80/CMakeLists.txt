@@ -21,8 +21,19 @@ add_custom_command(
     COMMENT "Generating the Z80 interpreter's opcode switch")
 
 # The interpreter (z80_cpu.c) and the instruction helpers (z80_ops.h).
-add_library(z80 STATIC z80_cpu.c ${GEN_DIR}/z80_switch.inc)
-target_include_directories(z80 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${GEN_DIR})
+# z80_library(NAME PREFIX): another copy with its functions and the bus it
+# calls renamed PREFIXz80_step, PREFIXz80_read, ... (z80_cpu.h), for a second
+# system with this CPU in the same program.
+set(Z80_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE INTERNAL "")  # seen from the systems' folders
+function(z80_library name prefix)
+    add_library(${name} STATIC ${Z80_DIR}/z80_cpu.c ${GEN_DIR}/z80_switch.inc)
+    target_include_directories(${name} PUBLIC ${Z80_DIR} PRIVATE ${GEN_DIR})
+    if(prefix)
+        target_compile_definitions(${name} PUBLIC Z80_PREFIX=${prefix})
+        add_dependencies(${name} z80)  # the switch's rule belongs to this folder's target
+    endif()
+endfunction()
+z80_library(z80 "")
 
 if(TESTS)
     # SingleStepTests z80 on a flat bus (tests/genesis/test_z80.py)

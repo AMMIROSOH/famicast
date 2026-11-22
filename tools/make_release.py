@@ -121,7 +121,8 @@ def main():
 
     # 3. stage
     for prog in ("retrocast", "nes_headless", "nesrecomp", "gb_headless", "gbrecomp",
-                 "genesis_headless", "mdrecomp", "atari2600_headless", "atari2600recomp"):
+                 "genesis_headless", "mdrecomp", "atari2600_headless", "atari2600recomp",
+                 "sms_headless"):
         shutil.copy2(os.path.join(build, prog + EXE), stage)
     for item in KIT_FILES:
         src = os.path.join(ROOT, item)
