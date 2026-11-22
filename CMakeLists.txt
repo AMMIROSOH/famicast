@@ -85,7 +85,7 @@ set(AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by AUTO_
 # Target name = file name without "(...)"/"[...]" tags, lower case,
 # non-alphanumerics -> '_' (e.g. "Arkista's Ring (U) [!].nes" -> arkista_s_ring);
 # hints are read from nes/games/<name>.toml or gb/games/<name>.toml when present.
-set(ROMS "" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .a26, .7z) to recompile (semicolon-separated)")
+set(ROMS "" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .a26) to recompile (semicolon-separated)")
 # Relative paths are relative to the folder cmake was run from (for the
 # release kit that is the archive folder, not kit/), else to this source
 # folder. CMake has no variable for the former, but a cmake -P child sees it
@@ -122,7 +122,7 @@ if(ROMS)
             message(FATAL_ERROR "ROMS: not found: ${rom} (looked in ${cwd} and ${CMAKE_SOURCE_DIR})")
         endif()
     endforeach()
-    set(ROMS "${absolute_roms}" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .a26, .7z) to recompile (semicolon-separated)" FORCE)
+    set(ROMS "${absolute_roms}" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .a26) to recompile (semicolon-separated)" FORCE)
 endif()
 
 # Warnings as errors (CI): our code only, SDL3 above is not affected.
@@ -164,7 +164,7 @@ foreach(rom IN LISTS ROMS)
     set(sys nes)
     if(ext STREQUAL ".gb" OR ext STREQUAL ".gbc")
         set(sys gb)
-    elseif(ext STREQUAL ".a26" OR ext STREQUAL ".7z")
+    elseif(ext STREQUAL ".a26")
         set(sys atari2600)
     endif()
     if(NOT sys IN_LIST SYSTEMS)

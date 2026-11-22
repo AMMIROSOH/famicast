@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Loads a raw cartridge or an archive containing one .a26 or .bin file.
+/* Loads a raw cartridge file.
  * The caller owns *data and frees it with free(). */
 int a26_load_rom(const char *path, uint8_t **data, size_t *size, char *err, size_t errlen);
 

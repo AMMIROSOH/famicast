@@ -115,27 +115,9 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DWERROR=ON "-DSYSTEMS=${{ needs.changes.outputs.cmake }}" || exit /b 1
           cmake --build build
 
-  atari-macos:
-    needs: changes
-    if: contains(fromJSON(needs.changes.outputs.systems), 'atari2600')
-    runs-on: macos-latest
-    env:
-      RETROCAST_STRICT: "1"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      - name: Build Atari player and recompiler
-        run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DWERROR=ON -DSYSTEMS=atari2600
-          cmake --build build --parallel
-      - name: Test
-        run: python -m unittest discover -s tests/atari2600 -t . -v
-
   ci-ok:
     if: always()
-    needs: [changes, data, build-test, frontend, atari-macos]
+    needs: [changes, data, build-test, frontend]
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed or had nothing to do

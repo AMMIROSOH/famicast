@@ -1,33 +1,7 @@
-if(EXISTS "${CMAKE_SOURCE_DIR}/third_party/lzma/C/7z.h")
-    set(sdk "${CMAKE_SOURCE_DIR}/third_party/lzma/C")
-else()
-    include(FetchContent)
-    FetchContent_Declare(atari_lzma_sdk
-        GIT_REPOSITORY https://github.com/ip7z/7zip.git
-        GIT_TAG 8c63d71ff886bda90c86db28466287f977374237
-        GIT_SHALLOW TRUE)
-    FetchContent_MakeAvailable(atari_lzma_sdk)
-    set(sdk ${atari_lzma_sdk_SOURCE_DIR}/C)
-endif()
-add_library(atari_lzma STATIC
-    ${sdk}/7zAlloc.c ${sdk}/7zArcIn.c ${sdk}/7zBuf.c ${sdk}/7zBuf2.c
-    ${sdk}/7zCrc.c ${sdk}/7zCrcOpt.c ${sdk}/7zDec.c ${sdk}/7zFile.c
-    ${sdk}/7zStream.c ${sdk}/Bcj2.c ${sdk}/Bra.c ${sdk}/Bra86.c
-    ${sdk}/BraIA64.c ${sdk}/CpuArch.c ${sdk}/Delta.c ${sdk}/Lzma2Dec.c
-    ${sdk}/LzmaDec.c)
-target_include_directories(atari_lzma PUBLIC ${sdk})
-target_compile_definitions(atari_lzma PRIVATE Z7_EXTRACT_ONLY)
-if(MSVC)
-    target_compile_options(atari_lzma PRIVATE /W0 /WX-)
-else()
-    target_compile_options(atari_lzma PRIVATE -w -Wno-error)
-endif()
-
 add_library(atari2600_cart STATIC runtime/cart.c)
 target_include_directories(atari2600_cart PUBLIC runtime)
 
 add_library(atari2600_loader STATIC runtime/loader.c)
-target_link_libraries(atari2600_loader PUBLIC atari_lzma)
 target_include_directories(atari2600_loader PUBLIC runtime)
 
 add_library(atari2600_bus STATIC runtime/bus.c runtime/riot.c)

@@ -87,11 +87,6 @@ def main():
             shutil.copytree(src, os.path.join(kit, item))
         else:
             shutil.copy2(src, kit)
-    sdk = os.path.join(ROOT, "third_party", "lzma", "C")
-    if not os.path.isfile(os.path.join(sdk, "7z.h")):
-        sdk = os.path.join(build, "_deps", "atari_lzma_sdk-src", "C")
-    shutil.copytree(sdk,
-                    os.path.join(kit, "third_party", "lzma", "C"))
     shutil.copy2(os.path.join(ROOT, "dist", "README.txt"), stage)
     shutil.copy2(os.path.join(ROOT, "LICENSE"), stage)
     shutil.copy2(os.path.join(sdl_src, "LICENSE.txt"), os.path.join(stage, "LICENSE-SDL3.txt"))
