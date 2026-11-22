@@ -46,9 +46,20 @@ typedef struct Gb {
     uint8_t p1, pad;
     /* PPU (ppu.c) */
     uint8_t lcdc, stat, scy, scx, ly, lyc, wy, wx, stat_line;
-    uint8_t mode;              /* STAT mode while the LCD is on */
+    uint8_t mode, mode_seen;   /* STAT mode while the LCD is on; what it was a dot before the cycle's end (what the CPU reads) */
+    uint8_t coin_hold;         /* the LY=LYC flag as the LCD was turned off */
+    uint8_t ly_seen;           /* the same for LY: STAT's coincidence flag is clear for a cycle after LY changes */
     uint8_t wy_hit, win_line;  /* LY reached WY this frame; the window's own line counter */
-    int dot, mode3_end;        /* dot in the line (0-455), where this line's mode 3 ends */
+    int dot;                   /* dot in the line (0-455) */
+    struct {                   /* mode 3 of this line, drawn a dot at a time (ppu.c) */
+        int x, stall, otile;          /* next pixel (160: mode 3 is over); dots left of a fetch stall */
+        uint8_t fine, pos;     /* SCX mod 8 at the line's start; next bit of the tile row in hand (8: fetch) */
+        uint8_t lo, hi, attr;  /* that row's two bit planes and (CGB) its map attributes */
+        uint8_t glitch, stage, ntile, nattr, ny, nlo, nhi;  /* the next row: fetch step done, tile, attributes, row in tile, bytes */
+        uint8_t col, wcol, win;  /* background and window tile columns fetched; the window has started */
+        uint8_t nobj, next, objs[10];  /* objects on the line by X; the next one to fetch */
+        uint8_t ob_ci[160], ob_fl[160], ob_ix[160];  /* object pixels so far: colour (0: none), OAM flags, OAM index */
+    } m3;
     uint16_t fb[160 * 144];    /* the frame being drawn: DMG shades 0 (light) - 3 (dark); CGB: RGB555 */
     uint16_t frame[160 * 144]; /* the last whole frame (copied at vblank; blank while the LCD is off) */
     uint32_t frame_count;      /* frames completed into `frame` */
@@ -99,6 +110,7 @@ int gb_state_load(Gb *g, const char *path, char *err, size_t errlen);
 uint8_t gb_compat_palettes(Gb *g);  /* cgb_compat.c: the boot ROM's palette for this game; returns its title checksum */
 void ppu_tick(Gb *g);
 int ppu_mode(const Gb *g);
+int ppu_vmode(const Gb *g);
 void ppu_stat_update(Gb *g);
 void ppu_stat_write(Gb *g, uint8_t v);
 void ppu_lcdc_write(Gb *g, uint8_t v);

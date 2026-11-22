@@ -5,6 +5,45 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.md).
 
+## 2026-11-19 · Game Boy: PPU drawn a dot at a time, PPU timing tests
+- **cgb-acid-hell**: 0 of 23,040 pixels differ from the reference
+  (`tests/gb/test_ppu.py`); before, 2 differed (one pixel on each of two
+  lines: its LCDC writes every 8 dots, one an LCDC.4 change just before
+  the tile's high byte is read, which then returns the tile number). The
+  result holds with the high byte read 4-6 pixels into the previous tile
+  and a glitch window of 4-8 dots, not at 7 pixels or 2 dots; shifting the
+  first pixel by 2 or 4 dots in either direction breaks it for 3 of the 4
+  shifts. dmg-acid2 and cgb-acid2 still exact.
+- **Mooneye PPU timing**: intr_2_mode0_timing, intr_2_mode0_timing_sprites,
+  intr_2_mode3_timing, intr_2_oam_ok_timing, lcdon_timing-GS,
+  lcdon_write_timing-GS, stat_lyc_onoff and vblank_stat_intr-GS pass and
+  are out of `OPEN`: 137 ROMs pass, 12 are open. How each was found: the
+  registers at the failing compare, read out of a ring of the last
+  instructions (D/E hold the loop counts), and the test sources' tables of
+  expected reads. What they say: STAT, VRAM and OAM see the mode a dot
+  before the cycle ends (free again a dot late, taken at once for reads);
+  an object costs 6 dots, +0-5 only for the first one in a background tile
+  (the sprites test is a table of about 100 cases); the LCD turned on starts line
+  0 four dots in, in mode 0, mode 3 two dots late; STAT's LY=LYC flag is
+  clear for a cycle after LY changes and is kept while the LCD is off
+  (the STAT line is held too); on the DMG the mode 2 source also fires as
+  line 144 begins.
+- **CGB palette RAM** reads $FF and ignores writes in mode 3 (the index
+  still steps); VRAM and OAM were closed to the CPU already.
+- **Games**: the 41 DMG and 36 Color games of the earlier sheets, 1,800
+  frames of scripted play, before and after: all 77 still end on a
+  title, menu or play picture (no frame turned blank or uniform). 10
+  pictures differ (2-7,600 pixels): the games' own timing moved a little
+  (LCD-on and STAT timing), the pictures seen are other moments of the
+  same play. 5 DMG games (recompiled, lockstep with the interpreter, 1,800
+  frames): 5 of 5 identical, 97.6-99.2% of CPU cycles recompiled.
+- **Speed**: Release (gcc), 3,000 frames of one game: DMG
+  1,766 frames/s before, 1,518 after; Color 1,182 before, 1,078 after (14%
+  and 9% slower: a loop over the dots of a mode 3 cycle).
+- **Not matched**: mealybug-tearoom's PPU tests (m3_* mid-line writes,
+  window timing; about 30 ROMs, each against its CGB or DMG screenshot) differ from their references by 10-22,000
+  pixels; not in the suite.
+
 ## 2026-11-19 · Game Boy G5: hint files and the misses of your own play
 - **Hint files** (`gb/games/NAME.toml`: `entries`, `banked`, `data`, `rom_fnv1a`)
   and `NAME.misses`: 8 new tests in `tests/gb/test_recomp.py` on a made-up

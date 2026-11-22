@@ -20,6 +20,20 @@ cartridge's clock. So every register access happens at its exact cycle,
 with no catch-up scheme (and no speed gain from recompiling either: the
 per-cycle stepping is most of the time).
 
+## PPU
+`ppu_tick` steps the PPU one dot at a time (4 a cycle, 2 in double speed).
+Mode 3 is drawn as it goes (`mode3_dot`): 12 dots + SCX mod 8 before the
+first pixel, then a pixel a dot, with stalls of 6 when the window starts
+and 6-11 for an object (the extra dots only for the first object in a
+background tile). The background is read a row at a time in three steps
+(map entry, low byte, high byte) at fixed pixels, so a write to LCDC,
+SCX, SCY or the palettes takes effect at its own pixel; objects are read
+whole when their X is reached. An LCDC.4 change a few dots before the high
+byte is read makes it read the tile number instead (what cgb-acid-hell
+shows). The mode the CPU reads (STAT, VRAM, OAM, CGB palette RAM) is the
+one a dot before the cycle ends, and the STAT interrupt line uses the real
+one. After the LCD is turned on line 0 has no mode 2 and is 452 dots long.
+
 ## Models
 A game whose header asks for the Color ($0143 bit 7) runs in CGB mode, any
 other as on the original Game Boy; `model` (`gb.ini`, `gb_headless

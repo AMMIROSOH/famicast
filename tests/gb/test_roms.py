@@ -34,16 +34,7 @@ MODELS = {
     "boot_div-A": "agb", "boot_regs-A": "agb", "boot_div-cgb0": "cgb0", "boot_div-cgbABCDE": "cgb",
     "boot_hwio-C": "cgb", "boot_regs-cgb": "cgb",
 }
-PPU = "PPU timing (G3)"
-OPEN = {
-    "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.gb": PPU,
-    "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites.gb": PPU,
-    "mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb": PPU,
-    "mooneye-test-suite/acceptance/ppu/intr_2_oam_ok_timing.gb": PPU,
-    "mooneye-test-suite/acceptance/ppu/lcdon_timing-GS.gb": PPU,
-    "mooneye-test-suite/acceptance/ppu/lcdon_write_timing-GS.gb": PPU,
-    "mooneye-test-suite/acceptance/ppu/stat_lyc_onoff.gb": PPU,
-    "mooneye-test-suite/acceptance/ppu/vblank_stat_intr-GS.gb": PPU,
+OPEN = {  # none now; a ROM that fails goes here with the reason
 }
 
 
