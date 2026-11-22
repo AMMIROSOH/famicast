@@ -38,8 +38,10 @@ console reset and select switches. F5 resets the emulator, F2 saves a state,
 and F4 loads it. Two gamepads are supported.
 
 The TIA clocks playfield groups, horizontal motion and audio independently.
-Sprite graphics still use a position-based renderer, so effects that change
-sprite size while a copy is being drawn and chip-specific late motion quirks
-can differ from hardware.
 Some cartridge formats are not implemented. Paddles, SECAM and cartridge RAM
 are not supported yet.
+
+## Roadmap
+
+- Improve TIA sprite rendering. Sprite size changes during drawing and some
+  late motion quirks still differ from hardware.
