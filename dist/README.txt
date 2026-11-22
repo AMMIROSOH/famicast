@@ -16,6 +16,10 @@ WHAT IS IN HERE
   gb_headless     The same without a window, for test ROMs (--frames N,
                   --wav FILE to record the sound).
   gbrecomp        The Game Boy recompiler: turns a ROM into C source.
+  atari2600       Atari 2600 interpreter in development. Accepts raw .a26 files.
+                  See kit/atari2600/README.md.
+  atari2600_headless  Atari 2600 interpreter without a window.
+  atari2600recomp Atari 2600 recompiler.
   kit/            Everything needed to build a recompiled game into a
                   native program (see below), with SDL3 prebuilt.
 

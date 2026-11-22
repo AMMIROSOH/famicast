@@ -82,13 +82,43 @@ static inline void op_AND(Cpu *c, uint8_t v) { c->a &= v; nz(c, c->a); }
 static inline void op_ORA(Cpu *c, uint8_t v) { c->a |= v; nz(c, c->a); }
 static inline void op_EOR(Cpu *c, uint8_t v) { c->a ^= v; nz(c, c->a); }
 static inline void op_ADC(Cpu *c, uint8_t v) {
+    if (c->decimal_enabled && (c->p & FLAG_D)) {
+        unsigned a = c->a, carry = c->p & FLAG_C;
+        unsigned binary = a + v + carry;
+        unsigned low = (a & 15) + (v & 15) + carry;
+        if (low >= 10) low = ((low + 6) & 15) + 16;
+        unsigned sum = (a & 0xF0) + (v & 0xF0) + low;
+        c->p = (uint8_t)((c->p & ~(FLAG_N | FLAG_Z | FLAG_V | FLAG_C)) |
+                         ((binary & 255) == 0 ? FLAG_Z : 0) | (sum & FLAG_N) |
+                         ((~(a ^ v) & (a ^ sum) & 0x80) ? FLAG_V : 0));
+        if (sum >= 0xA0) sum += 0x60;
+        if (sum >= 0x100) c->p |= FLAG_C;
+        c->a = (uint8_t)sum;
+        return;
+    }
     unsigned s = c->a + v + (c->p & FLAG_C);  /* 2A03: no decimal mode */
     c->p = (uint8_t)((c->p & ~(FLAG_C | FLAG_V)) | (s > 0xFF ? FLAG_C : 0) |
                      ((~(c->a ^ v) & (c->a ^ s) & 0x80) ? FLAG_V : 0));
     c->a = (uint8_t)s;
     nz(c, c->a);
 }
-static inline void op_SBC(Cpu *c, uint8_t v) { op_ADC(c, (uint8_t)~v); }
+static inline void op_SBC(Cpu *c, uint8_t v) {
+    if (c->decimal_enabled && (c->p & FLAG_D)) {
+        unsigned a = c->a, borrow = (c->p & FLAG_C) ? 0 : 1;
+        unsigned binary = a - v - borrow;
+        int low = (int)(a & 15) - (v & 15) - (int)borrow;
+        int high = (int)(a >> 4) - (v >> 4);
+        if (low < 0) { low -= 6; high--; }
+        if (high < 0) high -= 6;
+        c->p = (uint8_t)((c->p & ~(FLAG_N | FLAG_Z | FLAG_V | FLAG_C)) |
+                         ((binary & 255) == 0 ? FLAG_Z : 0) | (binary & FLAG_N) |
+                         (((a ^ v) & (a ^ binary) & 0x80) ? FLAG_V : 0) |
+                         (binary < 256 ? FLAG_C : 0));
+        c->a = (uint8_t)(((unsigned)high << 4) | ((unsigned)low & 15));
+        return;
+    }
+    op_ADC(c, (uint8_t)~v);
+}
 static inline void compare(Cpu *c, uint8_t r, uint8_t v) { set_c(c, r >= v); nz(c, (uint8_t)(r - v)); }
 static inline void op_CMP(Cpu *c, uint8_t v) { compare(c, c->a, v); }
 static inline void op_CPX(Cpu *c, uint8_t v) { compare(c, c->x, v); }
@@ -105,10 +135,17 @@ static inline void op_ALR(Cpu *c, uint8_t v) {
     c->a &= v; set_c(c, c->a & 1); c->a >>= 1; nz(c, c->a);
 }
 static inline void op_ARR(Cpu *c, uint8_t v) {
-    c->a = (uint8_t)(((c->a & v) >> 1) | ((c->p & FLAG_C) << 7));
+    uint8_t input = c->a & v;
+    c->a = (uint8_t)((input >> 1) | ((c->p & FLAG_C) << 7));
     nz(c, c->a);
     set_c(c, c->a & 0x40);
     c->p = (uint8_t)((c->p & ~FLAG_V) | (((c->a >> 6) ^ (c->a >> 5)) & 1 ? FLAG_V : 0));
+    if (c->decimal_enabled && (c->p & FLAG_D)) {
+        if ((input & 15) + (input & 1) > 5)
+            c->a = (uint8_t)((c->a & 0xF0) | ((c->a + 6) & 15));
+        set_c(c, (input & 0xF0) + (input & 0x10) > 0x50);
+        if (c->p & FLAG_C) c->a += 0x60;
+    }
 }
 static inline void op_AXS(Cpu *c, uint8_t v) {
     uint8_t t = c->a & c->x; set_c(c, t >= v); c->x = (uint8_t)(t - v); nz(c, c->x);

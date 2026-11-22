@@ -84,3 +84,10 @@ detail yet.
 | Library | Used for | License |
 |---------|----------|---------|
 | [SDL3](https://libsdl.org), tag `release-3.4.20` via CMake FetchContent | Window, audio, keyboard, gamepad | zlib |
+
+## Atari 2600
+
+- Stella, `src/emucore/M6532.cxx`, GPL-2.0-or-later, consulted for RIOT register and timer behavior: https://github.com/stella-emu/stella/blob/master/src/emucore/M6532.cxx
+- Stella, `src/emucore/tia/AudioChannel.cxx`, GPL-2.0-or-later, adapted for TIA audio channel counters: https://github.com/stella-emu/stella/blob/master/src/emucore/tia/AudioChannel.cxx
+- Stella, `src/emucore/tia/TIA.cxx` and `Player.hxx`, GPL-2.0-or-later, consulted for TIA write delays, horizontal sync, sprite motion clocks and collision gating: https://github.com/stella-emu/stella/tree/master/src/emucore/tia
+- Stella, `src/common/PaletteHandler.cxx`, GPL-2.0-or-later, standard NTSC and PAL color palettes: https://github.com/stella-emu/stella/blob/master/src/common/PaletteHandler.cxx

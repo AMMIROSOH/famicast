@@ -23,6 +23,7 @@ typedef struct Cpu {
     uint64_t cycles;  /* CPU cycles since power-on; +1 per bus access */
     void *bus;        /* owner's context for cpu_read/cpu_write */
     uint8_t open_bus; /* last value on the data bus */
+    uint8_t decimal_enabled; /* NMOS 6502 decimal arithmetic; disabled for NES 2A03 */
     /* Optional fast path, set up by the bus (all NULL/0 = every access goes
      * through cpu_read/cpu_write, as the test bus wants). read_map/write_map:
      * per 2 KB page, memory that can be accessed directly with no side

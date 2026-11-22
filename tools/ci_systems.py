@@ -13,8 +13,8 @@ import json
 import subprocess
 import sys
 
-SYSTEMS = ["nes", "gb", "genesis"]  # as in CMakeLists.txt SYSTEMS
-CPUS = {"6502": ["nes"], "sm83": ["gb"], "m68k": ["genesis"], "z80": ["genesis"]}  # cpu/<name>/ -> systems (CMakeLists.txt CPU_<system>)
+SYSTEMS = ["nes", "gb", "genesis", "atari2600"]  # as in CMakeLists.txt SYSTEMS
+CPUS = {"6502": ["nes", "atari2600"], "sm83": ["gb"], "m68k": ["genesis"], "z80": ["genesis"]}  # cpu/<name>/ -> systems (CMakeLists.txt CPU_<system>)
 DOCS = ("docs/", "dist/", ".github/release-notes.md", ".github/workflows/release.yml", "tools/make_release.py")
 
 

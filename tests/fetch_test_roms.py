@@ -82,6 +82,30 @@ def fetch_sst(opcode):
     return path
 
 
+NMOS_DECIMAL_OPCODES = (0x69, 0xE9, 0x6B, 0x67, 0xE7)
+NMOS_BUS_OPCODES = (0x00, 0x20, 0x40, 0x6C, 0x91, 0xBD, 0xD0, 0xFE)
+
+
+def fetch_sst_nmos(opcode):
+    """Fetch NMOS 6502 instruction and bus vectors in the shared runner format."""
+    path = os.path.join(ROMS, "sst_nmos", "%02x.bin" % opcode)
+    if os.path.exists(path):
+        return path
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    url = "https://raw.githubusercontent.com/SingleStepTests/65x02/%s/6502/v1/%02x.json"
+    req = urllib.request.Request(url % (SST_COMMIT, opcode), headers={"User-Agent": "retrocast-tests"})
+    vectors = json.loads(urllib.request.urlopen(req, timeout=120).read())
+    out = [struct.pack("<I", len(vectors))]
+    for vector in vectors:
+        out.append(_pack_state(vector["initial"]) + _pack_state(vector["final"]))
+        out.append(struct.pack("<H", len(vector["cycles"])))
+        out.extend(struct.pack("<HBB", a, v, kind == "write") for a, v, kind in vector["cycles"])
+    with open(path + ".tmp", "wb") as f:
+        f.write(b"".join(out))
+    os.replace(path + ".tmp", path)
+    return path
+
+
 # SingleStepTests sm83 (MIT): 1,000 single-instruction tests per Game Boy
 # opcode ("cb 46" for the CB table), with the bus state of every M-cycle.
 # Pinned to a commit.
@@ -362,6 +386,8 @@ if __name__ == "__main__":
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(8) as ex:
             for p in ex.map(fetch_sst, range(256)):
+                print(p)
+            for p in ex.map(fetch_sst_nmos, NMOS_DECIMAL_OPCODES + NMOS_BUS_OPCODES):
                 print(p)
     if "--sst-sm83" in sys.argv:  # Game Boy CPU: ~150 MB download, ~20 MB on disk
         from concurrent.futures import ThreadPoolExecutor

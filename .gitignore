@@ -6,6 +6,7 @@ roms/
 # build outputs
 out/
 build/
+/build-atari2600/
 /sdl3/
 __pycache__/
 *.pyc

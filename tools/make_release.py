@@ -4,10 +4,10 @@
 
 1. SDL3 (release-3.4.20), static, with the frontend's options (cmake/sdl3_options.cmake),
    installed into the staged kit/sdl3.
-2. nes, nes_headless, nesrecomp, gb, gb_headless and gbrecomp, Release, linked against that SDL3.
+2. NES, Game Boy and Atari 2600 programs, Release, linked against that SDL3.
 3. Stage: the programs, the recompile kit (this project's CMakeLists.txt, cmake/,
    core/, nes/, gb/ and the prebuilt SDL3), README.txt, licenses.
-4. Kit check: recompile a tiny generated ROM with the staged kit, as a user
+4. Kit check: recompile tiny generated ROMs with the staged kit, as a user
    would, and run the result headless.
 5. Archive: NAME.zip on Windows, NAME.tar.gz elsewhere, in --out.
 Used by .github/workflows/release.yml; needs git, CMake >= 3.20, a C compiler.
@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SDL_TAG = "release-3.4.20"  # as in CMakeLists.txt
 WIN = os.name == "nt"
 EXE = ".exe" if WIN else ""
-KIT_FILES = ["CMakeLists.txt", "cmake", "core", "cpu", "nes", "gb", "genesis"]
+KIT_FILES = ["CMakeLists.txt", "cmake", "core", "cpu", "nes", "gb", "genesis", "atari2600"]
 
 
 def run(*cmd, cwd=None):
@@ -43,6 +43,14 @@ def tiny_rom(path):
     prg[-6:] = bytes([0x00, 0xC0, 0x00, 0xC0, 0x00, 0xC0])  # NMI, RESET, IRQ = $C000
     with open(path, "wb") as f:
         f.write(b"NES\x1a\x01\x01\x00\x00" + bytes(8) + prg + bytes(0x2000))
+
+
+def tiny_atari_rom(path):
+    rom = bytearray(2048)
+    rom[:3] = bytes([0x4C, 0x00, 0xF0])  # JMP $F000
+    rom[-4:-2] = bytes([0x00, 0xF0])
+    with open(path, "wb") as f:
+        f.write(rom)
 
 
 def main():
@@ -70,7 +78,8 @@ def main():
     cmake_build(ROOT, build, "-DSDL3_PREFIX=" + os.path.join(kit, "sdl3"))
 
     # 3. stage
-    for prog in ("nes", "nes_headless", "nesrecomp", "gb", "gb_headless", "gbrecomp"):
+    for prog in ("nes", "nes_headless", "nesrecomp", "gb", "gb_headless", "gbrecomp",
+                 "atari2600", "atari2600_headless", "atari2600recomp"):
         shutil.copy2(os.path.join(build, prog + EXE), stage)
     for item in KIT_FILES:
         src = os.path.join(ROOT, item)
@@ -85,10 +94,14 @@ def main():
     # 4. kit check: recompile a ROM with the staged kit, then run it
     rom = os.path.join(work, "kit_check.nes")
     tiny_rom(rom)
+    atari_rom = os.path.join(work, "kit_check_atari.a26")
+    tiny_atari_rom(atari_rom)
     kit_build = os.path.join(work, "kit-build")
-    cmake_build(kit, kit_build, "-DROMS=" + rom)
+    cmake_build(kit, kit_build, "-DROMS=" + rom + ";" + atari_rom)
     run(os.path.join(kit_build, "kit_check_headless" + EXE), "--frames", "30")
     run(os.path.join(stage, "nes_headless" + EXE), rom, "--frames", "30")
+    run(os.path.join(kit_build, "kit_check_atari_headless" + EXE), "--frames", "2", "--diff")
+    run(os.path.join(stage, "atari2600_headless" + EXE), atari_rom, "--frames", "2")
 
     # 5. archive
     os.makedirs(a.out, exist_ok=True)

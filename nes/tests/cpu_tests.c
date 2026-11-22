@@ -92,7 +92,7 @@ static const uint8_t *read_state(const uint8_t *q, State *st) {
     return q + 9 + 3 * st->nram;
 }
 
-static int sst_file(const char *path) {
+static int sst_file(const char *path, int decimal_enabled) {
     long size;
     uint8_t *d = read_file(path, &size);
     const uint8_t *q = d + 4;
@@ -107,7 +107,8 @@ static int sst_file(const char *path) {
         q = cyc + 4 * ncyc;
 
         for (int i = 0; i < in.nram; i++) mem[in.ram[3 * i] | in.ram[3 * i + 1] << 8] = in.ram[3 * i + 2];
-        Cpu c = {.pc = in.pc, .s = in.s, .a = in.a, .x = in.x, .y = in.y, .p = in.p};
+        Cpu c = {.pc = in.pc, .s = in.s, .a = in.a, .x = in.x, .y = in.y, .p = in.p,
+                 .decimal_enabled = (uint8_t)decimal_enabled};
         log_n = 0;
         cpu_step(&c);
 
@@ -142,9 +143,10 @@ static int sst_file(const char *path) {
 int main(int argc, char **argv) {
     if (argc == 4 && !strcmp(argv[1], "nestest")) return nestest(argv[2], atol(argv[3]), 0);
     if (argc == 4 && !strcmp(argv[1], "nestest-recomp")) return nestest(argv[2], atol(argv[3]), 1);
-    if (argc >= 3 && !strcmp(argv[1], "sst")) {
+    if (argc >= 3 && (!strcmp(argv[1], "sst") || !strcmp(argv[1], "sst-nmos"))) {
         int bad = 0;
-        for (int i = 2; i < argc; i++) bad |= sst_file(argv[i]);
+        int decimal_enabled = !strcmp(argv[1], "sst-nmos");
+        for (int i = 2; i < argc; i++) bad |= sst_file(argv[i], decimal_enabled);
         return bad;
     }
     fprintf(stderr, "usage: cpu_tests nestest ROM N | cpu_tests sst FILE...\n");

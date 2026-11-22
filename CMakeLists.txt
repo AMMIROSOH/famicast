@@ -85,7 +85,7 @@ set(AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by AUTO_
 # Target name = file name without "(...)"/"[...]" tags, lower case,
 # non-alphanumerics -> '_' (e.g. "Arkista's Ring (U) [!].nes" -> arkista_s_ring);
 # hints are read from nes/games/<name>.toml or gb/games/<name>.toml when present.
-set(ROMS "" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .md, .gen, .bin) to recompile (semicolon-separated)")
+set(ROMS "" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .md, .gen, .bin, .a26) to recompile (semicolon-separated)")
 # Relative paths are relative to the folder cmake was run from (for the
 # release kit that is the archive folder, not kit/), else to this source
 # folder. CMake has no variable for the former, but a cmake -P child sees it
@@ -122,7 +122,7 @@ if(ROMS)
             message(FATAL_ERROR "ROMS: not found: ${rom} (looked in ${cwd} and ${CMAKE_SOURCE_DIR})")
         endif()
     endforeach()
-    set(ROMS "${absolute_roms}" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .md, .gen, .bin) to recompile (semicolon-separated)" FORCE)
+    set(ROMS "${absolute_roms}" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc, .md, .gen, .bin, .a26) to recompile (semicolon-separated)" FORCE)
 endif()
 
 # Warnings as errors (CI): our code only, SDL3 above is not affected.
@@ -132,15 +132,16 @@ if(WERROR)
 endif()
 
 # The systems to build (CI builds the ones a change touches): nes, gb, genesis.
-set(SYSTEMS "nes;gb;genesis" CACHE STRING "Systems to build (semicolon-separated): nes, gb, genesis")
+set(SYSTEMS "nes;gb;genesis;atari2600" CACHE STRING "Systems to build (semicolon-separated): nes, gb, genesis, atari2600")
 # The CPUs they use (cpu/): added once each, before the systems.
 set(CPU_nes 6502)
 set(CPU_gb sm83)
 set(CPU_genesis "m68k;z80")  # the 68000 and the Z80
+set(CPU_atari2600 6502)
 set(cpus "")
 foreach(sys IN LISTS SYSTEMS)
-    if(NOT sys MATCHES "^(nes|gb|genesis)$")
-        message(FATAL_ERROR "SYSTEMS: unknown system ${sys} (nes, gb, genesis)")
+    if(NOT sys MATCHES "^(nes|gb|genesis|atari2600)$")
+        message(FATAL_ERROR "SYSTEMS: unknown system ${sys} (nes, gb, genesis, atari2600)")
     endif()
     list(APPEND cpus ${CPU_${sys}})
 endforeach()
@@ -165,6 +166,8 @@ foreach(rom IN LISTS ROMS)
         set(sys gb)
     elseif(ext MATCHES "^\\.(md|gen|bin)$")
         set(sys genesis)
+    elseif(ext STREQUAL ".a26")
+        set(sys atari2600)
     endif()
     if(NOT sys IN_LIST SYSTEMS)
         message(FATAL_ERROR "ROMS: ${rom} is a ${sys} game, but SYSTEMS is ${SYSTEMS}")
@@ -172,6 +175,8 @@ foreach(rom IN LISTS ROMS)
         genesis_recompile(${name} "${rom}")
     elseif(sys STREQUAL "gb")
         gb_recompile(${name} "${rom}" ${CMAKE_SOURCE_DIR}/gb/games/${name}.toml)
+    elseif(sys STREQUAL "atari2600")
+        atari2600_recompile(${name} "${rom}" ${CMAKE_SOURCE_DIR}/atari2600/games/${name}.toml)
     else()
         nes_recompile(${name} "${rom}" ${NES_DIR}/games/${name}.toml)
         list(APPEND game_names ${name})
