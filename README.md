@@ -80,7 +80,8 @@ cmake -S . -B build -DROMS="path/to/Game One.nes;path/to/Game Two (E) [!].gb"
 cmake --build build --config Release   # -> build/game_one, build/game_two (+ _headless)
 build/game_one                         # the ROM is embedded: no path needed
 ```
-The file extension picks the system (`.nes`, `.fds`, `.gb`, `.gbc`, `.md`, `.gen`, `.bin`, `.a26`). Before
+The file extension picks the system (`.nes`, `.fds`, `.gb`, `.gbc`, `.md`, `.gen`, `.a26`;
+`.bin` only with a Genesis header). Before
 recompiling, the build runs each game in the interpreter for
 `AUTO_HINTS_FRAMES` (default 6000) frames of scripted play and recompiles
 every address it ran (`-DAUTO_HINTS=OFF` skips this). More ways to reach

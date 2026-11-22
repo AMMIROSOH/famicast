@@ -2,7 +2,7 @@
 (genesis/docs/roadmap.md D1). Local only: needs the No-Intro set as .7z
 files in roms/Sega - Mega Drive - Genesis/ (or $GENESIS_ROMS_DIR) and 7z;
 skips without them. The sample: every 40th game, by name, leaving out
-prototypes, betas, demos, pirate and unlicensed dumps.
+prototypes, betas, demos, pirate and unlicensed dumps, and BIOS images.
 """
 import glob
 import os
@@ -24,7 +24,8 @@ NOT_LICENSED = re.compile(r"\((Proto|Beta|Pirate|Unl|Demo|Program|Sample|Afterma
 
 def sample(root=SET, every=40):
     games = sorted(glob.glob(os.path.join(root, "**", "*.7z"), recursive=True))
-    return [g for g in games if not NOT_LICENSED.search(os.path.basename(g))][::every]
+    return [g for g in games if not NOT_LICENSED.search(os.path.basename(g))
+            and not os.path.basename(g).startswith("[BIOS]")][::every]
 
 
 @built(RUNNER, "build the C runtime first")

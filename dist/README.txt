@@ -1,7 +1,9 @@
-retrocast - static recompiler for NES, Famicom Disk System, Game Boy and Game Boy Color games
+retrocast - static recompiler for NES, Famicom Disk System, Game Boy, Game Boy Color,
+Genesis / Mega Drive and Atari 2600 games
 https://github.com/Viper-Bit/retrocast
 
-No games are included. Use your own legally dumped games (.nes, .fds, .gb, .gbc).
+No games are included. Use your own legally dumped games (.nes, .fds, .gb, .gbc,
+.md, .a26).
 
 
 WHAT IS IN HERE
@@ -16,6 +18,11 @@ WHAT IS IN HERE
   gb_headless     The same without a window, for test ROMs (--frames N,
                   --wav FILE to record the sound).
   gbrecomp        The Game Boy recompiler: turns a ROM into C source.
+  genesis         Plays a Genesis / Mega Drive game in the built-in
+                  interpreter, with sound. Usage: genesis path/to/game.md
+  genesis_headless  The same without a window (--frames N, --ppm FILE,
+                  --wav FILE, --diff, --coverage).
+  mdrecomp        The Genesis recompiler (68000 code into C source).
   atari2600       Atari 2600 interpreter in development. Accepts raw .a26 files.
                   See kit/atari2600/README.md.
   atari2600_headless  Atari 2600 interpreter without a window.
@@ -34,7 +41,10 @@ that have them), Enter = Start, Right Shift = Select,
 F5 = reset, F2 / F4 = save / load state, F6 = next disk side (FDS),
 F10 = TV frame, F11 or Alt+Enter = fullscreen, Esc = quit.
 Gamepads work too (first = player 1, second = player 2).
-Settings are in nes.ini / gb.ini next to the program, created on first run.
+Genesis pad: A, B, C = keyboard A, Z, X (gamepad West, South, East);
+X, Y, Z = Q, S, W (left shoulder, North, right shoulder); Mode = Right Shift.
+Settings are in nes.ini / gb.ini / genesis.ini next to the program,
+created on first run.
 
 
 RECOMPILING A GAME (the kit)
@@ -54,13 +64,14 @@ From the folder this file is in:
 The program is build/my_game (build/my_game.exe on Windows), plus
 build/my_game_headless. Several games: separate the paths with ";".
 A relative path is relative to the folder you run cmake from. The file's
-extension picks the system: .nes, .fds, .gb, .gbc.
+extension picks the system: .nes, .fds, .gb, .gbc, .md (or .gen; .bin when
+it has a Genesis header), .a26.
 
 Code the recompiler cannot find on its own runs in the interpreter. Two
 things recompile more of it:
   - the build plays each game for a while first (scripted, about 6 seconds)
     and recompiles everything that ran; -DAUTO_HINTS=OFF skips this;
-  - your own play (NES games so far): the game notes code it had to
+  - your own play (NES, Game Boy and Genesis games): the game notes code it had to
     interpret in build/my_game.misses, and the next
     "cmake --build build --config Release" recompiles it.
 
@@ -89,7 +100,17 @@ game.gb.sav next to the game, with the cartridge clock where there is one.
 More: gb/README.md on the project page.
 
 
+GENESIS / MEGA DRIVE
+
+The region comes from the game's header (the Americas when the game
+allows it, else Japan, else Europe at 50 Hz). pad = 6 (six buttons) or 3 in
+genesis.ini: a few early games misread a six-button pad. Battery saves are
+kept in game.md.sav next to the game. Code the Z80 runs is always
+interpreted (the 68000 copies it into the Z80's RAM). More:
+genesis/README.md on the project page.
+
+
 LICENSES
 
 retrocast: GPL-3.0-or-later (LICENSE); the source is on the project page.
-SDL3 (linked into nes, gb and the kit): zlib license (LICENSE-SDL3.txt).
+SDL3 (linked into the game programs and the kit): zlib license (LICENSE-SDL3.txt).

@@ -1,7 +1,8 @@
 # Release archives: per system the interpreter program, its headless twin
 # and its recompiler (nes, nes_headless, nesrecomp; gb, gb_headless,
-# gbrecomp) and the recompile kit (prebuilt SDL3), one per platform
-# (tools/make_release.py).
+# gbrecomp; genesis, genesis_headless, mdrecomp; atari2600,
+# atari2600_headless, atari2600recomp) and the recompile kit (prebuilt
+# SDL3), one per platform (tools/make_release.py).
 # A pushed tag v* builds them and creates a draft GitHub Release to review
 # and publish; a manual run (Actions tab) or a push to a release/** branch
 # only uploads them as artifacts (a test run before tagging).
