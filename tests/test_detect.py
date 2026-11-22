@@ -63,7 +63,7 @@ CASES = [  # file name, bytes, expected id (None: refused)
     ("game.bin", genesis(b" SEGA GENESIS"), "md"),
     ("game.a26", atari(), "a26"),
     ("bank.a26", atari(8192, vector_ok=False), "a26"),  # weak, the extension decides
-    ("game.bin", atari(2048), "a26"),  # weak but enough: a 2K cartridge with a vector into it
+    ("game.bin", atari(2048), None),  # weak: without .a26 (or --system) no system is picked
     ("both.nes", both_headers(), "nes"),  # two sure answers, the extension decides
     ("both.rom", both_headers(), None),  # two sure answers, nothing decides: --system
     ("random.bin", bytes(range(256)) * 5, None),

@@ -149,7 +149,8 @@ that are its own. The frontend does the rest.
   checks (NES and FDS headers or a raw FDS disk side, the Game Boy's logo
   and header checksum, the Genesis "SEGA" at $100), a guess for the Atari
   2600 (no header: a cartridge size and a reset vector into the cartridge
-  window). The best score wins; the extension only breaks ties (+20); two
+  window), too weak to decide alone: the `.a26` extension confirms it.
+  The best score wins; the extension adds 20 (ties, and the Atari); two
   sure answers or none is an error, and `--system` decides. The build's
   `ROMS` list uses the same rules (`cmake/detect_system.cmake`;
   `tests/test_detect.py` runs both on the same files).

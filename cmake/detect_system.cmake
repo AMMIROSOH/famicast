@@ -54,7 +54,7 @@ function(detect_system file out)
         file(READ "${file}" vec OFFSET ${at} LIMIT 1 HEX)
         math(EXPR hi "0x${vec} & 16")
         if(hi)
-            set(a26 30)
+            set(a26 20)  # alone below 30: the .a26 extension or --system decides
         else()
             set(a26 10)
         endif()
