@@ -164,7 +164,16 @@ foreach(rom IN LISTS ROMS)
     set(sys nes)
     if(ext STREQUAL ".gb" OR ext STREQUAL ".gbc")
         set(sys gb)
-    elseif(ext MATCHES "^\\.(md|gen|bin)$")
+    elseif(ext STREQUAL ".md" OR ext STREQUAL ".gen")
+        set(sys genesis)
+    elseif(ext STREQUAL ".bin")
+        # .bin is used by many systems: a Genesis game says "SEGA" at $100
+        # (some " SEGA"), as the console's TMSS checks
+        file(READ "${rom}" head OFFSET 256 LIMIT 5)
+        if(NOT head MATCHES "^ ?SEGA")
+            message(FATAL_ERROR "ROMS: ${rom}: a .bin without a Genesis header (\"SEGA\" at $100); "
+                                "Genesis games may also be named .md or .gen")
+        endif()
         set(sys genesis)
     elseif(ext STREQUAL ".a26")
         set(sys atari2600)

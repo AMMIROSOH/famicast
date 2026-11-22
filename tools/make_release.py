@@ -4,9 +4,9 @@
 
 1. SDL3 (release-3.4.20), static, with the frontend's options (cmake/sdl3_options.cmake),
    installed into the staged kit/sdl3.
-2. NES, Game Boy and Atari 2600 programs, Release, linked against that SDL3.
+2. NES, Game Boy, Genesis and Atari 2600 programs, Release, linked against that SDL3.
 3. Stage: the programs, the recompile kit (this project's CMakeLists.txt, cmake/,
-   core/, nes/, gb/ and the prebuilt SDL3), README.txt, licenses.
+   core/, cpu/, the system folders and the prebuilt SDL3), README.txt, licenses.
 4. Kit check: recompile tiny generated ROMs with the staged kit, as a user
    would, and run the result headless.
 5. Archive: NAME.zip on Windows, NAME.tar.gz elsewhere, in --out.
@@ -45,6 +45,20 @@ def tiny_rom(path):
         f.write(b"NES\x1a\x01\x01\x00\x00" + bytes(8) + prg + bytes(0x2000))
 
 
+def tiny_md_rom(path):
+    """A Genesis cartridge: vectors, the "SEGA" header, the TMSS unlock, one VDP
+    register write (the headless program and the build's trace count a game
+    as running from its first VDP write), then a loop."""
+    rom = bytearray(0x400)
+    rom[0:8] = bytes([0x00, 0xFF, 0xFE, 0x00, 0x00, 0x00, 0x02, 0x00])  # SSP $FFFE00, PC $200
+    rom[0x100:0x110] = b"SEGA MEGA DRIVE "
+    rom[0x200:0x212] = bytes([0x23, 0xFC, 0x53, 0x45, 0x47, 0x41, 0x00, 0xA1, 0x40, 0x00,  # MOVE.L #'SEGA',$A14000
+                              0x33, 0xFC, 0x81, 0x04, 0x00, 0xC0, 0x00, 0x04,  # MOVE.W #$8104,$C00004
+                              0x60, 0xFE])  # BRA.S to itself
+    with open(path, "wb") as f:
+        f.write(rom)
+
+
 def tiny_atari_rom(path):
     rom = bytearray(2048)
     rom[:3] = bytes([0x4C, 0x00, 0xF0])  # JMP $F000
@@ -79,6 +93,7 @@ def main():
 
     # 3. stage
     for prog in ("nes", "nes_headless", "nesrecomp", "gb", "gb_headless", "gbrecomp",
+                 "genesis", "genesis_headless", "mdrecomp",
                  "atari2600", "atari2600_headless", "atari2600recomp"):
         shutil.copy2(os.path.join(build, prog + EXE), stage)
     for item in KIT_FILES:
@@ -94,12 +109,16 @@ def main():
     # 4. kit check: recompile a ROM with the staged kit, then run it
     rom = os.path.join(work, "kit_check.nes")
     tiny_rom(rom)
+    md_rom = os.path.join(work, "kit_check_md.md")
+    tiny_md_rom(md_rom)
     atari_rom = os.path.join(work, "kit_check_atari.a26")
     tiny_atari_rom(atari_rom)
     kit_build = os.path.join(work, "kit-build")
-    cmake_build(kit, kit_build, "-DROMS=" + rom + ";" + atari_rom)
+    cmake_build(kit, kit_build, "-DROMS=" + rom + ";" + md_rom + ";" + atari_rom)
     run(os.path.join(kit_build, "kit_check_headless" + EXE), "--frames", "30")
     run(os.path.join(stage, "nes_headless" + EXE), rom, "--frames", "30")
+    run(os.path.join(kit_build, "kit_check_md_headless" + EXE), md_rom, "--frames", "30", "--diff")
+    run(os.path.join(stage, "genesis_headless" + EXE), md_rom, "--frames", "30")
     run(os.path.join(kit_build, "kit_check_atari_headless" + EXE), "--frames", "2", "--diff")
     run(os.path.join(stage, "atari2600_headless" + EXE), atari_rom, "--frames", "2")
 
