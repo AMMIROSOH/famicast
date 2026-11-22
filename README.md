@@ -21,12 +21,13 @@ own.
    emits one C function per basic block, plus the ROM itself. Before that,
    the build plays the game for a while in the interpreter to find code
    static analysis cannot.
-2. Each CPU's instructions are written once, as C templates (`core/recomp/`
-   markers for the PC), and both the interpreter and the recompiled code
-   are made from them: the same bus accesses, the same cycles.
+2. Each CPU's instructions are written once, as C templates in its folder
+   under `cpu/` (the PC markers are in `core/recomp/`), and both the
+   interpreter and the recompiled code are made from them: the same bus
+   accesses, the same cycles.
 3. Each system's runtime (`nes/runtime/`, `gb/runtime/`) provides the
-   hardware; `core/frontend/` (SDL3) is the window, sound, gamepads,
-   settings, save states and recordings for all of them.
+   hardware around the CPU; `core/frontend/` (SDL3) is the window, sound,
+   gamepads, settings, save states and recordings for all of them.
 4. Anything the recompiler did not see (jump tables, code in RAM) falls back
    to the **reference interpreter**, which is validated against public test
    suites and is also the oracle the recompiled code is diffed against.
@@ -138,7 +139,8 @@ was not built (`RETROCAST_STRICT=1`: fail). Tests for recompiled games run
 for the games the build was configured with and are skipped otherwise.
 
 CI (`.github/workflows/ci.yml`) builds and tests only the systems a change
-touches (`tools/ci_systems.py`; shared code means all of them) with GCC,
+touches (`tools/ci_systems.py`: a change under a CPU's folder in `cpu/`
+tests the systems that use that CPU; shared code means all of them) with GCC,
 Clang and MSVC, warnings as errors, plus the window programs; test data is
 kept in the Actions cache. The required check is `ci-ok`.
 
@@ -146,6 +148,7 @@ kept in the Actions cache. The required check is `ci-ok`.
 | File | Content |
 |------|---------|
 | [docs/architecture.md](docs/architecture.md) | Layout, the pipeline, templates, recompiled code, frontend: what every system shares |
+| [cpu/README.md](cpu/README.md) | The CPUs (6502, SM83), shared by the systems that use them |
 | [docs/roadmap.md](docs/roadmap.md) | The order rule, the systems, stretch goals |
 | [docs/verification-log.md](docs/verification-log.md) | Checks of the shared parts |
 | [docs/prior-art.md](docs/prior-art.md) | Other recompilers and emulators, and what we take from them |

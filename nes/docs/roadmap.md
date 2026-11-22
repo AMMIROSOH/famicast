@@ -26,8 +26,8 @@ in [first-prototype.md](first-prototype.md).
 
 ## M0 · Repo and build skeleton
 - [x] git, GPL-3.0, corrected docs, `.gitignore` for ROMs.
-- [x] CMake project: `nescpu` static lib, `nes` executable, SDL3 3.4.20 via
-  FetchContent (static), `-DFRONTEND=OFF` for headless builds.
+- [x] CMake project: `nescpu` static lib (now `cpu6502`), `nes` executable,
+  SDL3 3.4.20 via FetchContent (static), `-DFRONTEND=OFF` for headless builds.
 - [x] The old prototype set aside (`legacy/`, later removed; 08).
 - [x] GitHub Actions workflow (`.github/workflows/ci.yml`: Linux GCC and
   Clang, Windows MSVC; public test ROMs; headless). Green on its first run
@@ -50,8 +50,8 @@ Written in Python first, ported to C in M8a.
   generated C).
 
 ## M2 · Reference interpreter
-- [x] `nes/runtime/cpu.c` + `cpu_ops.h`, opcode switch generated from the
-  opcode table; one bus access per cycle.
+- [x] `cpu/6502/cpu6502.c` + `cpu6502_ops.h` (then `nes/runtime/cpu.c`),
+  opcode switch generated from the opcode table; one bus access per cycle.
 - [x] `nes/tests/cpu_tests.c` on a flat 64 KB bus; driven by
   `tests/nes/test_cpu.py`.
 - [x] nestest: all 8,991 lines match, unofficial opcodes included.
@@ -63,7 +63,7 @@ Written in Python first, ported to C in M8a.
 - [x] `nes/runtime/cart.c` (NROM), `ppu.c` (per-dot rendering, loopy scrolling,
   per-dot sprite evaluation with the overflow bug, vblank/NMI races, open-bus
   decay), `nes.c` (CPU bus, OAM DMA, controllers), `palette.c` (NTSC model).
-- [x] CPU interrupt polling on the second-to-last cycle (`cpu_ops.h`).
+- [x] CPU interrupt polling on the second-to-last cycle (`cpu6502_ops.h`).
 - [x] SDL3 frontend: ROM loading, keyboard, integer scaling, 60.1 Hz pacing
   (vsync on displays of 59 Hz and up, against tearing).
 - [x] `nes_headless` runner: blargg $6000 protocol, zero-page result codes,
@@ -106,7 +106,7 @@ M5b, speed:
   the CPU touches the PPU, OAM DMA runs, or vblank (NMI) is due.
 - [x] `ppu_run`: skips vblank lines in one step; sprite line buffer
   (per-pixel lookup instead of scanning 8 sprites).
-- [x] Memory-map fast path in `rd`/`wr` (`cpu.h` read/write maps): RAM,
+- [x] Memory-map fast path in `rd`/`wr` (`cpu6502.h` read/write maps): RAM,
   PRG RAM and ROM accesses are inline loads; helps both modes.
 - [x] Recompiled code with static PC: code bytes and PC values are constants
   (`fetch_k`).
