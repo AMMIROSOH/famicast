@@ -5,6 +5,30 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../../docs/verification-log.md).
 
+## 2026-11-23 · 68000 MOVE.L address errors (C2)
+- **SingleStepTests m68000** (`cpu/m68k/m68k_tests.c`, the same pinned
+  corpus as below): MOVE.l now passes 2,500 of 2,500, and no other family
+  regressed — all 127 families pass, 317,500 tests on state, every bus
+  transaction with its clocks and strobes (TAS and TRAPV by state only).
+- **Two causes**: the address-error frame pushed the queue's IR after the
+  last refill instead of the opcode (`c->op`, as `m68k_cpu.h` says it is
+  for), which cost MOVE.l 294 tests on the frame's IR and status word; and
+  a long MOVE's flags at a write fault were set from the full long too
+  early. The flags the microcode has reached depend on the source and
+  destination: register or immediate source, no flags yet to (An)/(An)+
+  and only N/Z of the first word to d(An)/d(An,Xn); memory source, the low
+  word's to (An)/(An)+ and absolute long, the full long's elsewhere. The
+  final long's flags are set after the write.
+- **The one exception**: a word MOVE to -(An) that faults on its write
+  reports the shifted queue IR in the frame, as the corpus records; the
+  generic case uses the opcode. Checked by comparing every address-error
+  frame's IR against both the opcode and the queue IR at the fault, across
+  all families.
+- **Builds**: gcc with `-Wall` and MSVC with `-DWERROR=ON`, no warnings;
+  the generated copy in `build/gen` is remade by `m68k_gen` from the
+  edited template. The Genesis suite passes with `RETROCAST_STRICT=1` and
+  `GENESIS_SST_REQUIRED=1`, the recompiler's lockstep test included.
+
 ## 2026-11-22 · The recompiler (D5)
 - **Lengths**: `m68k_ext_words` against every template without a branch,
   at build time (`m68k_gen` stops on a mismatch): 39,853 opcodes agree;

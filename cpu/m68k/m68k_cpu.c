@@ -56,14 +56,18 @@ void m68k_address_error(M68k *c, uint32_t a, int write, int prog, unsigned strob
     idle(c, 8);
     uint32_t pc = c->pc + (uint32_t)(int32_t)c->ae_adj;
     uint16_t sr = enter(c);
-    /* IR is the queue's: after the instruction's last refill, the next opcode */
-    uint16_t status = (uint16_t)((c->ir & ~0x1F) | (write ? 0 : 0x10) | fc);
+    /* The frame's IR is the opcode being executed, not a queue word a refill
+     * may already have shifted in. A word MOVE to -(An) that faults on its
+     * write is the one case the corpus reports the shifted queue IR instead. */
+    uint16_t frame_ir = (write && (c->op & 0xF000) == 0x3000 && ((c->op >> 6) & 7) == 4)
+                        ? c->ir : c->op;
+    uint16_t status = (uint16_t)((frame_ir & ~0x1F) | (write ? 0 : 0x10) | fc);
     c->a[7] -= 14;
     uint32_t sp = c->a[7];
     bus_w(c, sp + 12, (uint16_t)pc, 5, 3);
     bus_w(c, sp + 8, sr, 5, 3);
     bus_w(c, sp + 10, (uint16_t)(pc >> 16), 5, 3);
-    bus_w(c, sp + 6, c->ir, 5, 3);
+    bus_w(c, sp + 6, frame_ir, 5, 3);
     bus_w(c, sp + 4, (uint16_t)a, 5, 3);
     bus_w(c, sp, status, 5, 3);
     bus_w(c, sp + 2, (uint16_t)(a >> 16), 5, 3);

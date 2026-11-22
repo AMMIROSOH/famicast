@@ -4,12 +4,10 @@ Needs the C build (m68k_tests) and the tests: python tests/fetch_test_roms.py
 --sst-m68k (files not downloaded are skipped; GENESIS_SST_REQUIRED=1 fails
 instead). Every family is checked on registers, SR, PC, the prefetch queue,
 RAM and every bus transaction with its clocks; TAS and TRAPV on state only
-(the corpus' README: their transaction logs are not reliable). OPEN lists
-the families that do not pass all 2,500 yet, with the count they reach: a
-fix that passes more makes the test fail until the number is raised.
+(the corpus' README: their transaction logs are not reliable). Every family
+is expected to pass all 2,500 of its tests.
 """
 import os
-import re
 import subprocess
 import unittest
 
@@ -22,11 +20,6 @@ BUILD = os.environ.get("NES_BUILD", os.path.join(ROOT, "build"))
 EXE = ".exe" if os.name == "nt" else ""
 RUNNER = os.path.join(BUILD, "m68k_tests" + EXE)
 END_ONLY = {"TAS", "TRAPV"}
-OPEN = {
-    # an address error on a long MOVE's write: the flags it leaves depend on how far the
-    # microcode got (unchanged, V and C cleared, or N and Z of the first word written)
-    "MOVE.l": 2206,
-}
 
 
 @built(RUNNER, "build the C runtime first")
@@ -42,11 +35,7 @@ class TestSingleStepM68k(unittest.TestCase):
                     continue
                 mode = "sst-end" if name in END_ONLY else "sst"
                 r = subprocess.run([RUNNER, mode, path], capture_output=True, text=True)
-                passed, total = map(int, re.search(r": (\d+)/(\d+)", r.stdout).groups())
-                if name in OPEN:
-                    self.assertEqual(passed, OPEN[name], "%s: %d/%d, OPEN says %d" % (name, passed, total, OPEN[name]))
-                else:
-                    self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
 if __name__ == "__main__":
