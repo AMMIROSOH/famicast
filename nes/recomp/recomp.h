@@ -7,21 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "template.h"  /* Lines, Buf, bprintf (core/recomp) */
-
-/* ---- ops.c: the opcode table (16x16 grids, nesdev "CPU unofficial opcodes") ---- */
-typedef struct {
-    uint8_t code, size, cycles, official;
-    char mn[4], mode[4];
-} Op;
-
-extern Op OPS[256];
-void ops_init(void);
-int is_branch(const char *mn);
-int page_penalty(const Op *op);
-
-/* ---- c6502.c: C statements executing one instruction (shared with the interpreter) ---- */
-void body(const Op *op, Lines *out);
+#include "c6502.h"    /* Op, OPS, body (cpu/6502); Lines, Buf (core/recomp) */
 
 /* ---- analyze.c: decoding, exploration, basic blocks ---- */
 typedef struct {
@@ -88,6 +74,5 @@ typedef struct {
 void emit_program(Buf *out, Region *regions, int nregions, const char *rom_name, uint32_t prg_hash,
                   int nbanks, int bank_reg, const uint8_t *rom, size_t rom_size, uint16_t dispatch_at,
                   const uint8_t *bios);
-void emit_cpu_switch(Buf *out);
 
 #endif

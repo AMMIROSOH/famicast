@@ -1,10 +1,10 @@
 /* Instruction semantics shared by the interpreter and recompiled code.
  * Flag rules: nes/docs/6502-traps.md. Unofficial opcodes: nesdev wiki
  * "CPU unofficial opcodes"; all checked against SingleStepTests. */
-#ifndef NES_CPU_OPS_H
-#define NES_CPU_OPS_H
+#ifndef CPU6502_OPS_H
+#define CPU6502_OPS_H
 
-#include "cpu.h"
+#include "cpu6502.h"
 
 /* Recompiled code is built with CPU_OPS_OUTLINE: one out-of-line copy of the
  * bus helpers per file keeps thousands of blocks small (CMakeLists.txt). */

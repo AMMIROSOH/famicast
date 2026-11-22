@@ -97,7 +97,7 @@ def _pack_sm83(st):
 
 def fetch_sst_sm83(name):
     """Return the path of the binary form of one sm83 file ("00".."ff",
-    "cb 00".."cb ff"; format: see gb/tests/cpu_tests.c), downloading it."""
+    "cb 00".."cb ff"; format: see cpu/sm83/sm83_tests.c), downloading it."""
     path = os.path.join(ROMS, "sst_sm83", name.replace(" ", "_") + ".bin")
     if os.path.exists(path):
         return path

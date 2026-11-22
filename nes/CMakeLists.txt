@@ -2,39 +2,25 @@
 # sets GEN_DIR, NES_DIR and the options). Functions use absolute paths: the
 # root calls nes_recompile for the games in ROMS.
 
-# The recompiler is a build-time tool. It also writes the interpreter's opcode
-# switch, from the same table and C templates (recomp/ops.c, recomp/c6502.c),
-# so instruction semantics exist once.
-add_executable(nesrecomp recomp/main.c recomp/ops.c recomp/c6502.c recomp/analyze.c
-    recomp/emit.c runtime/cart.c runtime/fds.c)
+# The recompiler is a build-time tool, on the 6502's opcode table and C
+# templates (cpu/6502), which also make the interpreter's switch.
+add_executable(nesrecomp recomp/main.c recomp/analyze.c recomp/emit.c runtime/cart.c runtime/fds.c)
 target_include_directories(nesrecomp PRIVATE runtime)
-target_link_libraries(nesrecomp PRIVATE recomp_template)
-
-# WORKING_DIRECTORY on custom commands that run our programs: without it the
-# Visual Studio generator writes a bare "nesrecomp.exe" (relative to build/),
-# which MSBuild's cmd does not look for in the current folder.
-add_custom_command(
-    OUTPUT ${GEN_DIR}/cpu_switch.inc
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN_DIR}
-    COMMAND nesrecomp --cpu-switch ${GEN_DIR}/cpu_switch.inc
-    DEPENDS nesrecomp
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Generating the interpreter's opcode switch")
-
-add_library(nescpu STATIC runtime/cpu.c ${GEN_DIR}/cpu_switch.inc)
-target_include_directories(nescpu PUBLIC runtime PRIVATE ${GEN_DIR})
+target_link_libraries(nesrecomp PRIVATE cpu6502_templates)
 
 # Programs without recompiled code link this instead (recomp_program = NULL).
 add_library(recomp_none STATIC runtime/recomp_none.c)
-target_link_libraries(recomp_none PUBLIC nescpu)
+target_include_directories(recomp_none PUBLIC runtime)
+target_link_libraries(recomp_none PUBLIC cpu6502)
 
 add_executable(cpu_tests tests/cpu_tests.c)
-target_link_libraries(cpu_tests PRIVATE nescpu recomp_none)
+target_link_libraries(cpu_tests PRIVATE cpu6502 recomp_none)
 
 # The NES system: bus, PPU, cartridge (implements cpu_read/cpu_write).
 add_library(nescore STATIC runtime/nes.c runtime/ppu.c runtime/apu.c runtime/cart.c runtime/fds.c
     runtime/palette.c)
-target_link_libraries(nescore PUBLIC nescpu core)
+target_include_directories(nescore PUBLIC runtime)
+target_link_libraries(nescore PUBLIC cpu6502 core)
 if(NOT MSVC)
     target_link_libraries(nescore PUBLIC m)
 endif()
@@ -121,7 +107,8 @@ function(nes_recompile name rom)
     # bus helpers out of line in generated code: thousands of blocks with them
     # inlined outgrow the CPU caches (Kirby: 8.6 -> 4.6 MB, 19.9x -> 23.4x, nes/docs/verification-log.md)
     target_compile_definitions(${name}_code PRIVATE CPU_OPS_OUTLINE)
-    target_link_libraries(${name}_code PUBLIC nescpu)
+    target_include_directories(${name}_code PUBLIC ${NES_DIR}/runtime)  # recomp_rt.h
+    target_link_libraries(${name}_code PUBLIC cpu6502)
     add_executable(${name}_headless ${NES_DIR}/tests/nes_headless.c)
     target_link_libraries(${name}_headless PRIVATE nescore ${name}_code)
     if(FRONTEND)

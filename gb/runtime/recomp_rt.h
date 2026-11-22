@@ -10,7 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "cpu.h"
+#include "sm83_cpu.h"
 
 typedef void (*GbRecompFn)(GbCpu *c);
 

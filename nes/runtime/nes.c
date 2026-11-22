@@ -1,5 +1,5 @@
 /* CPU bus. Memory map: nesdev wiki "CPU memory map". Every CPU cycle makes
- * exactly one bus access (runtime/cpu.c) and is worth 3 PPU dots: 2 before the
+ * exactly one bus access (cpu/6502/cpu6502.c) and is worth 3 PPU dots: 2 before the
  * access and 1 after. The 2/1 split was measured: of 0-3 dots before, only 2
  * passes blargg ppu_vbl_nmi 05-nmi_timing (nes/docs/verification-log.md).
  *
@@ -297,7 +297,7 @@ void cpu_write(Cpu *c, uint16_t a, uint8_t v) {
     plan_next_event(n);
 }
 
-/* Fast-path pages for the CPU (cpu.h): 2 KB RAM mirrored over $0000-$1FFF,
+/* Fast-path pages for the CPU (cpu6502.h): 2 KB RAM mirrored over $0000-$1FFF,
  * PRG RAM at $6000-$7FFF, PRG ROM at $8000-$FFFF as the mapper has banked it
  * (rebuilt after every mapper write). */
 static void map_memory(Nes *n) {

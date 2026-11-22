@@ -1,5 +1,5 @@
-/* Instruction templates, shared by every CPU's recompiler (nes/recomp,
- * gb/recomp): each instruction is a few lines of C, and every use of the PC
+/* Instruction templates, shared by every CPU's recompiler (cpu/6502,
+ * cpu/sm83): each instruction is a few lines of C, and every use of the PC
  * in them is a marker, never C text, so one template serves the
  * interpreter (the PC read at run time) and recompiled code (the PC and
  * the code bytes as constants):

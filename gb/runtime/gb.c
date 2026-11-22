@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cpu_ops.h"    /* rd */
+#include "sm83_ops.h"    /* rd */
 #include "input_log.h"  /* PAD_* */
 #include "recomp_rt.h"
 

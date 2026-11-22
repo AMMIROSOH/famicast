@@ -9,7 +9,6 @@
  *   banked = [[3, 0x4100]]          # [ROM bank, address $0000-$7FFF] of code
  *   data = [[3, 0x5000, 0x5100]]    # [ROM bank, first, end) never decoded as code
  *
- *   gbrecomp --cpu-switch OUT.inc   the interpreter's opcode switch (gb/runtime/cpu.c)
  *   gbrecomp --ops                  every opcode: "CB? XX size name" (tests) */
 #include <stdio.h>
 #include <stdlib.h>
@@ -156,12 +155,6 @@ static int recompile(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-    if (argc == 3 && !strcmp(argv[1], "--cpu-switch")) {
-        Buf o = {0};
-        sm83_cpu_switch(&o);
-        buf_write_file(argv[2], &o);
-        return 0;
-    }
     if (argc == 2 && !strcmp(argv[1], "--ops")) {
         Lines l;
         char name[32];
@@ -173,6 +166,6 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (argc >= 2 && argv[1][0] != '-') return recompile(argc, argv);
-    fprintf(stderr, "usage: gbrecomp ROM -o OUT.c [--hints GAME.toml]... [--misses TRACE]... [--no-rom] | --cpu-switch OUT.inc | --ops\n");
+    fprintf(stderr, "usage: gbrecomp ROM -o OUT.c [--hints GAME.toml]... [--misses TRACE]... [--no-rom] | --ops\n");
     return 2;
 }

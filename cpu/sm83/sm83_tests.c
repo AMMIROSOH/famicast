@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cpu.h"
+#include "sm83_cpu.h"
 
 static uint8_t mem[0x10000];
 typedef struct { uint16_t addr; uint8_t value, kind; } Access;

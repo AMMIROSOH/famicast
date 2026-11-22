@@ -14,7 +14,7 @@
 
 #include "apu.h"
 #include "cart.h"
-#include "cpu.h"
+#include "sm83_cpu.h"
 
 enum { GB_FRAME_CYCLES = 17556 };  /* M-cycles per frame: 154 lines x 114 */
 enum { INT_VBLANK = 1, INT_STAT = 2, INT_TIMER = 4, INT_SERIAL = 8, INT_JOYPAD = 16 };

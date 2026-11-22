@@ -1,5 +1,5 @@
 /* Reference 2A03 interpreter: one bus access per cycle (nes/docs/architecture.md). */
-#include "cpu_ops.h"
+#include "cpu6502_ops.h"
 
 /* NMI/IRQ entry. An NMI seen in the first four cycles takes over an IRQ's
  * vector; no polling at the end, so the handler's first instruction always
@@ -43,6 +43,6 @@ void cpu_step(Cpu *c) {
         return;
     }
     switch (rd(c, c->pc++)) {
-#include "cpu_switch.inc"
+#include "cpu6502_switch.inc"
     }
 }
