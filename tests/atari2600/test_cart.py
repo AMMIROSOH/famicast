@@ -14,6 +14,34 @@ RUNNER = os.path.join(os.environ.get("ATARI2600_BUILD", os.path.join(ROOT, "buil
 
 @built(RUNNER, "build the Atari 2600 cartridge tests first")
 class TestCartridge(unittest.TestCase):
+    def test_archive_member_selection(self):
+        runner = RUNNER.replace("atari2600_cart_tests", "atari2600_headless")
+        rom = bytearray(2048)
+        rom[:3] = bytes((0x4C, 0, 0xF0))
+        rom[-4:-2] = bytes((0, 0xF0))
+        with tempfile.TemporaryDirectory() as directory:
+            for name, content in (("game.a26", rom), ("another.bin", rom),
+                                  ("notes.txt", b"test"), ("oversized.a26", bytes(32769))):
+                with open(os.path.join(directory, name), "wb") as file:
+                    file.write(content)
+            for members, error in (
+                (("game.a26", "notes.txt"), None),
+                (("game.a26", "another.bin"), "multiple ROM members"),
+                (("notes.txt",), "no regular ROM member"),
+                (("oversized.a26",), "unsupported ROM size"),
+            ):
+                with self.subTest(members=members):
+                    archive = os.path.join(directory, "game.7z")
+                    subprocess.run(["cmake", "-E", "tar", "cf", archive, "--format=7zip", *members],
+                                   cwd=directory, check=True, capture_output=True)
+                    result = subprocess.run([runner, archive, "--frames", "1"],
+                                            capture_output=True, text=True, check=False)
+                    if error:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn(error, result.stderr)
+                    else:
+                        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_cartridge_banks_and_mirroring(self):
         result = subprocess.run([RUNNER], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

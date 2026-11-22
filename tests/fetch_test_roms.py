@@ -82,6 +82,10 @@ def fetch_sst(opcode):
     return path
 
 
+NMOS_DECIMAL_OPCODES = (0x69, 0xE9, 0x6B, 0x67, 0xE7)
+NMOS_BUS_OPCODES = (0x00, 0x20, 0x40, 0x6C, 0x91, 0xBD, 0xD0, 0xFE)
+
+
 def fetch_sst_nmos(opcode):
     """Fetch NMOS 6502 instruction and bus vectors in the shared runner format."""
     path = os.path.join(ROMS, "sst_nmos", "%02x.bin" % opcode)
@@ -383,7 +387,7 @@ if __name__ == "__main__":
         with ThreadPoolExecutor(8) as ex:
             for p in ex.map(fetch_sst, range(256)):
                 print(p)
-            for p in ex.map(fetch_sst_nmos, (0x69, 0xE9, 0x6B, 0x67, 0xE7)):
+            for p in ex.map(fetch_sst_nmos, NMOS_DECIMAL_OPCODES + NMOS_BUS_OPCODES):
                 print(p)
     if "--sst-sm83" in sys.argv:  # Game Boy CPU: ~150 MB download, ~20 MB on disk
         from concurrent.futures import ThreadPoolExecutor

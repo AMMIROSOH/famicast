@@ -1,24 +1,53 @@
 #include <stdio.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "atari.h"
 #include "loader.h"
+#include "palette.h"
+
+static InputFrame scripted_input(int frame) {
+    static const uint16_t directions[] = {PAD_RIGHT, PAD_UP, PAD_LEFT, PAD_DOWN};
+    InputFrame input = {0};
+    if (frame >= 30 && frame < 35) input.pad[0] |= PAD_START;
+    if (frame >= 60 && frame % 20 < 10) input.pad[0] |= PAD_A;
+    if (frame >= 75) input.pad[0] |= directions[(frame / 25) % 4];
+    return input;
+}
 
 int main(int argc, char **argv) {
     const char *path = argc > 1 && argv[1][0] != '-' ? argv[1] : NULL;
     int embedded = !path && a26_recomp_program && a26_recomp_program->rom;
-    if (!path && !embedded) { fprintf(stderr, "usage: atari2600_headless ROM [--frames N] [--diff] [--coverage]\n"); return 2; }
+    if (!path && !embedded) {
+        fprintf(stderr, "usage: atari2600_headless ROM [--frames N] [--record FILE] [--replay FILE] [--diff] [--coverage]\n");
+        return 2;
+    }
     const char *name = path ? path : a26_recomp_program->rom_name;
     int frames = 60, play = 0, diff = 0, coverage = 0;
     int pal = a26_recomp_program ? a26_recomp_program->pal : (strstr(name, "(Europe)") != NULL || strstr(name, "(PAL)") != NULL);
     A26CartType mapper = A26_CART_AUTO;
     if (a26_recomp_program) mapper = (A26CartType)a26_recomp_program->mapper;
     const char *ppm = NULL, *trace_path = NULL, *load_path = NULL, *save_path = NULL;
+    const char *record_path = NULL, *replay_path = NULL;
+    int frame_limit = 0;
     int save_at = -1;
     for (int i = path ? 2 : 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
+        if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
+            char *end;
+            errno = 0;
+            long value = strtol(argv[++i], &end, 10);
+            if (errno || !*argv[i] || *end || value < 0 || value > INT_MAX) {
+                fprintf(stderr, "invalid frame count: %s\n", argv[i]);
+                return 2;
+            }
+            frame_limit = 1;
+            frames = (int)value;
+        }
         else if (!strcmp(argv[i], "--play")) play = 1;
+        else if (!strcmp(argv[i], "--record") && i + 1 < argc) record_path = argv[++i];
+        else if (!strcmp(argv[i], "--replay") && i + 1 < argc) replay_path = argv[++i];
         else if (!strcmp(argv[i], "--diff")) diff = 1;
         else if (!strcmp(argv[i], "--coverage")) coverage = 1;
         else if (!strcmp(argv[i], "--trace") && i + 1 < argc) trace_path = argv[++i];
@@ -67,15 +96,41 @@ int main(int argc, char **argv) {
     if (load_path && (a26_load(&machine, load_path) || (diff && a26_load(&reference, load_path)))) {
         fprintf(stderr, "cannot load state\n"); free(rom); return 1;
     }
-    InputFrame input = {0};
+    InputLog replay = {0};
+    FILE *record = NULL;
+    int result = 1;
+    if (replay_path && (input_log_load(replay_path, &replay) || strcmp(replay.system, "a26") ||
+                        replay.count > INT_MAX)) {
+        fprintf(stderr, "cannot load Atari 2600 recording: %s\n", replay_path);
+        goto done;
+    }
+    if (replay_path && !frame_limit) frames = (int)replay.count;
+    if (record_path && !(record = input_log_create(record_path, "a26"))) {
+        fprintf(stderr, "cannot create recording: %s\n", record_path);
+        goto done;
+    }
     for (int i = 0; i < frames && !machine.bus.cpu.jammed; i++) {
-        if (play) input.pad[0] = (uint16_t)((i >= 30 && i < 35 ? PAD_START : 0) |
-                                           (i >= 60 && i % 20 < 10 ? PAD_A : 0));
+        InputFrame input = {0};
+        if (i < replay.count) input = replay.frames[i];
+        else if (play) input = scripted_input(i);
+        if (record) input_log_write(record, input);
+        if (input.flags & INPUT_RESET) {
+            uint64_t compiled = machine.compiled_cycles, total = machine.total_cycles;
+            if (a26_init(&machine, rom, size, mapper, pal) ||
+                (diff && a26_init(&reference, rom, size, mapper, pal))) goto done;
+            machine.trace = trace_path ? trace : NULL;
+            machine.compiled_cycles = compiled;
+            machine.total_cycles = total;
+            if (diff) {
+                reference.program = NULL;
+                machine.reference = &reference;
+            }
+        }
         a26_frame(&machine, &input);
         machine.tia.sample_count = 0;
         if (diff) reference.tia.sample_count = 0;
         if (save_path && i + 1 == save_at && a26_save(&machine, save_path)) {
-            fprintf(stderr, "cannot save state\n"); free(rom); return 1;
+            fprintf(stderr, "cannot save state\n"); goto done;
         }
         if (machine.diff_failed) break;
     }
@@ -90,18 +145,34 @@ int main(int argc, char **argv) {
         FILE *f = fopen(trace_path, "wb");
         if (!f || fwrite(trace, 1, sizeof trace, f) != sizeof trace) {
             if (f) fclose(f);
-            fprintf(stderr, "cannot write trace\n"); free(rom); return 1;
+            fprintf(stderr, "cannot write trace\n"); goto done;
         }
-        if (fclose(f)) { free(rom); return 1; }
+        if (fclose(f)) goto done;
     }
     if (ppm) {
         FILE *f = fopen(ppm, "wb");
-        if (!f) { free(rom); return 1; }
-        fprintf(f, "P5\n%d %d\n255\n", A26_WIDTH, A26_HEIGHT);
-        for (unsigned i = 0; i < A26_WIDTH * A26_HEIGHT; i++) fputc((machine.tia.frame[i] & 14) * 17, f);
-        fclose(f);
+        if (!f) goto done;
+        fprintf(f, "P6\n%d %d\n255\n", A26_WIDTH, A26_HEIGHT);
+        for (unsigned i = 0; i < A26_WIDTH * A26_HEIGHT; i++) {
+            uint8_t pixel = machine.tia.frame[i];
+            uint32_t color = (pixel & 1) ? 0 : a26_palette_color(pixel, pal);
+            fputc((color >> 16) & 255, f);
+            fputc((color >> 8) & 255, f);
+            fputc(color & 255, f);
+        }
+        int failed = ferror(f);
+        if (fclose(f) || failed) goto done;
     }
-    int result = machine.bus.cpu.jammed || machine.diff_failed ? 1 : 0;
+    result = machine.bus.cpu.jammed || machine.diff_failed ? 1 : 0;
+done:
+    if (record) {
+        int failed = ferror(record);
+        if (fclose(record) || failed) {
+            fprintf(stderr, "cannot write recording: %s\n", record_path);
+            result = 1;
+        }
+    }
+    input_log_free(&replay);
     free(rom);
     return result;
 }

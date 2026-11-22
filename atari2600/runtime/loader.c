@@ -17,8 +17,17 @@ typedef struct {
 } LimitedAllocator;
 
 typedef union {
+#ifdef _MSC_VER
+    /* Match the alignment guaranteed by the Microsoft CRT's malloc. */
+#ifdef _WIN64
+    __declspec(align(16)) size_t size;
+#else
+    __declspec(align(8)) size_t size;
+#endif
+#else
     max_align_t alignment;
     size_t size;
+#endif
 } AllocationHeader;
 
 static void *limited_alloc(ISzAllocPtr allocator, size_t size) {
@@ -49,6 +58,16 @@ static int is_rom_name(const UInt16 *name, size_t length) {
          (lower_ascii(extension[1]) == 'b' && lower_ascii(extension[2]) == 'i' && lower_ascii(extension[3]) == 'n'));
 }
 
+static int is_regular_member(const CSzArEx *archive, UInt32 index) {
+    if (SzArEx_IsDir(archive, index)) return 0;
+    if (!SzBitWithVals_Check(&archive->Attribs, index)) return 1;
+    UInt32 attributes = archive->Attribs.Vals[index];
+    if (attributes & 0x400) return 0;  /* Windows reparse point */
+    if (!(attributes & 0x8000)) return 1;  /* no Unix mode */
+    UInt32 type = (attributes >> 16) & 0170000;
+    return type == 0 || type == 0100000;
+}
+
 static int load_archive(const char *path, uint8_t **data, size_t *size, char *err, size_t errlen) {
     LimitedAllocator alloc = {{limited_alloc, limited_free}, 0};
     CFileInStream file;
@@ -59,6 +78,7 @@ static int load_archive(const char *path, uint8_t **data, size_t *size, char *er
     size_t output_size = 0, offset = 0, extracted = 0;
     UInt32 block = 0xFFFFFFFF, selected = 0, count = 0;
     int ok = 0;
+    const char *reason = "invalid 7z archive";
     if (InFile_Open(&file.file, path)) {
         snprintf(err, errlen, "cannot open archive: %s", path);
         return -1;
@@ -75,7 +95,7 @@ static int load_archive(const char *path, uint8_t **data, size_t *size, char *er
     SRes result = SzArEx_Open(&archive, &stream.vt, &alloc.iface, &alloc.iface);
     if (result != SZ_OK) goto done;
     for (UInt32 i = 0; i < archive.NumFiles; i++) {
-        if (SzArEx_IsDir(&archive, i)) continue;
+        if (!is_regular_member(&archive, i)) continue;
         size_t length = SzArEx_GetFileNameUtf16(&archive, i, NULL);
         if (length > 4096) goto done;
         UInt16 *name = malloc(length * sizeof *name);
@@ -85,7 +105,14 @@ static int load_archive(const char *path, uint8_t **data, size_t *size, char *er
         free(name);
         if (match) { selected = i; count++; }
     }
-    if (count != 1 || SzArEx_GetFileSize(&archive, selected) > MAX_ROM_SIZE) goto done;
+    if (count != 1) {
+        reason = count ? "ambiguous 7z archive: multiple ROM members" : "7z archive contains no regular ROM member";
+        goto done;
+    }
+    if (!SzArEx_GetFileSize(&archive, selected) || SzArEx_GetFileSize(&archive, selected) > MAX_ROM_SIZE) {
+        reason = "unsupported ROM size in 7z archive";
+        goto done;
+    }
     result = SzArEx_Extract(&archive, &stream.vt, selected, &block, &output,
                             &output_size, &offset, &extracted, &alloc.iface, &alloc.iface);
     if (result != SZ_OK || !extracted || extracted > MAX_ROM_SIZE) goto done;
@@ -95,7 +122,11 @@ static int load_archive(const char *path, uint8_t **data, size_t *size, char *er
     *size = extracted;
     ok = 1;
 done:
-    if (!ok) snprintf(err, errlen, "invalid, unsupported, or ambiguous 7z archive: %s", path);
+    if (!ok) {
+        if (result == SZ_ERROR_UNSUPPORTED) reason = "unsupported or encrypted 7z archive";
+        else if (result == SZ_ERROR_MEM) reason = "7z archive exceeds the decoder memory limit or allocation failed";
+        snprintf(err, errlen, "%s: %s", reason, path);
+    }
     limited_free(&alloc.iface, output);
     SzArEx_Free(&archive, &alloc.iface);
     File_Close(&file.file);

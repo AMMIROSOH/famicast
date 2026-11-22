@@ -28,6 +28,42 @@ def run(program, *arguments):
 
 @built(FIXED, "build Atari recompiler fixtures first")
 class TestRecompiler(unittest.TestCase):
+    def test_record_and_replay(self):
+        rom = os.path.join(BUILD, "gen", "a26_fixed.a26")
+        with tempfile.TemporaryDirectory() as directory:
+            record = os.path.join(directory, "game.rec")
+            copy = os.path.join(directory, "copy.rec")
+            first_frame = os.path.join(directory, "first.pgm")
+            replay_frame = os.path.join(directory, "replay.pgm")
+            original = run(INTERPRETER, rom, "--frames", "72", "--play",
+                           "--record", record, "--ppm", first_frame)
+            self.assertEqual(original.returncode, 0, original.stderr)
+            replay = run(FIXED, "--replay", record, "--record", copy, "--diff", "--ppm", replay_frame)
+            self.assertEqual(replay.returncode, 0, replay.stderr)
+            self.assertEqual(replay.stdout.splitlines()[0], original.stdout.strip())
+            with open(record, "rb") as source, open(copy, "rb") as target:
+                recording = source.read()
+                self.assertEqual(recording, target.read())
+                self.assertEqual(recording[:9], b"RCIN\x02a26\x00")
+                self.assertIn(b"\x08\x00\x00\x00\x00", recording[9:])
+            with open(first_frame, "rb") as source, open(replay_frame, "rb") as target:
+                self.assertEqual(source.read(), target.read())
+
+            with open(copy, "wb") as reset:
+                inputs = bytearray(recording)
+                inputs[9 + 40 * 5 + 4] = 1
+                reset.write(inputs)
+            restarted = run(FIXED, "--replay", copy, "--diff")
+            baseline = run(INTERPRETER, rom, "--frames", "32")
+            self.assertEqual(restarted.returncode, 0, restarted.stderr)
+            self.assertEqual(restarted.stdout.splitlines()[0], baseline.stdout.strip())
+
+            with open(copy, "wb") as invalid:
+                invalid.write(recording[:5] + b"nes\x00" + recording[9:])
+            result = run(FIXED, "--replay", copy)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("cannot load Atari 2600 recording", result.stderr)
+
     def test_lockstep_and_interpreter_fallback(self):
         for program in (SMALL, FIXED, BANKED, F6, F4):
             with self.subTest(program=program):

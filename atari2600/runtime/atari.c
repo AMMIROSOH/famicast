@@ -132,7 +132,7 @@ typedef struct {
 
 int a26_save(Atari2600 *a, const char *path) {
     A26State state = {0};
-    memcpy(state.magic, "A26STATE", 8);
+    memcpy(state.magic, "A26STAT2", 8);
     state.hash = a->rom_hash;
     state.pal = a->pal;
     state.cpu = a->bus.cpu;
@@ -158,15 +158,29 @@ int a26_load(Atari2600 *a, const char *path) {
     if (!file) return -1;
     int failed = fread(&state, sizeof state, 1, file) != 1;
     fclose(file);
-    if (failed || memcmp(state.magic, "A26STATE", 8) || state.hash != a->rom_hash ||
+    if (failed) return -1;
+    int legacy = !memcmp(state.magic, "A26STATE", 8);
+    if ((!legacy && memcmp(state.magic, "A26STAT2", 8)) || state.hash != a->rom_hash ||
         state.pal != a->pal || state.bank >= a->bus.cart.banks || state.tia.x >= 228 ||
         state.tia.y >= A26_HEIGHT || state.tia.sample_count > 2048 ||
         state.tia.color_rate != (unsigned)(a->pal ? 3546895 : 3579545) ||
         (state.riot.divider != 1 && state.riot.divider != 8 &&
          state.riot.divider != 64 && state.riot.divider != 1024)) return -1;
+    if (legacy) {
+        state.tia.pf_pixel = state.tia.pf_reflect = state.tia.rsync_skip = state.tia.next_hmove = 0;
+        state.tia.motion_counter = state.tia.moving = 0;
+        state.tia.audio_clock = (uint8_t)state.tia.x;
+        memset(state.tia.reserved, 0, sizeof state.tia.reserved);
+    }
+    if (state.tia.pf_pixel > 1 || state.tia.pf_reflect > 1 ||
+        state.tia.rsync_skip > state.tia.x || state.tia.next_hmove > 6 ||
+        state.tia.motion_counter > 15 || state.tia.moving > 0x1F || state.tia.audio_clock >= 228 ||
+        (state.tia.next_hmove && state.tia.next_hmove <= state.tia.pending_delay[0x2A])) return -1;
+    for (unsigned i = 0; i < 5; i++)
+        if ((unsigned)state.tia.position[i] >= A26_WIDTH) return -1;
     unsigned pending = 0;
     for (unsigned i = 0; i < 64; i++) {
-        if (state.tia.pending_delay[i] > 2) return -1;
+        if (state.tia.pending_delay[i] > (i >= sizeof state.tia.reg ? 0 : i == 0x2A ? 6 : 2)) return -1;
         if (state.tia.pending_delay[i]) pending++;
     }
     if (pending != state.tia.pending_count) return -1;

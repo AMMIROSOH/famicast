@@ -28,12 +28,18 @@ The build fetches the public-domain LZMA SDK. The cartridge size selects 2K,
 settings. The headless program accepts `--mapper` and `--region` overrides.
 Auto region recognizes `(Europe)` and `(PAL)` in the file name.
 
+Both players accept `--record FILE` and `--replay FILE` for Atari 2600
+controller and reset inputs. The headless runner defaults to the recording's
+length when replaying. Use `--play` to generate scripted inputs for a headless
+recording.
+
 Arrow keys and X control the first joystick. Enter and Right Shift operate the
 console reset and select switches. F5 resets the emulator, F2 saves a state,
 and F4 loads it. Two gamepads are supported.
 
-TIA rendering and sound are still being validated against independent
-hardware references. Object positioning and mid-scanline effects are
-approximations.
+The TIA clocks playfield groups, horizontal motion and audio independently.
+Sprite graphics still use a position-based renderer, so effects that change
+sprite size while a copy is being drawn and chip-specific late motion quirks
+can differ from hardware.
 Some cartridge formats are not implemented. Paddles, SECAM and cartridge RAM
 are not supported yet.

@@ -6,7 +6,11 @@
 enum { A26_WIDTH = 160, A26_HEIGHT = 312 };
 
 typedef struct {
-    uint8_t reg[64], collision[8];
+    uint8_t reg[0x2D];
+    /* Keep the original state layout by using the unused register slots. */
+    uint8_t pf_pixel, pf_reflect, rsync_skip, next_hmove;
+    uint8_t motion_counter, moving, audio_clock, reserved[12];
+    uint8_t collision[8];
     uint8_t input[6];
     uint8_t fire[2];
     uint8_t delayed_player[2], delayed_ball;

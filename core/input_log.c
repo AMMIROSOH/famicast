@@ -33,7 +33,15 @@ int input_log_load(const char *path, InputLog *log) {
     if (!ok || body % per) { fclose(f); return -1; }
     memcpy(log->system, v2 ? head + 5 : "nes", 4);
     log->count = body / per;
+    if ((uintmax_t)log->count > (SIZE_MAX - 1) / sizeof *log->frames) {
+        fclose(f);
+        return -1;
+    }
     log->frames = malloc((size_t)log->count * sizeof *log->frames + 1);
+    if (!log->frames) {
+        fclose(f);
+        return -1;
+    }
     for (long i = 0; i < log->count; i++) {
         uint8_t b[5];
         if (fread(b, 1, (size_t)per, f) != (size_t)per) { fclose(f); input_log_free(log); return -1; }
