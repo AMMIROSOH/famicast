@@ -147,7 +147,8 @@ that are its own. The frontend does the rest.
 - **Which system** (`core/detect.h`): each system has a detector over the
   file's bytes, scoring it 0-100: 100 for a header the console itself
   checks (NES and FDS headers or a raw FDS disk side, the Game Boy's logo
-  and header checksum, the Genesis "SEGA" at $100), a guess for the Atari
+  and header checksum, the Genesis "SEGA" at $100, the Sega 8-bit "TMR
+  SEGA" whose region tells the Master System from the Game Gear), a guess for the Atari
   2600 (no header: a cartridge size and a reset vector into the cartridge
   window), too weak to decide alone: the `.a26` extension confirms it.
   The best score wins; the extension adds 20 (ties, and the Atari); two
@@ -155,8 +156,11 @@ that are its own. The frontend does the rest.
   `ROMS` list uses the same rules (`cmake/detect_system.cmake`;
   `tests/test_detect.py` runs both on the same files).
 - **Two systems on one CPU**: the NES and the Atari 2600 both run the
-  shared 6502 with their own bus functions; each gets its own copy of the
-  interpreter (`cpu/README.md`).
+  shared 6502, the Genesis and the Master System the Z80, each with its own
+  bus functions; each gets its own copy of the interpreter
+  (`cpu/README.md`). The Game Gear is a mode of the Master System, not a
+  system of its own in the build, with its own detector and `System`
+  table.
 - **Sound**: the system names its rate and channels (`SysInfo`: the NES
   mono, the Game Boy stereo) and returns sample frames, interleaved.
 - **Input**: one set of 16-bit buttons per player for every system (A, B,

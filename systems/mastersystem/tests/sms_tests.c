@@ -37,7 +37,7 @@ static void test_header(void) {
 static void test_memory(void) {
     for (unsigned b = 0; b < 32; b++) memset(rom + b * 0x4000, (int)b, 0x4000);
     rom[0x0123] = 0xAA;
-    sms_init(&s, rom, sizeof rom, 0);
+    sms_init(&s, rom, sizeof rom, 0, 0);
     assert(z80_read(&s.cpu, 0x4000) == 1 && z80_read(&s.cpu, 0x8000) == 2);  /* power-on banks 0, 1, 2 */
     z80_write(&s.cpu, 0xFFFF, 0x1B);
     assert(z80_read(&s.cpu, 0x8000) == 0x1B);
@@ -64,7 +64,7 @@ static void test_codemasters(void) {
     for (unsigned b = 0; b < 16; b++) memset(rom + b * 0x4000, (int)b, 0x4000);
     rom[0x7FE6] = 0x34, rom[0x7FE7] = 0x12, rom[0x7FE8] = 0xCC, rom[0x7FE9] = 0xED;  /* $1234 + $EDCC */
     assert(sms_is_codemasters(rom, 0x40000));
-    sms_init(&s, rom, 0x40000, 0);
+    sms_init(&s, rom, 0x40000, 0, 0);
     assert(z80_read(&s.cpu, 0x8000) == 0);                  /* power-on banks 0, 1, 0 */
     z80_write(&s.cpu, 0x8000, 7);
     z80_write(&s.cpu, 0x0000, 3);
@@ -76,7 +76,7 @@ static void test_codemasters(void) {
 }
 
 static void test_ports(void) {
-    sms_init(&s, rom, sizeof rom, 0);
+    sms_init(&s, rom, sizeof rom, 0, 0);
     assert(z80_in(&s.cpu, 0xDC) == 0xFF && z80_in(&s.cpu, 0xDD) == 0xFF);  /* nothing pressed */
     s.pad[0] = PAD_UP | PAD_B;
     s.pad[1] = PAD_DOWN | PAD_A;
@@ -96,7 +96,7 @@ static void test_ports(void) {
 }
 
 static void test_vdp_ports(void) {
-    sms_init(&s, rom, sizeof rom, 0);
+    sms_init(&s, rom, sizeof rom, 0, 0);
     vdp_addr(0x1234, 1);
     z80_out(&s.cpu, 0xBE, 0xA5);
     z80_out(&s.cpu, 0xBE, 0x5A);
@@ -112,9 +112,48 @@ static void test_vdp_ports(void) {
     assert(sms_color(&s, 1) == 0xFF55AAFFu);
 }
 
+/* The Game Gear mode: header detection, the palette, port $00, no NMI. */
+static void test_gamegear(void) {
+    memset(rom, 0, sizeof rom);
+    memcpy(rom + 0x7FF0, "TMR SEGA", 8);
+    rom[0x7FFF] = 0x6C;                                     /* GG export */
+    assert(sms_gg_mode(rom, 0x8000, "x.sms") == 1);
+    rom[0x7FFF] = 0x4C;                                     /* an SMS cartridge runs as one */
+    assert(sms_gg_mode(rom, 0x8000, "x.gg") == 0);
+    rom[0x7FFF] = 0;
+    memset(rom + 0x7FF0, 0, 8);
+    assert(sms_gg_mode(rom, 0x8000, "x.GG") == 1 && sms_gg_mode(rom, 0x8000, "x.sms") == 0);
+    rom[0x7FFF] = 0x6C;
+    memcpy(rom + 0x7FF0, "TMR SEGA", 8);
+    rom[0] = 0x18, rom[1] = 0xFE;                           /* JR $0000 */
+    rom[0x66] = 0x76;                                       /* an NMI would halt */
+    sms_init(&s, rom, 0x8000, 1, 1);
+    assert(!s.pal);                                         /* 60 Hz only */
+    vdp_addr(6, 3);                                         /* colour 3: bytes 6 and 7 */
+    z80_out(&s.cpu, 0xBE, 0x21);                            /* green 2, red 1 */
+    assert(s.vdp.cram[3] == 0);                             /* latched only */
+    z80_out(&s.cpu, 0xBE, 0x03);                            /* blue 3 */
+    assert(s.vdp.cram[3] == 0x0321);
+    assert(sms_color(&s, 3) == 0xFF112233u);
+    vdp_addr(0x3E, 3);                                      /* the last sprite colour */
+    z80_out(&s.cpu, 0xBE, 0xFF), z80_out(&s.cpu, 0xBE, 0x0F);
+    assert(s.vdp.cram[31] == 0x0FFF);
+    assert(z80_in(&s.cpu, 0x00) == 0xC0);                   /* Start up, export, NTSC */
+    sms_frame(&s, PAD_START, 0);
+    assert(z80_in(&s.cpu, 0x00) == 0x40);
+    assert(!s.cpu.halted);                                 /* no NMI */
+    uint8_t mem_ctrl = s.mem_ctrl;
+    z80_out(&s.cpu, 0x00, 0x12);                            /* GG port, not $3E */
+    assert(s.mem_ctrl == mem_ctrl);
+    rom[0x7FFF] = 0x5C;                                     /* GG Japan */
+    sms_init(&s, rom, 0x8000, 0, 1);
+    assert(z80_in(&s.cpu, 0x00) == 0x80);
+    memset(rom, 0, sizeof rom);
+}
+
 /* A 16-colour tile and a sprite, drawn on line 0. */
 static void test_render(void) {
-    sms_init(&s, rom, sizeof rom, 0);
+    sms_init(&s, rom, sizeof rom, 0, 0);
     vdp_reg(1, 0x40);                                       /* display on */
     vdp_reg(2, 0xFF);                                       /* names at $3800 */
     vdp_reg(5, 0xFF);                                       /* sprites at $3F00 */
@@ -157,20 +196,20 @@ static void test_timing(void) {
     memcpy(rom, main_code, sizeof main_code);
     static const uint8_t isr[] = {0xDB, 0xBF, 0x21, 0x00, 0xC0, 0x34, 0xFB, 0xC9};  /* IN A,($BF); INC ($C000); EI; RET */
     memcpy(rom + 0x38, isr, sizeof isr);
-    sms_init(&s, rom, 0x8000, 0);
+    sms_init(&s, rom, 0x8000, 0, 0);
     s.vdp.reg[1] = 0x20;                                    /* frame interrupt on */
     for (int i = 0; i < 10; i++) sms_frame(&s, 0, 0);
     assert(s.ram[0] == 10);                                 /* one a frame */
     assert(s.cpu.tstates >= 10u * 262 * 228 && s.cpu.tstates < 10u * 262 * 228 + 30);
     assert(s.n_samples == 735 || s.n_samples == 736);       /* 44100 / 59.92 */
     /* a line interrupt every 10 lines, lines 0-192 */
-    sms_init(&s, rom, 0x8000, 0);
+    sms_init(&s, rom, 0x8000, 0, 0);
     s.vdp.reg[0] = 0x10, s.vdp.reg[10] = 9;
     sms_frame(&s, 0, 0);
     sms_frame(&s, 0, 0);
     assert(s.ram[0] >= 19 * 2 - 2 && s.ram[0] <= 20 * 2);
     /* Pause: an NMI on the press only */
-    sms_init(&s, rom, 0x8000, 0);
+    sms_init(&s, rom, 0x8000, 0, 0);
     rom[0x66] = 0x3C, rom[0x67] = 0xED, rom[0x68] = 0x45;   /* INC A; RETN */
     s.cpu.a = 0;
     sms_frame(&s, PAD_START, 0);
@@ -178,19 +217,19 @@ static void test_timing(void) {
     sms_frame(&s, 0, PAD_START);
     assert(s.cpu.a == 1);
     /* PAL: 313 lines */
-    sms_init(&s, rom, 0x8000, 1);
+    sms_init(&s, rom, 0x8000, 1, 0);
     sms_frame(&s, 0, 0);
     assert(s.cpu.tstates >= 313u * 228 && s.cpu.tstates < 313u * 228 + 30);
 }
 
 static void test_state(void) {
-    sms_init(&s, rom, 0x8000, 0);
+    sms_init(&s, rom, 0x8000, 0, 0);
     sms_frame(&s, 0, 0);
     z80_write(&s.cpu, 0xC010, 0x77);
     sms_psg_write(&s.psg, 0x9A);
     assert(sms_save(&s, "sms_test.state") == 0);
     static Sms t;
-    sms_init(&t, rom, 0x8000, 0);
+    sms_init(&t, rom, 0x8000, 0, 0);
     char err[128];
     assert(sms_load(&t, "sms_test.state", err, sizeof err) == 0);
     assert(t.cpu.pc == s.cpu.pc && z80_read(&t.cpu, 0xC010) == 0x77 && t.psg.vol[0] == 10);
@@ -204,6 +243,7 @@ int main(void) {
     test_codemasters();
     test_ports();
     test_vdp_ports();
+    test_gamegear();
     test_render();
     test_timing();
     test_state();

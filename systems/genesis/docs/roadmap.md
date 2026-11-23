@@ -185,6 +185,4 @@ corrects this list where they disagree.
   (`systems/genesis/tests/random_rom.c`, 100%).
 
 ## Later
-- The Master System and Game Gear: the same Z80, a small machine, a
-  cheap way to check the Z80 recompiler on ROM code.
 - Arcade boards with the 68000 and Z80 (CPS-1, Neo Geo).

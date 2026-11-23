@@ -24,6 +24,14 @@ int sms_is_codemasters(const uint8_t *d, size_t size) {
     return sum && ((sum + inv) & 0xFFFF) == 0;
 }
 
+int sms_gg_mode(const uint8_t *data, size_t size, const char *path) {
+    long h = sms_header(data, size);
+    unsigned region = h >= 0 ? data[h + 15] >> 4 : 0;
+    if (region >= 3 && region <= 7) return region >= 5;
+    size_t n = path ? strlen(path) : 0;
+    return n >= 3 && (path[n - 3] == '.') && (path[n - 2] | 32) == 'g' && (path[n - 1] | 32) == 'g';
+}
+
 uint32_t sms_cart_addr(const SmsCart *c, uint16_t a) {
     if (a < 0x0400 && !c->codemasters) return a;
     unsigned banks = (unsigned)((c->size + SMS_ROM_BANK - 1) / SMS_ROM_BANK);

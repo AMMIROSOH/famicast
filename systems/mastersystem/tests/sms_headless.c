@@ -1,8 +1,11 @@
 /* Runs a .sms without a window, for tests and scripts: --frames N, --play
- * (button 1 taps to get past title screens, then walking right), --ppm FILE
+ * (button 1 taps, and Start on a Game Gear, to get past title screens, then
+ * walking right), --ppm FILE
  * (the last frame), --wav FILE, --state-at N FILE, --load-state FILE,
  * --pal/--ntsc, --misses FILE (a trace for smsrecomp), --diff (run the
- * interpreter alongside the recompiled code) and --coverage. */
+ * interpreter alongside the recompiled code) and --coverage. A Game Gear
+ * game (sms_gg_mode) runs in that mode; --ppm and the colour count are then
+ * its LCD's 160x144. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,9 +14,11 @@
 #include "loader.h"
 #include "sms.h"
 
-static uint16_t scripted(long frame) {
+static uint16_t scripted(long frame, int gg) {
     long k = frame % 60;
     uint16_t pad = frame >= 60 && k < 4 ? PAD_B : 0;
+    /* a Game Gear title screen waits for Start (on a Master System it is Pause) */
+    if (gg && frame >= 60 && frame <= 600 && k >= 30 && k < 34) pad |= PAD_START;
     if (frame > 600 && k >= 20) pad |= PAD_RIGHT;
     if (frame > 600 && k >= 40 && k < 44) pad |= PAD_A;
     return pad;
@@ -69,7 +74,7 @@ int main(int argc, char **argv) {
     }
     const char *path = argv[1], *ppm = NULL, *wav = NULL, *state_out = NULL, *state_in = NULL, *misses = NULL;
     long frames = 600, state_at = -1;
-    int play = 0, pal = strstr(path, "(Europe)") != NULL, diff = 0, coverage = 0;
+    int play = 0, pal = strstr(path, "(Europe)") != NULL, diff = 0, coverage = 0, gg;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]);
         else if (!strcmp(argv[i], "--play")) play = 1;
@@ -89,7 +94,8 @@ int main(int argc, char **argv) {
     char err[256];
     if (sms_load_rom(path, &rom, &size, err, sizeof err)) { fprintf(stderr, "%s\n", err); return 2; }
     static Sms s, reference;
-    sms_init(&s, rom, size, pal);
+    gg = sms_gg_mode(rom, size, path);
+    sms_init(&s, rom, size, pal, gg);
     if (state_in && sms_load(&s, state_in, err, sizeof err)) { fprintf(stderr, "%s\n", err); return 2; }
     uint8_t *trace = NULL;
     if (misses) {
@@ -98,7 +104,7 @@ int main(int argc, char **argv) {
         s.misses = trace;
     }
     if (diff) {
-        sms_init(&reference, rom, size, pal);
+        sms_init(&reference, rom, size, pal, gg);
         reference.recomp_on = 0;
         if (state_in && sms_load(&reference, state_in, err, sizeof err)) { fprintf(stderr, "%s\n", err); return 2; }
         reference.misses = NULL;
@@ -110,7 +116,7 @@ int main(int argc, char **argv) {
     int failed = 0;
     for (long i = 0; i < frames && !failed; i++) {
         if (i == state_at && sms_save(&s, state_out)) { perror(state_out); return 2; }
-        uint16_t pad = play ? scripted(i) : 0;
+        uint16_t pad = play ? scripted(i, gg) : 0;
         sms_frame(&s, pad, 0);
         if (diff) {
             sms_frame(&reference, pad, 0);
@@ -127,12 +133,14 @@ int main(int argc, char **argv) {
         }
     }
     if (w && (write_wav(w, samples) || fclose(w))) { perror(wav); return 2; }
-    uint8_t seen[64] = {0};
+    unsigned w0 = gg ? GG_WIDTH : SMS_WIDTH, h0 = gg ? GG_HEIGHT : SMS_HEIGHT, x0 = gg ? GG_X : 0, y0 = gg ? GG_Y : 0;
+    static uint8_t seen[4096];
     unsigned colours = 0;
-    for (unsigned i = 0; i < SMS_WIDTH * SMS_HEIGHT; i++) {
-        unsigned c = s.vdp.cram[s.vdp.frame[i] & 31];
-        colours += !seen[c], seen[c] = 1;
-    }
+    for (unsigned y = 0; y < h0; y++)
+        for (unsigned x = 0; x < w0; x++) {
+            unsigned c = s.vdp.cram[s.vdp.frame[(y + y0) * SMS_WIDTH + x + x0] & 31] & 0xFFF;
+            colours += !seen[c], seen[c] = 1;
+        }
     printf("frames=%u pc=%04X vdp_writes=%u colours=%u\n", s.frames, s.cpu.pc, s.writes, colours);
     if (diff && !failed) printf("diff: %u frames, no difference\n", s.frames);
     if (coverage) {
@@ -152,11 +160,12 @@ int main(int argc, char **argv) {
     if (ppm) {
         FILE *o = fopen(ppm, "wb");
         if (!o) { perror(ppm); return 2; }
-        fprintf(o, "P6\n%d %d\n255\n", SMS_WIDTH, SMS_HEIGHT);
-        for (unsigned i = 0; i < SMS_WIDTH * SMS_HEIGHT; i++) {
-            uint32_t c = sms_color(&s, s.vdp.frame[i]);
-            fputc((int)(c >> 16 & 255), o), fputc((int)(c >> 8 & 255), o), fputc((int)(c & 255), o);
-        }
+        fprintf(o, "P6\n%u %u\n255\n", w0, h0);
+        for (unsigned y = 0; y < h0; y++)
+            for (unsigned x = 0; x < w0; x++) {
+                uint32_t c = sms_color(&s, s.vdp.frame[(y + y0) * SMS_WIDTH + x + x0]);
+                fputc((int)(c >> 16 & 255), o), fputc((int)(c >> 8 & 255), o), fputc((int)(c & 255), o);
+            }
         if (fclose(o)) { perror(ppm); return 2; }
     }
     free(trace);

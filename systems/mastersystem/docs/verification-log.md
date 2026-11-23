@@ -5,6 +5,27 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../../docs/verification-log.md).
 
+## 2026-11-23 · S4 · the Game Gear mode
+- **Self-checks** (`sms_tests`): the mode from the header and the file
+  name, two-byte palette writes to colours 3 and 31, ----BBBBGGGGRRRR
+  colours, port $00 with and without Start (export and Japan), Start
+  without an NMI, port $00 writes not reaching $3E, 60 Hz only.
+- **Games** (900 frames of `--play`, `--ppm` checked by eye): Aladdin
+  (beta), Columns, Defenders of Oasis (beta) and Micro Machines (beta, the
+  Codemasters mapper) show their title or intro pictures in the right
+  colours.
+- **Boot test** (`TestGameGearBoot`, `--play` taps Start on a Game Gear
+  during the title screens): Columns, Ecco - The Tides of Time, Defenders of
+  Oasis and Micro Machines end on pictures of 4+ colours. Ax Battler was
+  left out: its story text runs 70 s before the title, which Start does not
+  skip (it reaches the title at 4,500 frames).
+- **Recompiled** (`-DROMS`, 3,000 frames of `--play --diff --coverage`):
+  Columns 99.1% and Micro Machines 94.5% of cycles recompiled, no
+  difference.
+- **Builds**: MinGW gcc with `-DWERROR=ON -DTESTS=ON`, every system;
+  `test_detect` agrees between the C detectors and the CMake rules.
+- **Not checked**: the window program by hand; stereo (not done).
+
 ## 2026-11-23 · S3 · the Z80 recompiler
 - **Random instructions** (`smstest_random`, `tests/random_rom.c`): 6,391
   instructions from the base, CB, ED, DD and FD tables, memory writes

@@ -17,11 +17,12 @@ own.
 | Sega Genesis / Mega Drive | 68000, Z80, VDP, PSG and YM2612, 3- and 6-button pads, battery saves; recompiled (68000) | [systems/genesis/README.md](systems/genesis/README.md) |
 | Atari 2600 | 2K/4K/F8/F6/F4 cartridges, TIA picture and sound, NTSC and PAL, joystick; recompiled; no Superchip RAM or other schemes, paddles or SECAM | [systems/atari2600/README.md](systems/atari2600/README.md) |
 | Master System / Mark III | Z80, Sega and Codemasters mappers, cartridge RAM, VDP (mode 4) and PSG, NTSC and PAL, two pads and Pause; recompiled (Z80) | [systems/mastersystem/README.md](systems/mastersystem/README.md) |
+| Game Gear | a mode of the Master System: 160x144 LCD, 12-bit palette, Start on port $00; recompiled (Z80) | [systems/mastersystem/README.md](systems/mastersystem/README.md) |
 
 ## How it works
 1. Each system has a recompiler (`systems/nes/recomp/` → `nesrecomp`, `systems/gb/recomp/`
    → `gbrecomp`, `systems/genesis/recomp/` → `mdrecomp`, `systems/mastersystem/recomp/`
-   → `smsrecomp`; C, built and run by CMake). It finds the reachable code and
+   → `smsrecomp`, also for the Game Gear; C, built and run by CMake). It finds the reachable code and
    emits one C function per basic block, plus the ROM itself. Before that,
    the build plays the game for a while in the interpreter to find code
    static analysis cannot.
@@ -44,8 +45,8 @@ Details: [docs/architecture.md](docs/architecture.md); plans:
 Windows (x64, arm64), Linux (x64, arm64; glibc 2.35+) and macOS (arm64):
 `retrocast`, which plays a game of any system in the interpreter; per
 system a headless program (`nes_headless`, `gb_headless`, `genesis_headless`,
-`atari2600_headless`, `sms_headless`) and a recompiler (`nesrecomp`, `gbrecomp`, `mdrecomp`,
-`atari2600recomp`, `smsrecomp`); and a **kit** that recompiles your games
+`atari2600_headless`, `sms_headless`) and a recompiler (`nesrecomp`,
+`gbrecomp`, `mdrecomp`, `atari2600recomp`, `smsrecomp`); and a **kit** that recompiles your games
 into native programs with only CMake and a C compiler installed (SDL3 comes
 prebuilt). `README.txt` in the archive explains both. Archives are made by
 `tools/make_release.py` (`.github/workflows/release.yml`: push a tag `v*`
@@ -71,16 +72,16 @@ and FDS headers, the Game Boy's logo and header checksum, the Genesis
 "SEGA" at $100, the Master System's "TMR SEGA" at $1FF0/$3FF0/$7FF0/$1FFF0;
 the Atari 2600 has no header and is recognised by its size and reset vector,
 with the `.a26` extension to confirm. When a file is unclear it says so;
-`--system nes|gb|md|a26|sms` picks one. Each system keeps its settings in its
-own file next to the program (`nes.ini`, `gb.ini`, `genesis.ini`,
-`atari2600.ini`, `mastersystem.ini`).
+`--system nes|gb|md|a26|sms|gg` picks one. Each system keeps its settings in
+its own file next to the program (`nes.ini`, `gb.ini`, `genesis.ini`,
+`atari2600.ini`, `mastersystem.ini`, `gamegear.ini`).
 Builds are **Release**; tests, timings and full-speed play assume it. Keep
 `--config Release` with Visual Studio (the default generator with MSVC):
 without it `cmake --build` builds Debug, which is too slow to play.
 Ninja and Makefiles ignore the flag and build Release anyway. Programs are
 put in `build/` with every generator (no `Release/` or `Debug/` subfolder).
 Headless (no SDL3): add `-DFRONTEND=OFF`. Only some systems:
-`-DSYSTEMS=gb` (default `nes;gb;genesis;atari2600;mastersystem`). Warnings as errors: `-DWERROR=ON`. Test programs: `-DTESTS=ON` ([Contributing](#contributing)). On Windows the game programs open
+`-DSYSTEMS=gb` (default `nes;gb;genesis;atari2600;mastersystem`; `mastersystem` includes the Game Gear). Warnings as errors: `-DWERROR=ON`. Test programs: `-DTESTS=ON` ([Contributing](#contributing)). On Windows the game programs open
 no console window; use the `_headless` programs for text output.
 
 ## Recompiling a game

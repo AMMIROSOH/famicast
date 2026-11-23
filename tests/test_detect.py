@@ -13,7 +13,7 @@ from tests.games import ROOT, built
 BUILD = os.environ.get("NES_BUILD", os.path.join(ROOT, "build"))
 EXE = ".exe" if os.name == "nt" else ""
 RUNNER = os.path.join(BUILD, "system_detect" + EXE)
-CMAKE_ID = {"nes": "nes", "gb": "gb", "genesis": "md", "atari2600": "a26", "mastersystem": "sms"}
+CMAKE_ID = {"nes": "nes", "gb": "gb", "genesis": "md", "atari2600": "a26", "mastersystem": "sms", "gamegear": "gg"}
 LOGO = bytes.fromhex("ceed6666cc0d000b03730083000c000d0008111f8889000edccc6ee6ddddd999"
                      "bbbb67636e0eecccdddc999fbbb9333e")
 
@@ -49,6 +49,13 @@ def sms(header=True, region=0x4):
     return bytes(rom)
 
 
+def gg(region=0x6):
+    rom = bytearray(0x8000)
+    rom[0x7FF0:0x7FF8] = b"TMR SEGA"
+    rom[0x7FFF] = region << 4 | 0xC
+    return bytes(rom)
+
+
 def nes():
     return b"NES\x1a\x01\x01" + bytes(10) + bytes(0x4000 + 0x2000)
 
@@ -73,7 +80,9 @@ CASES = [  # file name, bytes, expected id (None: refused)
     ("no_extension_sms", sms(), "sms"),
     ("japan.sms", sms(header=False), "sms"),  # no header: weak, the extension decides
     ("japan.bin", sms(header=False), None),
-    ("gamegear.gg", sms(region=0x6), None),  # a Game Gear header is not a Master System game
+    ("game.gg", gg(), "gg"),
+    ("game.sms", gg(), "gg"),  # the region nibble decides, not the extension
+    ("no_extension_gg", gg(region=0x5), "gg"),
     ("game.a26", atari(), "a26"),
     ("bank.a26", atari(8192, vector_ok=False), "a26"),  # weak, the extension decides
     ("game.bin", atari(2048), None),  # weak: without .a26 (or --system) no system is picked

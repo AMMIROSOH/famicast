@@ -1,4 +1,4 @@
-# The Sega Master System / Mark III. It shares cpu/z80 with the Genesis;
+# The Sega Master System / Mark III, and the Game Gear as a mode of it. It shares cpu/z80 with the Genesis;
 # the Z80 core's bus functions are in runtime/sms.c.
 
 # Its own copy of the Z80 interpreter: the bus functions are global symbols,
@@ -83,4 +83,7 @@ endif()
 
 if(FRONTEND)
     frontend_system(mastersystem smscore sms_loader sms_recomp_none)
+    # the Game Gear: gamegear_system is in the same frontend.c
+    set_property(GLOBAL APPEND PROPERTY RETROCAST_SYSTEMS gamegear)
+    add_library(gamegear_window INTERFACE)
 endif()

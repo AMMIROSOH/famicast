@@ -58,8 +58,20 @@ static uint8_t port_dd(const Sms *s) {
     return v;
 }
 
+/* Game Gear ports $00-$06 (SMS Power, I/O Port Map - Game Gear): $00 is
+ * Start (bit 7, 0 = pressed), export (bit 6) and NTSC (bit 5 = 0); $01-$05
+ * the link port, read as nothing connected. */
+static uint8_t gg_port(const Sms *s, unsigned port) {
+    static const uint8_t link[6] = {0, 0x7F, 0xFF, 0x00, 0xFF, 0x00};
+    if (port) return link[port];
+    long h = sms_header(s->cart.data, s->cart.size);
+    int japan = h >= 0 && s->cart.data[h + 15] >> 4 == 5;
+    return (uint8_t)(((s->pad[0] | s->pad[1]) & PAD_START ? 0 : 0x80) | (japan ? 0 : 0x40));
+}
+
 uint8_t z80_in(Z80 *z, uint16_t port) {
     Sms *s = z->bus;
+    if (s->vdp.gg && (port & 0xFF) < 6) return gg_port(s, port & 0xFF);
     switch (port & 0xC1) {
     case 0x40: return sms_vdp_vcount(s);
     case 0x41: return sms_vdp_hcount(s);
@@ -73,6 +85,9 @@ uint8_t z80_in(Z80 *z, uint16_t port) {
 
 void z80_out(Z80 *z, uint16_t port, uint8_t v) {
     Sms *s = z->bus;
+    /* shortcut: the Game Gear's stereo register ($06) and link port are ignored, the
+     * sound is mono; keep $06 and mix two channels if stereo is wanted */
+    if (s->vdp.gg && (port & 0xFF) < 7) return;
     switch (port & 0xC1) {
     case 0x00: s->mem_ctrl = v; break;
     case 0x01: s->io_ctrl = v; break;
@@ -146,7 +161,9 @@ void sms_reset(Sms *s) {
     z80_reset(&s->cpu);
     s->cpu.sp = 0xDFF0;  /* where the BIOS leaves it */
     memset(s->ram, 0, sizeof s->ram);
+    uint8_t gg = s->vdp.gg;
     memset(&s->vdp, 0, sizeof s->vdp);
+    s->vdp.gg = gg;
     s->cart.page[0] = 0, s->cart.page[1] = 0, s->cart.page[2] = 1, s->cart.page[3] = s->cart.codemasters ? 0 : 2;
     s->mem_ctrl = 0xAB, s->io_ctrl = 0xFF;
     s->pause = 0;
@@ -159,13 +176,14 @@ void sms_reset(Sms *s) {
     sms_psg_reset(&s->psg);
 }
 
-int sms_init(Sms *s, const uint8_t *rom, size_t size, int pal) {
+int sms_init(Sms *s, const uint8_t *rom, size_t size, int pal, int gg) {
     if (!rom || !size) return 1;
     memset(s, 0, sizeof *s);
     s->cart.data = rom;
     s->cart.size = size;
     s->cart.codemasters = (uint8_t)sms_is_codemasters(rom, size);
-    s->pal = pal;
+    s->pal = pal && !gg;  /* every Game Gear is 60 Hz */
+    s->vdp.gg = (uint8_t)(gg != 0);
     s->recomp_on = sms_recomp_program && sms_recomp_program->rom_hash == sms_rom_hash(rom, size);
     sms_reset(s);
     return 0;
@@ -178,7 +196,7 @@ static uint64_t sample_time(const Sms *s, uint64_t n) {
 void sms_frame(Sms *s, uint16_t pad0, uint16_t pad1) {
     s->pad[0] = pad0, s->pad[1] = pad1;
     int pause = ((pad0 | pad1) & PAD_START) != 0;
-    if (pause && !s->pause) z80_nmi(&s->cpu);  /* Pause is the Z80's NMI, on the press */
+    if (pause && !s->pause && !s->vdp.gg) z80_nmi(&s->cpu);  /* Pause is the Z80's NMI, on the press */
     s->pause = (uint8_t)pause;
     s->n_samples = 0;
     unsigned lines = sms_lines(s);
@@ -200,7 +218,7 @@ void sms_frame(Sms *s, uint16_t pad0, uint16_t pad1) {
 }
 
 /* ---- save states: the machine without the ROM pointer ---- */
-static const char MAGIC[8] = {'S', 'M', 'S', 'S', 'T', 'A', 'T', '1'};
+static const char MAGIC[8] = {'S', 'M', 'S', 'S', 'T', 'A', 'T', '2'};
 
 int sms_save(const Sms *s, const char *path) {
     FILE *f = fopen(path, "wb");
