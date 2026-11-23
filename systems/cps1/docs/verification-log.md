@@ -5,6 +5,26 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../../docs/verification-log.md).
 
+## 2026-11-23 · P3 · the YM2151 against ymfm
+- **How**: Final Fight's 173,836 YM2151 register writes (80 s of play,
+  logged with their sample) played through our YM2151 and through ymfm
+  (Aaron Giles, BSD-3, commit 81aec25; built outside the repository, not
+  linked into retrocast), compared in 73 ms windows; then each part alone
+  with register scripts.
+- **Before**: the LFO's rate and depths, the noise, and summed carriers
+  (a 14-bit clip, the YM2612's) differed, and a decay at its sustain
+  level took one step too many (-0.75 dB on a held note).
+- **After**: pitch within 1.2 cents on 195 notes (key code, fraction, DT2)
+  and DT1 0-7 exact; attack within 3% and release exact at every rate;
+  vibrato and tremolo depth and rate for each waveform; noise at every
+  frequency (level and spectrum identical); the 8 algorithms with
+  feedback 55-60 dB below the signal; the whole song at the same level
+  (median 0.0 dB) and spectrum (correlation median 1.00, centroid ratio
+  1.00). `cps1_tests` pins the sustain hold, the LFO counter and the
+  carrier sum.
+- **Genesis**: the envelope's new order (the state changes before the
+  step, as in ymfm's YM2612) leaves `md_tests`' YM2612 hash unchanged.
+
 ## 2026-11-23 · P3 · sound
 - **Genesis unchanged**: a YM2612 program (two channels, algorithms 4
   and 7, feedback, the LFO) hashes the same before and after moving the

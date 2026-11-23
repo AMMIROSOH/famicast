@@ -22,7 +22,8 @@ void fm_eg_step(FmOp *o, int kc, uint32_t eg_cnt);  /* kc: the 5-bit key code */
 int fm_op_out(const FmOp *o, int mod, int am);    /* phase plus modulation, through log-sin and exp: +-8168 */
 int fm_detune(int dt, int kc);                    /* DT1 in phase increments, negative for dt bit 2 */
 /* S1-S4 through algorithm alg, S1 fed back by fb (0-7, fb_out its last two
- * outputs, updated); am: each operator's AM. The channel's output, -8192..8191. */
-int fm_algorithm(FmOp op[4], int alg, int fb, int16_t fb_out[2], const int am[4]);
+ * outputs, updated); am: each operator's AM. The channel's output, clamped to
+ * -clip-1..clip: 8191 on the YM2612 (its 14-bit channel), 32767 on the YM2151. */
+int fm_algorithm(FmOp op[4], int alg, int fb, int16_t fb_out[2], const int am[4], int clip);
 
 #endif

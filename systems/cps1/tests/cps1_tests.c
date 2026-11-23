@@ -377,6 +377,33 @@ static void test_opm_release(void) {
     assert(last == 0);
 }
 
+static void test_opm_sustain_hold(void) {  /* D1L 0: the decay holds at full level, no extra step */
+    opm_tone(0x4A);
+    opm_reg(0xA0 + 24, 31);              /* D1R 31 */
+    for (int i = 0; i < 2000; i++) opm_sample(&opm);
+    assert(opm.ch[0].op[3].att == 0);
+}
+
+static void test_opm_lfo_rate(void) {  /* LFRQ $C0: (16 << 12) a sample, a cycle in 2^30 / 65,536 samples */
+    opm_reset(&opm);
+    opm_reg(0x18, 0xC0);
+    for (int i = 0; i < 16384; i++) opm_sample(&opm);
+    assert(opm.lfo_phase == 1u << 30);
+}
+
+static void test_opm_carriers_sum(void) {  /* algorithm 7: four loud carriers pass the YM2612's 14-bit clip */
+    opm_tone(0x4A);
+    for (int slot = 0; slot < 4; slot++)
+        opm_reg((uint8_t)(0x40 + slot * 8), 0x01), opm_reg((uint8_t)(0x60 + slot * 8), 0), opm_reg((uint8_t)(0x80 + slot * 8), 0x1F);
+    opm_reg(0x08, 0x78);
+    int peak = 0;
+    for (int i = 0; i < 2000; i++) {
+        int v = opm_sample(&opm);
+        peak = v > peak ? v : -v > peak ? -v : peak;
+    }
+    assert(peak > 8191 * 2);             /* both sides, (L + R) / 2: four carriers near 8,168 each */
+}
+
 /* ---- the OKI MSM6295 ---- */
 
 static uint8_t okirom[0x1000];
@@ -515,6 +542,9 @@ int main(void) {
     test_opm_timer_a();
     test_opm_timer_b();
     test_opm_release();
+    test_opm_sustain_hold();
+    test_opm_lfo_rate();
+    test_opm_carriers_sum();
     test_oki_decode();
     test_oki_status();
     test_oki_stop();

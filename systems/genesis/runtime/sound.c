@@ -67,7 +67,7 @@ static int channel(Ym *y, int c) {
         if (y->eg_sub == 0) fm_eg_step(o, kc, y->eg_cnt);
     }
     int am4[4] = {ch->op[0].am ? am : 0, ch->op[1].am ? am : 0, ch->op[2].am ? am : 0, ch->op[3].am ? am : 0};
-    return fm_algorithm(ch->op, ch->alg, ch->fb, ch->fb_out, am4);
+    return fm_algorithm(ch->op, ch->alg, ch->fb, ch->fb_out, am4, 8191);
 }
 
 static void ym_sample(Ym *y, float *l, float *r) {

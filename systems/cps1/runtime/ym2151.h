@@ -29,16 +29,17 @@ typedef struct {
     uint16_t tb_cnt;
     uint8_t status;                /* bit 0 timer A, bit 1 timer B */
     uint8_t irq;                   /* a flag set with its IRQ enabled */
-    uint32_t lfo_phase;            /* 24-bit fraction of an LFO cycle */
-    uint8_t lfo_rand;
+    uint8_t test;                  /* $01: bit 1 holds the LFO in reset */
+    uint32_t lfo_phase;            /* the LFO counter: bits 22-29 its position */
     uint8_t eg_sub;
     uint32_t eg_cnt;
     uint32_t noise_lfsr, noise_cnt;
+    uint8_t noise_state;
 } Opm;
 
 void opm_reset(Opm *y);
 void opm_write(Opm *y, int port, uint8_t v);  /* port 0: register number, 1: data */
 uint8_t opm_status(const Opm *y);             /* bit 1 timer B, bit 0 timer A; never busy */
-int opm_sample(Opm *y);                       /* one sample, mono: -16384..16383 */
+int opm_sample(Opm *y);                       /* one sample, mono (L + R) / 2: -32768..32767 */
 
 #endif

@@ -71,6 +71,10 @@ void fm_key(FmOp *o, int on) {
 }
 
 void fm_eg_step(FmOp *o, int kc, uint32_t cnt) {
+    /* the state changes first: a decay already at the sustain level holds there */
+    if (o->state == FM_ATTACK && o->att == 0) o->state = FM_DECAY;
+    int sl = o->sl == 15 ? 0x3E0 : o->sl << 5;
+    if (o->state == FM_DECAY && o->att >= sl) o->state = FM_SUSTAIN;
     int rate = o->state == FM_ATTACK ? o->ar : o->state == FM_DECAY ? o->dr : o->state == FM_SUSTAIN ? o->sr : o->rr * 2 + 1;
     int r = rate ? 2 * rate + (kc >> (3 - o->ks)) : 0;
     if (r > 63) r = 63;
@@ -80,11 +84,9 @@ void fm_eg_step(FmOp *o, int kc, uint32_t cnt) {
     int att = o->att;
     if (o->state == FM_ATTACK) {
         att = r >= 62 ? 0 : att + ((~att * inc) >> 4);
-        if (att <= 0) att = 0, o->state = FM_DECAY;
+        if (att < 0) att = 0;
     } else {
         att += inc;
-        int sl = o->sl == 15 ? 0x3E0 : o->sl << 5;
-        if (o->state == FM_DECAY && att >= sl) o->state = FM_SUSTAIN;
         if (att > 0x3FF) att = 0x3FF;
     }
     o->att = (uint16_t)att;
@@ -102,7 +104,7 @@ int fm_op_out(const FmOp *o, int mod, int am) {
     return p & 0x200 ? -v : v;
 }
 
-int fm_algorithm(FmOp op[4], int alg, int fb, int16_t fb_out[2], const int am[4]) {
+int fm_algorithm(FmOp op[4], int alg, int fb, int16_t fb_out[2], const int am[4], int clip) {
     int a1 = am[0], a2 = am[1], a3 = am[2], a4 = am[3];
     int f = fb ? (fb_out[0] + fb_out[1]) >> (10 - fb) : 0;
     int s1 = fm_op_out(&op[0], f, a1), s2, s3, out;
@@ -117,5 +119,5 @@ int fm_algorithm(FmOp op[4], int alg, int fb, int16_t fb_out[2], const int am[4]
     case 6: s2 = fm_op_out(&op[1], s1 >> 1, a2); s3 = fm_op_out(&op[2], 0, a3); out = s2 + s3 + fm_op_out(&op[3], 0, a4); break;
     default: s2 = fm_op_out(&op[1], 0, a2); s3 = fm_op_out(&op[2], 0, a3); out = s1 + s2 + s3 + fm_op_out(&op[3], 0, a4); break;
     }
-    return out > 8191 ? 8191 : out < -8192 ? -8192 : out;
+    return out > clip ? clip : out < -clip - 1 ? -clip - 1 : out;
 }
