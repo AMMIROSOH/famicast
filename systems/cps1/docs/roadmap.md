@@ -37,8 +37,8 @@ before the thing it checks. A milestone is done when its exit test passes.
   game's id; `cmake/detect_system.cmake` matches a zip to `games.c`'s CRCs.
 - [x] **Exit:** `test_detect` (the C detector and the CMake rule agree on
   Final Fight and refuse a CPS-2 zip; a `games.c` the rule cannot read
-  stops it); `test_ffight_state`; `retrocast` opens Final Fight.
-- Open: a long session played by hand.
+  stops it); `test_ffight_state`; Final Fight played by hand in
+  `retrocast` to Game Over.
 
 ## P3 · Sound
 - [x] The Z80 (ROM, bank, RAM, the command and fade latches), the YM2151
