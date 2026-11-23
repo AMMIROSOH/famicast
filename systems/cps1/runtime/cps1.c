@@ -7,7 +7,12 @@
  *   $800180 / $800188  sound command / fade (for the Z80)
  *   $900000-$92FFFF  graphics RAM;  $FF0000-$FFFFFF  work RAM
  * Anything else reads $FFFF. VBlank is interrupt level 2 (autovector) from
- * line 240, held until acknowledged. Sources: docs/sources.md (CPS-1). */
+ * line 240, held until acknowledged.
+ * The sound Z80: $0000-$7FFF ROM, $8000-$BFFF a 16 KB bank (ROM $8000 +
+ * bank x $4000; $F004 bit 0), $D000-$D7FF RAM, $F000/$F001 the YM2151,
+ * $F002 the OKI ($F006 its pin 7), $F008 / $F00A the 68000's command and fade; the YM2151's
+ * IRQ is its INT. It runs line by line after the 68000.
+ * Sources: docs/sources.md (CPS-1, CPS-1 sound). */
 #include <string.h>
 
 #include "cps1.h"
@@ -101,12 +106,74 @@ void m68k_aborted(M68k *c, uint32_t a, unsigned fc, unsigned strobe, int write) 
 int m68k_iack(M68k *c, int level) { (void)level; c->ipl = 0; return -1; }  /* autovector; acknowledging clears it */
 void m68k_reset_out(M68k *c) { (void)c; }
 
+/* ---- the sound Z80 ---- */
+
+static uint8_t zrd(Cps1 *s, uint16_t a) {
+    const uint8_t *rom = s->rom->region[CPS1_R_SOUND];
+    uint32_t size = s->rom->size[CPS1_R_SOUND], at = a < 0x8000 ? a : 0x8000u + s->bank * 0x4000u + (a - 0x8000u);
+    if (a < 0xC000) return at < size ? rom[at] : 0xFF;
+    if (a >= 0xD000 && a < 0xD800) return s->z80_ram[a - 0xD000];
+    switch (a) {
+    case 0xF001: return opm_status(&s->opm);
+    case 0xF002: return oki_status(&s->oki);
+    case 0xF008: return s->sound_cmd;
+    case 0xF00A: return s->sound_fade;
+    default: return 0xFF;
+    }
+}
+
+uint8_t z80_fetch(Z80 *z, uint16_t pc) { return zrd(z->bus, pc); }
+uint8_t z80_read(Z80 *z, uint16_t a) { return zrd(z->bus, a); }
+void z80_write(Z80 *z, uint16_t a, uint8_t v) {
+    Cps1 *s = z->bus;
+    if (a >= 0xD000 && a < 0xD800) s->z80_ram[a - 0xD000] = v;
+    else if (a == 0xF000 || a == 0xF001) opm_write(&s->opm, a & 1, v);
+    else if (a == 0xF002) oki_write(&s->oki, v);
+    else if (a == 0xF004) s->bank = v & 1;
+    else if (a == 0xF006) s->oki.pin7 = v & 1;  /* the OKI's rate: 132 clocks a sample, or 165 */
+}
+uint8_t z80_in(Z80 *z, uint16_t port) { (void)z, (void)port; return 0xFF; }
+void z80_out(Z80 *z, uint16_t port, uint8_t v) { (void)z, (void)port, (void)v; }
+void z80_idle(Z80 *z, uint16_t a, unsigned n) { (void)z, (void)a, (void)n; }
+uint8_t z80_irq_ack(Z80 *z) { (void)z; return 0xFF; }  /* IM 1: RST $38 */
+
+static void sample(Cps1 *s) {
+    s->oki_acc += 64ull * 1000000;  /* 64 Z80 T-states in OKI clocks (1 MHz) x 3,579,545 */
+    uint64_t period = (s->oki.pin7 ? 132ull : 165ull) * CPS1_Z80_CLOCK;
+    while (s->oki_acc >= period) s->oki_acc -= period, s->oki_out = oki_sample(&s->oki);
+    /* MAME's CPS-1 mix: the YM2151's two sides x 0.35, the OKI x 0.30, full
+     * scale 32,768 for the YM2151's 16 bits and 65,536 for the OKI's sum */
+    int v = opm_sample(&s->opm) * 7 / 10 + s->oki_out * 15 / 100;
+    if (s->snd_n < CPS1_SND_BUF) s->snd[s->snd_n++] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+}
+
+static void run_z80(Cps1 *s) {
+    uint64_t end = s->lines * CPS1_Z80_CLOCK * 512 / 8000000;  /* 229.09 a line */
+    while (s->z80.tstates < end) {
+        if (!s->opm.irq || !z80_interrupt(&s->z80)) z80_step(&s->z80);
+        while (s->z80.tstates >= s->snd_next) sample(s), s->snd_next += 64;
+    }
+}
+
+int cps1_take_sound(Cps1 *s, int16_t *out, int max) {
+    int n = s->snd_n < max ? s->snd_n : max;
+    memcpy(out, s->snd, (size_t)n * sizeof *out);
+    memmove(s->snd, s->snd + n, (size_t)(s->snd_n - n) * sizeof *out);
+    s->snd_n -= n;
+    return n;
+}
+
 void cps1_init(Cps1 *s, const Cps1Rom *r) {
     memset(s, 0, sizeof *s);
     s->rom = r;
     memset(s->dip, 0xFF, sizeof s->dip);  /* every switch off */
     s->cpu.bus = s;
     m68k_reset(&s->cpu);
+    s->z80.bus = s;
+    z80_reset(&s->z80);
+    opm_reset(&s->opm);
+    oki_reset(&s->oki, r->region[CPS1_R_OKI], r->size[CPS1_R_OKI]);
+    s->snd_next = 64;
 }
 
 void cps1_set_input(Cps1 *s, int player, uint16_t pad) {
@@ -122,5 +189,7 @@ void cps1_frame(Cps1 *s) {
         s->line_end += CPS1_LINE_CLOCKS;
         while (s->cpu.cycles < s->line_end && !s->cpu.halted) m68k_step(&s->cpu);
         if (s->cpu.halted) s->cpu.cycles = s->line_end;
+        s->lines++;
+        run_z80(s);
     }
 }

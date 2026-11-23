@@ -7,7 +7,7 @@ before the thing it checks. A milestone is done when its exit test passes.
 |---|---|---|
 | P1 | `core/zip`: directory, inflate, CRC | done |
 | P2 | the 68000 machine, CPS-A/CPS-B picture, the game table with Final Fight | done |
-| P3 | sound: Z80, YM2151, OKI MSM6295 | open |
+| P3 | sound: Z80, YM2151, OKI MSM6295 | done |
 | P4 | the window (`retrocast`, `cps1.ini`), CMake detection, save states | open |
 | P5 | every plain-board game; stars, flip screen, graphics ROM mappers, raster interrupts | open |
 | P6 | the recompiler (`cps1recomp`, `-DROMS`, `--diff`) | open |
@@ -28,3 +28,11 @@ before the thing it checks. A milestone is done when its exit test passes.
   sprites and priority; the game table (Final Fight).
 - [x] **Exit:** `cps1_tests`; Final Fight reaches its title in
   `cps1_headless --ppm`, checked by eye.
+
+## P3 · Sound
+- [x] The Z80 (ROM, bank, RAM, the command and fade latches), the YM2151
+  on `core/audio/fm.c` (moved from the Genesis, sample-identical there), the
+  OKI MSM6295, the mix (mono, 55,930 Hz), `cps1_headless --wav`.
+- [x] **Exit:** `cps1_tests` (pitch, timers, release, ADPCM, the latch, the
+  bank, the YM2151's IRQ, the sample buffer); Final Fight's play is not
+  silent (`test_ffight_sound`).

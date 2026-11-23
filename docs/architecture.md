@@ -161,6 +161,10 @@ that are its own. The frontend does the rest.
   (`cpu/README.md`). The Game Gear is a mode of the Master System, not a
   system of its own in the build, with its own detector and `System`
   table.
+- **Shared sound chips** (`core/audio/`): a chip lives in its system's
+  folder while one system uses it, and moves here when a second needs it.
+  Now: the FM operator of the Yamaha OPN / OPM chips (`fm.c`), under the
+  Genesis' YM2612 and the CPS-1's YM2151.
 - **Sound**: the system names its rate and channels (`SysInfo`: the NES
   mono, the Game Boy stereo) and returns sample frames, interleaved.
 - **Input**: one set of 16-bit buttons per player for every system (A, B,

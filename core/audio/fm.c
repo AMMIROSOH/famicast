@@ -1,0 +1,123 @@
+/* The FM operator (fm.h), from the Genesis' YM2612 (systems/genesis/runtime/sound.c
+ * keeps that chip's channels; sources there and in docs/sources.md). */
+#include "fm.h"
+
+/* A quarter sine as -log2(sin((i + 0.5) / 512 * pi)) x 256, and the fraction
+ * 2^(i / 256) - 1 x 1024; rounded, as constants so every platform agrees. */
+static const uint16_t LOGSIN[256] = {
+    2137, 1731, 1543, 1419, 1326, 1252, 1190, 1137, 1091, 1050, 1013, 979, 949, 920, 894, 869,
+    846, 825, 804, 785, 767, 749, 732, 717, 701, 687, 672, 659, 646, 633, 621, 609,
+    598, 587, 576, 566, 556, 546, 536, 527, 518, 509, 501, 492, 484, 476, 468, 461,
+    453, 446, 439, 432, 425, 418, 411, 405, 399, 392, 386, 380, 375, 369, 363, 358,
+    352, 347, 341, 336, 331, 326, 321, 316, 311, 307, 302, 297, 293, 289, 284, 280,
+    276, 271, 267, 263, 259, 255, 251, 248, 244, 240, 236, 233, 229, 226, 222, 219,
+    215, 212, 209, 205, 202, 199, 196, 193, 190, 187, 184, 181, 178, 175, 172, 169,
+    167, 164, 161, 159, 156, 153, 151, 148, 146, 143, 141, 138, 136, 134, 131, 129,
+    127, 125, 122, 120, 118, 116, 114, 112, 110, 108, 106, 104, 102, 100, 98, 96,
+    94, 92, 91, 89, 87, 85, 83, 82, 80, 78, 77, 75, 74, 72, 70, 69,
+    67, 66, 64, 63, 62, 60, 59, 57, 56, 55, 53, 52, 51, 49, 48, 47,
+    46, 45, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30,
+    29, 28, 27, 26, 25, 24, 23, 23, 22, 21, 20, 20, 19, 18, 17, 17,
+    16, 15, 15, 14, 13, 13, 12, 12, 11, 10, 10, 9, 9, 8, 8, 7,
+    7, 7, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2,
+    2, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+};
+static const uint16_t EXP[256] = {
+    0, 3, 6, 8, 11, 14, 17, 20, 22, 25, 28, 31, 34, 37, 40, 42,
+    45, 48, 51, 54, 57, 60, 63, 66, 69, 72, 75, 78, 81, 84, 87, 90,
+    93, 96, 99, 102, 105, 108, 111, 114, 117, 120, 123, 126, 130, 133, 136, 139,
+    142, 145, 148, 152, 155, 158, 161, 164, 168, 171, 174, 177, 181, 184, 187, 190,
+    194, 197, 200, 204, 207, 210, 214, 217, 220, 224, 227, 231, 234, 237, 241, 244,
+    248, 251, 255, 258, 262, 265, 268, 272, 276, 279, 283, 286, 290, 293, 297, 300,
+    304, 308, 311, 315, 318, 322, 326, 329, 333, 337, 340, 344, 348, 352, 355, 359,
+    363, 367, 370, 374, 378, 382, 385, 389, 393, 397, 401, 405, 409, 412, 416, 420,
+    424, 428, 432, 436, 440, 444, 448, 452, 456, 460, 464, 468, 472, 476, 480, 484,
+    488, 492, 496, 501, 505, 509, 513, 517, 521, 526, 530, 534, 538, 542, 547, 551,
+    555, 560, 564, 568, 572, 577, 581, 585, 590, 594, 599, 603, 607, 612, 616, 621,
+    625, 630, 634, 639, 643, 648, 652, 657, 661, 666, 670, 675, 680, 684, 689, 693,
+    698, 703, 708, 712, 717, 722, 726, 731, 736, 741, 745, 750, 755, 760, 765, 770,
+    774, 779, 784, 789, 794, 799, 804, 809, 814, 819, 824, 829, 834, 839, 844, 849,
+    854, 859, 864, 869, 874, 880, 885, 890, 895, 900, 906, 911, 916, 921, 927, 932,
+    937, 942, 948, 953, 959, 964, 969, 975, 980, 986, 991, 996, 1002, 1007, 1013, 1018,
+};
+
+static const uint8_t DT[4][32] = {  /* detune by key code, in phase increments */
+    {0},
+    {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 8, 8},
+    {1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 16, 16, 16, 16},
+    {2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 20, 22, 22, 22, 22},
+};
+static const uint8_t EG_INC[17][8] = {  /* envelope steps: rows by rate % 4 below 48, then by rate */
+    {0, 1, 0, 1, 0, 1, 0, 1}, {0, 1, 0, 1, 1, 1, 0, 1}, {0, 1, 1, 1, 0, 1, 1, 1}, {0, 1, 1, 1, 1, 1, 1, 1},
+    {1, 1, 1, 1, 1, 1, 1, 1}, {1, 1, 1, 2, 1, 1, 1, 2}, {1, 2, 1, 2, 1, 2, 1, 2}, {1, 2, 2, 2, 1, 2, 2, 2},
+    {2, 2, 2, 2, 2, 2, 2, 2}, {2, 2, 2, 4, 2, 2, 2, 4}, {2, 4, 2, 4, 2, 4, 2, 4}, {2, 4, 4, 4, 2, 4, 4, 4},
+    {4, 4, 4, 4, 4, 4, 4, 4}, {4, 4, 4, 8, 4, 4, 4, 8}, {4, 8, 4, 8, 4, 8, 4, 8}, {4, 8, 8, 8, 4, 8, 8, 8},
+    {8, 8, 8, 8, 8, 8, 8, 8},
+};
+
+int fm_detune(int dt, int kc) {
+    int d = DT[dt & 3][kc & 31];
+    return dt & 4 ? -d : d;
+}
+
+void fm_key(FmOp *o, int on) {
+    if (on && !o->key) {
+        o->phase = 0;
+        o->state = FM_ATTACK;
+    } else if (!on && o->key) {
+        o->state = FM_RELEASE;
+    }
+    o->key = (uint8_t)on;
+}
+
+void fm_eg_step(FmOp *o, int kc, uint32_t cnt) {
+    /* the state changes first: a decay already at the sustain level holds there */
+    if (o->state == FM_ATTACK && o->att == 0) o->state = FM_DECAY;
+    int sl = o->sl == 15 ? 0x3E0 : o->sl << 5;
+    if (o->state == FM_DECAY && o->att >= sl) o->state = FM_SUSTAIN;
+    int rate = o->state == FM_ATTACK ? o->ar : o->state == FM_DECAY ? o->dr : o->state == FM_SUSTAIN ? o->sr : o->rr * 2 + 1;
+    int r = rate ? 2 * rate + (kc >> (3 - o->ks)) : 0;
+    if (r > 63) r = 63;
+    int shift = r < 48 ? 11 - (r >> 2) : 0;
+    if (!r || cnt & ((1u << shift) - 1)) return;
+    int inc = EG_INC[r < 48 ? r & 3 : (r - 44 < 16 ? r - 44 : 16)][cnt >> shift & 7];
+    int att = o->att;
+    if (o->state == FM_ATTACK) {
+        att = r >= 62 ? 0 : att + ((~att * inc) >> 4);
+        if (att < 0) att = 0;
+    } else {
+        att += inc;
+        if (att > 0x3FF) att = 0x3FF;
+    }
+    o->att = (uint16_t)att;
+}
+
+/* One operator: phase (10 bits) plus modulation, through log-sin and exp; +-8168. */
+int fm_op_out(const FmOp *o, int mod, int am) {
+    int env = o->att + (o->tl << 3) + am;
+    if (env > 0x3FF) env = 0x3FF;
+    unsigned p = ((o->phase >> 10) + (unsigned)mod) & 0x3FF;
+    int q = p & 0xFF;
+    if (p & 0x100) q ^= 0xFF;
+    int level = LOGSIN[q] + (env << 2);
+    int v = level >= 0x1FFF ? 0 : ((EXP[(level & 0xFF) ^ 0xFF] | 0x400) << 2) >> (level >> 8);
+    return p & 0x200 ? -v : v;
+}
+
+int fm_algorithm(FmOp op[4], int alg, int fb, int16_t fb_out[2], const int am[4], int clip) {
+    int a1 = am[0], a2 = am[1], a3 = am[2], a4 = am[3];
+    int f = fb ? (fb_out[0] + fb_out[1]) >> (10 - fb) : 0;
+    int s1 = fm_op_out(&op[0], f, a1), s2, s3, out;
+    fb_out[1] = fb_out[0], fb_out[0] = (int16_t)s1;
+    switch (alg) {
+    case 0: s2 = fm_op_out(&op[1], s1 >> 1, a2); s3 = fm_op_out(&op[2], s2 >> 1, a3); out = fm_op_out(&op[3], s3 >> 1, a4); break;
+    case 1: s2 = fm_op_out(&op[1], 0, a2); s3 = fm_op_out(&op[2], (s1 + s2) >> 1, a3); out = fm_op_out(&op[3], s3 >> 1, a4); break;
+    case 2: s2 = fm_op_out(&op[1], 0, a2); s3 = fm_op_out(&op[2], s2 >> 1, a3); out = fm_op_out(&op[3], (s1 + s3) >> 1, a4); break;
+    case 3: s2 = fm_op_out(&op[1], s1 >> 1, a2); s3 = fm_op_out(&op[2], 0, a3); out = fm_op_out(&op[3], (s2 + s3) >> 1, a4); break;
+    case 4: s2 = fm_op_out(&op[1], s1 >> 1, a2); s3 = fm_op_out(&op[2], 0, a3); out = s2 + fm_op_out(&op[3], s3 >> 1, a4); break;
+    case 5: s2 = fm_op_out(&op[1], s1 >> 1, a2); s3 = fm_op_out(&op[2], s1 >> 1, a3); out = s2 + s3 + fm_op_out(&op[3], s1 >> 1, a4); break;
+    case 6: s2 = fm_op_out(&op[1], s1 >> 1, a2); s3 = fm_op_out(&op[2], 0, a3); out = s2 + s3 + fm_op_out(&op[3], 0, a4); break;
+    default: s2 = fm_op_out(&op[1], 0, a2); s3 = fm_op_out(&op[2], 0, a3); out = s1 + s2 + s3 + fm_op_out(&op[3], 0, a4); break;
+    }
+    return out > clip ? clip : out < -clip - 1 ? -clip - 1 : out;
+}

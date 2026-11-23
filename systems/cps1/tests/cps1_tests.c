@@ -14,6 +14,8 @@
 #include "cps1.h"
 #include "detect.h"
 #include "input_log.h"
+#include "oki6295.h"
+#include "ym2151.h"
 
 extern const SystemDetector cps1_detector;
 
@@ -307,6 +309,234 @@ static void test_priority(void) {
     assert(m.frame[50 * CPS1_WIDTH + 131] == 0x400 + 0 * 16 + 7);
 }
 
+/* ---- the YM2151 ---- */
+
+static Opm opm;
+static void opm_reg(uint8_t r, uint8_t v) { opm_write(&opm, 0, r), opm_write(&opm, 1, v); }
+
+static void opm_tone(uint8_t kc) {  /* channel 0, algorithm 7, only C2 sounding */
+    opm_reset(&opm);
+    opm_reg(0x20, 0xC7);
+    for (int slot = 0; slot < 4; slot++) opm_reg((uint8_t)(0x60 + slot * 8), 127);
+    opm_reg(0x40 + 24, 0x01), opm_reg(0x60 + 24, 0), opm_reg(0x80 + 24, 0x1F), opm_reg(0xE0 + 24, 0x0F);
+    opm_reg(0x28, kc), opm_reg(0x30, 0);
+    opm_reg(0x08, 0x40);                 /* key on C2 of channel 0 */
+}
+
+static double opm_pitch(void) {
+    int prev = opm_sample(&opm), crossings = 0;
+    for (int i = 1; i < OPM_RATE; i++) {
+        int v = opm_sample(&opm);
+        if (prev < 0 && v >= 0) crossings++;
+        prev = v;
+    }
+    return crossings;
+}
+
+static void test_opm_pitch(void) {
+    opm_tone(0x4A);                      /* A4 */
+    double f = opm_pitch();
+    assert(f >= 437 && f <= 443);
+}
+
+static void test_opm_octave(void) {
+    opm_tone(0x5A);                      /* A5 */
+    double f = opm_pitch();
+    assert(f >= 874 && f <= 886);
+}
+
+static void test_opm_timer_a(void) {
+    opm_reset(&opm);
+    opm_reg(0x10, 1000 >> 2), opm_reg(0x11, 1000 & 3);  /* 24 samples */
+    opm_reg(0x14, 0x05);                 /* load A, its IRQ on */
+    for (int i = 0; i < 23; i++) opm_sample(&opm);
+    assert(!opm.irq && !(opm_status(&opm) & 1));
+    opm_sample(&opm);
+    assert(opm.irq && (opm_status(&opm) & 1));
+    opm_reg(0x14, 0x15);                 /* reset A's flag (keep it running) */
+    assert(!opm.irq && !(opm_status(&opm) & 1));
+}
+
+static void test_opm_timer_b(void) {
+    opm_reset(&opm);
+    opm_reg(0x12, 255);                  /* 16 samples */
+    opm_reg(0x14, 0x0A);
+    for (int i = 0; i < 15; i++) opm_sample(&opm);
+    assert(!opm.irq);
+    opm_sample(&opm);
+    assert(opm.irq && (opm_status(&opm) & 2));
+}
+
+static void test_opm_release(void) {
+    opm_tone(0x4A);
+    for (int i = 0; i < 1000; i++) opm_sample(&opm);
+    opm_reg(0x08, 0x00);                 /* key off */
+    int last = 1;
+    for (int i = 0; i < 2000; i++) last = opm_sample(&opm);
+    for (int i = 0; i < 100; i++) last |= opm_sample(&opm);
+    assert(last == 0);
+}
+
+static void test_opm_sustain_hold(void) {  /* D1L 0: the decay holds at full level, no extra step */
+    opm_tone(0x4A);
+    opm_reg(0xA0 + 24, 31);              /* D1R 31 */
+    for (int i = 0; i < 2000; i++) opm_sample(&opm);
+    assert(opm.ch[0].op[3].att == 0);
+}
+
+static void test_opm_lfo_rate(void) {  /* LFRQ $C0: (16 << 12) a sample, a cycle in 2^30 / 65,536 samples */
+    opm_reset(&opm);
+    opm_reg(0x18, 0xC0);
+    for (int i = 0; i < 16384; i++) opm_sample(&opm);
+    assert(opm.lfo_phase == 1u << 30);
+}
+
+static void test_opm_carriers_sum(void) {  /* algorithm 7: four loud carriers pass the YM2612's 14-bit clip */
+    opm_tone(0x4A);
+    for (int slot = 0; slot < 4; slot++)
+        opm_reg((uint8_t)(0x40 + slot * 8), 0x01), opm_reg((uint8_t)(0x60 + slot * 8), 0), opm_reg((uint8_t)(0x80 + slot * 8), 0x1F);
+    opm_reg(0x08, 0x78);
+    int peak = 0;
+    for (int i = 0; i < 2000; i++) {
+        int v = opm_sample(&opm);
+        peak = v > peak ? v : -v > peak ? -v : peak;
+    }
+    assert(peak > 8191 * 2);             /* both sides, (L + R) / 2: four carriers near 8,168 each */
+}
+
+/* ---- the OKI MSM6295 ---- */
+
+static uint8_t okirom[0x1000];
+static Oki oki;
+
+static void oki_phrase(int n, uint32_t start, uint32_t end) {
+    uint8_t *e = okirom + n * 8;
+    e[0] = (uint8_t)(start >> 16), e[1] = (uint8_t)(start >> 8), e[2] = (uint8_t)start;
+    e[3] = (uint8_t)(end >> 16), e[4] = (uint8_t)(end >> 8), e[5] = (uint8_t)end;
+}
+
+static void oki_setup(void) {
+    memset(okirom, 0, sizeof okirom);
+    oki_phrase(1, 0x400, 0x401);
+    okirom[0x400] = 0x08, okirom[0x401] = 0x80;  /* nibbles 0, 8, 8, 0 */
+    oki_phrase(2, 0x500, 0x4FF);                 /* ends before it starts */
+    oki_phrase(3, 0x3FFFF, 0x3FFFF);             /* past the ROM */
+    oki_phrase(4, 0xFF0, 0xFFF0);                /* runs off the ROM's end */
+    oki_reset(&oki, okirom, sizeof okirom);
+}
+
+static void test_oki_decode(void) {
+    oki_setup();
+    oki_write(&oki, 0x81), oki_write(&oki, 0x10);  /* phrase 1 on voice 1, full volume */
+    assert(oki_sample(&oki) == 2 * 32);  /* signal x volume (32: full) */
+    assert(oki_sample(&oki) == 0);
+    assert(oki_sample(&oki) == -2 * 32);
+    assert(oki_sample(&oki) == 0);
+}
+
+static void test_oki_status(void) {
+    oki_setup();
+    assert(oki_status(&oki) == 0xF0);
+    oki_write(&oki, 0x81), oki_write(&oki, 0x20);  /* voice 2 */
+    assert(oki_status(&oki) == 0xF2);
+    for (int i = 0; i < 3; i++) oki_sample(&oki);
+    assert(oki_status(&oki) == 0xF2);
+    oki_sample(&oki);                              /* the last nibble ends it */
+    assert(oki_status(&oki) == 0xF0);
+}
+
+static void test_oki_as_mame(void) {  /* MAME's okim6295: busy voices ignore a start; start = end is no phrase */
+    oki_setup();
+    oki_phrase(5, 0x600, 0x600);
+    okirom[0x400] = 0x77;                          /* a large first nibble: a restart would show */
+    oki_write(&oki, 0x81), oki_write(&oki, 0x10);
+    oki_sample(&oki);
+    oki_write(&oki, 0x81), oki_write(&oki, 0x17); /* again, at volume 7 */
+    assert(oki.v[0].nibble == 1 && oki.v[0].vol == 32);
+    oki_write(&oki, 0x85), oki_write(&oki, 0x20);
+    assert(!(oki_status(&oki) & 2));
+    oki_write(&oki, 0x81), oki_write(&oki, 0x47); /* voice 3 at volume 7: 3/32 */
+    assert(oki.v[2].vol == 3);
+}
+
+static void test_oki_stop(void) {
+    oki_setup();
+    oki_write(&oki, 0x81), oki_write(&oki, 0x10);
+    oki_write(&oki, 0x08);                         /* stop voice 1 */
+    assert(oki_status(&oki) == 0xF0 && oki_sample(&oki) == 0);
+}
+
+static void test_oki_bad_phrase(void) {
+    oki_setup();
+    oki_write(&oki, 0x82), oki_write(&oki, 0x10);
+    oki_write(&oki, 0x83), oki_write(&oki, 0x20);
+    assert(oki_status(&oki) == 0xF0);
+    oki_write(&oki, 0x84), oki_write(&oki, 0x40);  /* runs off the ROM: no read past it */
+    for (int i = 0; i < 0x1000; i++) oki_sample(&oki);
+    assert(oki.v[2].playing && oki.v[2].start + oki.v[2].nibble / 2 > sizeof okirom);  /* zeros, as MAME reads them */
+}
+
+/* ---- the Z80 side ---- */
+
+static uint8_t zrom[0x10000];
+
+static void boot_sound(const uint8_t *code, size_t n) {
+    memset(zrom, 0, sizeof zrom);
+    memcpy(zrom, code, n);
+    boot_program();
+    prog_rom.region[CPS1_R_SOUND] = zrom;
+    prog_rom.size[CPS1_R_SOUND] = sizeof zrom;
+    cps1_init(&m, &prog_rom);
+}
+
+static void test_latch(void) {
+    static const uint8_t code[] = {0x3A, 0x08, 0xF0, 0x32, 0x00, 0xD0, 0x18, 0xF8};  /* ld a,($F008); ld ($D000),a; jr */
+    boot_sound(code, sizeof code);
+    m68k_write(&m.cpu, 0x800180, 0x0023, 5, 1);  /* the low byte: $800181 */
+    cps1_frame(&m);
+    assert(m.z80_ram[0] == 0x23);
+    m68k_write(&m.cpu, 0x800180, 0x0011, 5, 1);
+    m68k_write(&m.cpu, 0x800180, 0x0042, 5, 1);  /* only the last one stays */
+    cps1_frame(&m);
+    assert(m.z80_ram[0] == 0x42);
+}
+
+static void test_bank(void) {
+    static const uint8_t code[] = {0x3E, 0x01, 0x32, 0x04, 0xF0,   /* ld a,1; ld ($F004),a */
+                                   0x3A, 0x00, 0x80, 0x32, 0x00, 0xD0, 0x18, 0xFE};  /* ld a,($8000); ld ($D000),a */
+    boot_sound(code, sizeof code);
+    zrom[0xC000] = 0x5A;                         /* bank 1: ROM $8000 + $4000 */
+    cps1_frame(&m);
+    assert(m.z80_ram[0] == 0x5A);
+}
+
+static void test_ym_irq(void) {
+    static const uint8_t code[] = {
+        0x31, 0x00, 0xD8, 0xED, 0x56,            /* ld sp,$D800; im 1 */
+        0x3E, 0x10, 0x32, 0x00, 0xF0, 0x3E, 0x80, 0x32, 0x01, 0xF0,  /* timer A = 512: 512 samples */
+        0x3E, 0x14, 0x32, 0x00, 0xF0, 0x3E, 0x15, 0x32, 0x01, 0xF0,  /* load A, its IRQ on */
+        0xFB, 0x18, 0xFE};                       /* ei; jr $ */
+    static const uint8_t irq[] = {0x21, 0x01, 0xD0, 0x34,  /* ld hl,$D001; inc (hl) */
+        0x3E, 0x14, 0x32, 0x00, 0xF0, 0x3E, 0x15, 0x32, 0x01, 0xF0,  /* reset A's flag */
+        0xFB, 0xC9};                             /* ei; ret */
+    boot_sound(code, sizeof code);
+    memcpy(zrom + 0x38, irq, sizeof irq);
+    cps1_frame(&m), cps1_frame(&m);
+    assert(m.z80_ram[1] >= 2);                   /* ~1,876 samples: 3 interrupts */
+}
+
+static void test_sound_buffer(void) {
+    static const uint8_t code[] = {0x18, 0xFE};
+    static int16_t out[CPS1_SND_BUF];
+    boot_sound(code, sizeof code);
+    for (int i = 0; i < 20; i++) cps1_frame(&m);  /* nobody takes the samples */
+    assert(m.snd_n <= CPS1_SND_BUF);
+    cps1_take_sound(&m, out, CPS1_SND_BUF);
+    cps1_frame(&m);
+    int n = cps1_take_sound(&m, out, CPS1_SND_BUF);
+    assert(n >= 936 && n <= 940);
+}
+
 int main(void) {
     make_test_game();
     test_layouts();
@@ -323,6 +553,23 @@ int main(void) {
     test_scroll3_tile();
     test_sprite_flip();
     test_priority();
+    test_opm_pitch();
+    test_opm_octave();
+    test_opm_timer_a();
+    test_opm_timer_b();
+    test_opm_release();
+    test_opm_sustain_hold();
+    test_opm_lfo_rate();
+    test_opm_carriers_sum();
+    test_oki_decode();
+    test_oki_status();
+    test_oki_stop();
+    test_oki_as_mame();
+    test_oki_bad_phrase();
+    test_latch();
+    test_bank();
+    test_ym_irq();
+    test_sound_buffer();
     puts("cps1_tests: ok");
     return 0;
 }

@@ -11,6 +11,9 @@
 #include <stdint.h>
 
 #include "m68k_cpu.h"
+#include "oki6295.h"
+#include "ym2151.h"
+#include "z80_cpu.h"
 #include "zip.h"
 
 /* ---- the game table (games.c) and loading (load.c) ---- */
@@ -75,6 +78,9 @@ void cps1_unload(Cps1Rom *r);
 #define CPS1_VBLANK_LINE 240
 #define CPS1_CLOCK 10000000     /* 68000 */
 #define CPS1_LINE_CLOCKS 640    /* 10 MHz / (8 MHz / 512) */
+#define CPS1_Z80_CLOCK 3579545
+#define CPS1_SAMPLE_RATE OPM_RATE  /* mono, one sample every 64 Z80 T-states */
+#define CPS1_SND_BUF 8192
 
 typedef struct Cps1 {
     M68k cpu;
@@ -88,6 +94,17 @@ typedef struct Cps1 {
     uint8_t dip[3];             /* DIP switches A-C, as read (active low) */
     int line;
     uint64_t line_end;          /* cpu.cycles when the current line ends */
+    Z80 z80;                    /* sound: $0000-$BFFF ROM (bank at $8000), $D000 RAM, $F000- I/O */
+    uint8_t z80_ram[0x800];
+    uint8_t bank;
+    Opm opm;
+    Oki oki;
+    uint64_t lines;             /* since power-on: the Z80 runs to lines x 229.09 T-states */
+    uint64_t snd_next;          /* the Z80 T-state of the next sample */
+    uint64_t oki_acc;           /* towards the OKI's next sample */
+    int oki_out;
+    int16_t snd[CPS1_SND_BUF];
+    int snd_n;
     uint16_t pal[0xC00];        /* the colours, as uploaded (video.c) */
     uint16_t frame[CPS1_WIDTH * CPS1_HEIGHT];  /* palette indices */
 } Cps1;
@@ -95,6 +112,9 @@ typedef struct Cps1 {
 void cps1_init(Cps1 *s, const Cps1Rom *r);
 void cps1_frame(Cps1 *s);       /* 262 lines; the picture is left in s->frame */
 void cps1_set_input(Cps1 *s, int player, uint16_t pad);  /* buttons 1-3 = B, A, X; Start; Select = coin */
+/* Up to max samples (mono, CPS1_SAMPLE_RATE) made so far; the number taken. When
+ * nobody takes them, a full buffer drops the new ones. */
+int cps1_take_sound(Cps1 *s, int16_t *out, int max);
 
 /* ---- the picture (video.c) ---- */
 void cps1_render(Cps1 *s);                     /* fills s->frame */

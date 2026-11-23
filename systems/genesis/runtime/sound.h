@@ -8,17 +8,13 @@
 
 #include <stdint.h>
 
+#include "fm.h"
+
 enum { SND_SAMPLE_CLOCKS = 144 * 7, SND_BUF = 4096 };  /* master clocks a sample; sample frames kept */
 
-typedef struct {
-    uint8_t dt, mul, tl, ks, ar, am, dr, sr, sl, rr;
-    uint8_t key, state;       /* state: attack, decay, sustain, release */
-    uint16_t att;             /* envelope attenuation, 10 bits (0.09375 dB) */
-    uint32_t phase;           /* 20 bits */
-} YmOp;
 
 typedef struct {
-    YmOp op[4];               /* S1, S2, S3, S4 (registers order them S1, S3, S2, S4) */
+    FmOp op[4];               /* S1, S2, S3, S4 (registers order them S1, S3, S2, S4) */
     uint16_t fnum;
     uint8_t block, fb, alg, ams, fms, pan;  /* pan: bit 1 left, bit 0 right */
     int16_t fb_out[2];        /* S1's last two outputs */
