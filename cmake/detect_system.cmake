@@ -1,8 +1,8 @@
 # Which system a ROM file is for, from its bytes: the rules of core/detect.h
 # and systems/*/runtime/detect.c, here for the build's ROMS list, so the
 # build and retrocast agree (tests/test_detect.py runs both on the same
-# files). detect_system(FILE VAR) sets VAR to nes, gb, genesis, atari2600 or
-# mastersystem, or stops with a message.
+# files). detect_system(FILE VAR) sets VAR to nes, gb, genesis, atari2600,
+# mastersystem or gamegear, or stops with a message.
 #   cmake -DFILE=game.bin -P cmake/detect_system.cmake   prints it
 function(detect_system file out)
     file(SIZE "${file}" size)
@@ -14,6 +14,7 @@ function(detect_system file out)
     set(md 0)
     set(a26 0)
     set(sms 0)
+    set(gg 0)
     # NES: iNES / NES 2.0 or FDS header; a raw FDS disk side: block 1, "*NINTENDO-HVC*"
     if(size GREATER_EQUAL 16)
         string(SUBSTRING "${head}" 0 8 magic)
@@ -62,6 +63,8 @@ function(detect_system file out)
                 string(SUBSTRING "${sig}" 30 1 region)
                 if(region MATCHES "^[34]$")
                     set(sms 100)
+                elseif(region MATCHES "^[567]$")
+                    set(gg 100)
                 elseif(NOT region MATCHES "^[567]$")
                     set(sms 70)
                 endif()
@@ -72,6 +75,7 @@ function(detect_system file out)
         math(EXPR rest "${size} % 8192")
         if(rest EQUAL 0)
             set(sms 20)
+            set(gg 20)  # the same for the Game Gear: .gg decides
         endif()
     endif()
     # Atari 2600: a cartridge size and a reset vector into $1000-$1FFF
@@ -91,10 +95,11 @@ function(detect_system file out)
     set(exts_md ".md;.gen;.bin")
     set(exts_a26 ".a26")
     set(exts_sms ".sms")
+    set(exts_gg ".gg")
     set(best "")
     set(best_score 0)
     set(tie "")
-    foreach(id nes gb md a26 sms)
+    foreach(id nes gb md a26 sms gg)
         set(s ${${id}})
         if(s GREATER 0 AND ext IN_LIST exts_${id})
             math(EXPR s "${s} + 20")
@@ -118,6 +123,7 @@ function(detect_system file out)
     set(system_md genesis)
     set(system_a26 atari2600)
     set(system_sms mastersystem)
+    set(system_gg gamegear)
     set(${out} ${system_${best}} PARENT_SCOPE)
 endfunction()
 

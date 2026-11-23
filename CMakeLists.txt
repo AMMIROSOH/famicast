@@ -164,7 +164,7 @@ if(WERROR)
 endif()
 
 # The systems to build (CI builds the ones a change touches): nes, gb, genesis.
-set(SYSTEMS "nes;gb;genesis;atari2600;mastersystem" CACHE STRING "Systems to build (semicolon-separated): nes, gb, genesis, atari2600, mastersystem")
+set(SYSTEMS "nes;gb;genesis;atari2600;mastersystem" CACHE STRING "Systems to build (semicolon-separated): nes, gb, genesis, atari2600, mastersystem (with the Game Gear)")
 # The CPUs they use (cpu/): added once each, before the systems.
 set(CPU_nes 6502)
 set(CPU_gb sm83)
@@ -206,6 +206,12 @@ if(TESTS)
         list(APPEND libs ${lib})
     endforeach()
     list(LENGTH SYSTEMS count)
+    if("mastersystem" IN_LIST SYSTEMS)  # the Game Gear is a mode of it, with its own detector
+        string(APPEND text "extern const SystemDetector gg_detector;
+    ")
+        string(APPEND items "&gg_detector, ")
+        math(EXPR count "${count} + 1")
+    endif()
     string(APPEND text "const SystemDetector *const detector_list[] = {${items}};
     const int detector_count = ${count};
     ")
@@ -231,6 +237,9 @@ foreach(rom IN LISTS ROMS)
     string(REGEX REPLACE "[^a-z0-9]+" "_" name "${name}")
     string(REGEX REPLACE "^_+|_+$" "" name "${name}")
     detect_system("${rom}" sys)  # from the file's bytes, as retrocast does
+    if(sys STREQUAL "gamegear")
+        set(sys mastersystem)  # a mode of the Master System
+    endif()
     if(NOT sys IN_LIST SYSTEMS)
         message(FATAL_ERROR "ROMS: ${rom} is a ${sys} game, but SYSTEMS is ${SYSTEMS}")
     elseif(sys STREQUAL "genesis")

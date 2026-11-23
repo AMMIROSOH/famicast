@@ -16,3 +16,15 @@ static int score(const uint8_t *d, size_t n) {
 }
 
 const SystemDetector sms_detector = {"sms", "Master System / Mark III", ".sms", score};
+
+/* The Game Gear: the same header with region 5-7; without one, .gg decides. */
+static int gg_score(const uint8_t *d, size_t n) {
+    long h = sms_header(d, n);
+    if (h >= 0) {
+        unsigned region = d[h + 15] >> 4;
+        return region >= 5 && region <= 7 ? 100 : 0;
+    }
+    return n && n % 0x2000 == 0 && n <= 0x100000 ? 20 : 0;
+}
+
+const SystemDetector gg_detector = {"gg", "Game Gear", ".gg", gg_score};

@@ -1,6 +1,9 @@
-/* The Master System behind core/frontend/system.h: ROM loading, cartridge
- * RAM kept in ROM.sav next to the game, the region, and the pads (button 1 =
- * B, button 2 = A, Start = the console's Pause button). */
+/* The Master System and the Game Gear behind core/frontend/system.h: ROM
+ * loading, cartridge RAM kept in ROM.sav next to the game, the region, and
+ * the pads (button 1 = B, button 2 = A, Start = the Master System's Pause
+ * button, the Game Gear's Start). A game runs in Game Gear mode when
+ * sms_gg_mode says so, or always as gamegear_system (--system gg); the
+ * window then shows the Game Gear's 160x144 LCD. */
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,7 +41,7 @@ static void save_sav(void) {
         SDL_Log("%s: %s", sav_path, SDL_GetError());
 }
 
-static int sys_open(const char *path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
+static int open_game(const char *path, const Settings *settings, SysInfo *info, char *err, size_t errlen, int gg) {
     const int embedded = !path && sms_recomp_program && sms_recomp_program->rom;
     if (!path && !embedded) { snprintf(err, errlen, "usage: %s game.sms", APP_NAME); return 1; }
     if (embedded) {  /* a recompiled game: saves and states next to the program, by the ROM's name */
@@ -55,7 +58,8 @@ static int sys_open(const char *path, const Settings *settings, SysInfo *info, c
         snprintf(sav_path, sizeof sav_path, "%s.sav", path);
     }
     int pal = region < 0 ? strstr(path, "(Europe)") != NULL : region;
-    sms_init(&machine, rom, rom_size, pal);
+    sms_init(&machine, rom, rom_size, pal, gg || sms_gg_mode(rom, rom_size, path));
+    pal = machine.pal;  /* the Game Gear is 60 Hz only */
     /* a recompiled game notes the ROM code it interpreted in <program>.misses (read by the next build) */
     snprintf(misses_path, sizeof misses_path, "%s%s.misses", SDL_GetBasePath(), APP_NAME);
     if (machine.recomp_on && settings->record_misses) machine.misses = calloc(sms_miss_slots(&machine), 1);
@@ -69,8 +73,8 @@ static int sys_open(const char *path, const Settings *settings, SysInfo *info, c
     snprintf(info->name, sizeof info->name, "%s", name);
     snprintf(info->tag, sizeof info->tag, "%s", pal ? "PAL" : "NTSC");
     snprintf(info->state_path, sizeof info->state_path, "%.*s.state", (int)(strlen(sav_path) - 4), sav_path);
-    info->width = info->cols = SMS_WIDTH;
-    info->height = info->lines = SMS_HEIGHT;
+    info->width = info->cols = machine.vdp.gg ? GG_WIDTH : SMS_WIDTH;
+    info->height = info->lines = machine.vdp.gg ? GG_HEIGHT : SMS_HEIGHT;
     info->fps = (double)(pal ? SMS_CLOCK_PAL : SMS_CLOCK_NTSC) / (sms_lines(&machine) * SMS_LINE_TSTATES);
     info->aspect = 8.0 / 7.0;  /* the NTSC pixel; close enough for PAL's */
     info->sample_rate = SMS_SAMPLE_RATE;
@@ -78,11 +82,23 @@ static int sys_open(const char *path, const Settings *settings, SysInfo *info, c
     return 0;
 }
 
+static int sys_open(const char *path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
+    return open_game(path, settings, info, err, errlen, 0);
+}
+static int gg_open(const char *path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
+    return open_game(path, settings, info, err, errlen, 1);
+}
+
 static void sys_reset(void) { sms_reset(&machine); }
 
 static int sys_frame(const InputFrame *in, uint32_t *rgb, float *samples, int max) {
     sms_frame(&machine, in->pad[0], in->pad[1]);
-    for (unsigned i = 0; i < SMS_WIDTH * SMS_HEIGHT; i++) rgb[i] = sms_color(&machine, machine.vdp.frame[i]);
+    if (machine.vdp.gg)
+        for (unsigned y = 0; y < GG_HEIGHT; y++)
+            for (unsigned x = 0; x < GG_WIDTH; x++)
+                rgb[y * GG_WIDTH + x] = sms_color(&machine, machine.vdp.frame[(y + GG_Y) * SMS_WIDTH + x + GG_X]);
+    else
+        for (unsigned i = 0; i < SMS_WIDTH * SMS_HEIGHT; i++) rgb[i] = sms_color(&machine, machine.vdp.frame[i]);
     int n = (int)machine.n_samples < max ? (int)machine.n_samples : max;
     memcpy(samples, machine.samples, (size_t)n * sizeof *samples);
     return n;
@@ -107,6 +123,9 @@ static void sys_close(void) {
     rom = NULL;
 }
 
-extern const SystemDetector sms_detector;
+extern const SystemDetector sms_detector, gg_detector;
 const System mastersystem_system = {&sms_detector, APP_NAME, SETTINGS, sys_setting, sys_open, sys_reset, sys_frame,
                                     sys_halted, sys_state_save, sys_state_load, sys_key, sys_close};
+/* settings in gamegear.ini; only in retrocast (a recompiled game has one system) */
+const System gamegear_system = {&gg_detector, "gamegear", SETTINGS, sys_setting, gg_open, sys_reset, sys_frame,
+                                sys_halted, sys_state_save, sys_state_load, sys_key, sys_close};

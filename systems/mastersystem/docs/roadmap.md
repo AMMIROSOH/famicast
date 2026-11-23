@@ -77,10 +77,22 @@ recompiler and its lockstep diff.
   picture (three quarters of the time); a faster renderer is where speed
   would come from.
 
+## S4 · Game Gear
+- [x] A mode of this machine (`Sms.vdp.gg`, chosen by `sms_gg_mode`: a
+  header's region 5-7, else a `.gg` name; a Master System cartridge runs in
+  Master System mode, as on the console): the 64-byte palette of 12-bit
+  colours written in byte pairs, ports $00-$06 (Start on bit 7 of $00, the
+  region, the link port read as unplugged), no Pause/NMI, 60 Hz only, the
+  LCD's central 160x144 in the window and in `sms_headless --ppm`.
+  `retrocast` detects it as its own system (`gg`, `gamegear.ini`);
+  `-DROMS` recompiles it with `smsrecomp`.
+- [x] **Exit:** `sms_tests` (palette, port $00, no NMI, mode choice); the
+  boot test plays four Game Gear games; two recompiled games ran 3,000
+  frames with `--diff` without a difference.
+- Open: the stereo register ($06) is ignored, the sound is mono.
+
 ## Later
-- Game Gear: the same machine with a 160x144 window of the picture, 12-bit
-  colour, Start on port $00 and stereo sound; S3's recompiler then serves
-  both.
+- Game Gear stereo (port $06).
 - Not modelled: the BIOS, the SMS2 VDP's 224- and 240-line modes, the
   Korean and other mappers, the light phaser, paddles and other
   controllers, the FM sound unit, raster effects on the palette within a

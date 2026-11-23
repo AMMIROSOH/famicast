@@ -1,9 +1,9 @@
 retrocast - static recompiler for NES, Famicom Disk System, Game Boy, Game Boy Color,
-Genesis / Mega Drive, Atari 2600 and Master System games
+Genesis / Mega Drive, Atari 2600, Master System and Game Gear games
 https://github.com/Viper-Bit/retrocast
 
 No games are included. Use your own legally dumped games (.nes, .fds, .gb, .gbc,
-.md, .a26, .sms).
+.md, .a26, .sms, .gg).
 
 
 WHAT IS IN HERE
@@ -11,9 +11,9 @@ WHAT IS IN HERE
   retrocast       Plays a game of any of these systems in the built-in
                   interpreter. Usage: retrocast path/to/game
                   The system is read from the file itself (its header);
-                  --system nes|gb|md|a26|sms picks one when the file does not
+                  --system nes|gb|md|a26|sms|gg picks one when the file does not
                   say (Atari 2600 games have no header: name them .a26;
-                  Master System games without one: .sms).
+                  Sega 8-bit games without one: .sms or .gg).
   nes_headless    The same without a window, for scripts and checks
                   (--frames N, --record/--replay, --diff, --coverage, ...).
   nesrecomp       The recompiler: turns a ROM into C source.
@@ -118,6 +118,15 @@ Sega's and Codemasters' cartridges. NTSC unless the file name says
 (Europe), or region = pal in mastersystem.ini. Games with cartridge RAM
 keep it in game.sms.sav next to the game. More: systems/mastersystem/README.md
 on the project page.
+
+
+GAME GEAR
+
+Sega's and Codemasters' cartridges. The LCD shows the central 160x144 of
+the 256x192 picture, in 12-bit colour (sound is mono). sms_headless and
+smsrecomp run Game Gear games too. Games with cartridge RAM keep it in
+game.gg.sav next to the game. More: systems/mastersystem/README.md on the
+project page.
 
 
 LICENSES

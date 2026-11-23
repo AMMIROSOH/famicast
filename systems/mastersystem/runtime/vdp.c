@@ -35,7 +35,12 @@ uint8_t sms_vdp_read_data(SmsVdp *v) {
 
 void sms_vdp_write_data(SmsVdp *v, uint8_t val) {
     v->latch = 0;
-    if (v->code == 3) v->cram[v->addr & 0x1F] = val & 0x3F;
+    if (v->code == 3 && v->gg) {
+        /* 64 bytes, two per colour: an even address latches the low byte,
+         * the odd one writes the colour */
+        if (v->addr & 1) v->cram[v->addr >> 1 & 31] = (uint16_t)(v->cram_latch | (val & 0x0F) << 8);
+        else v->cram_latch = val;
+    } else if (v->code == 3) v->cram[v->addr & 0x1F] = val & 0x3F;
     else v->vram[v->addr] = val;
     v->buffer = val;
     v->addr = (v->addr + 1) & 0x3FFF;
@@ -66,7 +71,9 @@ uint8_t sms_vdp_hcount(const Sms *s) {
 }
 
 uint32_t sms_color(const Sms *s, unsigned index) {
-    uint8_t c = s->vdp.cram[index & 31];
+    unsigned c = s->vdp.cram[index & 31];
+    if (s->vdp.gg)  /* ----BBBBGGGGRRRR */
+        return 0xFF000000u | (c & 15) * 17u << 16 | (c >> 4 & 15) * 17u << 8 | (c >> 8 & 15) * 17u;
     return 0xFF000000u | (uint32_t)(c & 3) * 85 << 16 | (uint32_t)(c >> 2 & 3) * 85 << 8 | (uint32_t)(c >> 4 & 3) * 85;
 }
 
