@@ -24,7 +24,7 @@ include(cmake/detect_system.cmake)  # detect_system(): which system a ROM is for
 set(NES_DIR ${CMAKE_SOURCE_DIR}/systems/nes)
 
 # Shared by every system: input recordings and the pad bits (core/).
-add_library(core STATIC core/input_log.c core/detect.c)
+add_library(core STATIC core/input_log.c core/detect.c core/zip.c)
 target_include_directories(core PUBLIC core)
 # Instruction templates for the recompilers (build-time tools).
 add_library(recomp_template STATIC core/recomp/template.c)
@@ -186,6 +186,8 @@ foreach(sys IN LISTS SYSTEMS)
     add_subdirectory(systems/${sys} ${CMAKE_BINARY_DIR}/sys_${sys})  # not build/<sys>: that is the program (no .exe off Windows)
 endforeach()
 if(TESTS)
+    add_executable(zip_check core/zip_check.c)  # tests/test_zip.py
+    target_link_libraries(zip_check PRIVATE core)
     # system_detect FILE: the system a file is for, from its bytes (core/detect.h;
     # each system's detector and the library it is in)
     set(DETECTOR_nes nes_detector nescore)
