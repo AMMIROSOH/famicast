@@ -88,11 +88,17 @@ typedef struct Cps1 {
     uint8_t dip[3];             /* DIP switches A-C, as read (active low) */
     int line;
     uint64_t line_end;          /* cpu.cycles when the current line ends */
+    uint16_t pal[0xC00];        /* the colours, as uploaded (video.c) */
     uint16_t frame[CPS1_WIDTH * CPS1_HEIGHT];  /* palette indices */
 } Cps1;
 
 void cps1_init(Cps1 *s, const Cps1Rom *r);
 void cps1_frame(Cps1 *s);       /* 262 lines; the picture is left in s->frame */
-void cps1_set_input(Cps1 *s, int player, uint16_t pad);  /* buttons 1-3 = B, A, C; Start, and Select = coin */
+void cps1_set_input(Cps1 *s, int player, uint16_t pad);  /* buttons 1-3 = B, A, X; Start; Select = coin */
+
+/* ---- the picture (video.c) ---- */
+void cps1_render(Cps1 *s);                     /* fills s->frame */
+uint32_t cps1_color(const Cps1 *s, uint16_t index);  /* 0xRRGGBB */
+void cps1_palette_upload(Cps1 *s);             /* on a write to the palette base */
 
 #endif

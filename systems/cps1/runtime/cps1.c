@@ -79,7 +79,10 @@ static void wr(Cps1 *s, uint32_t a, uint16_t v, unsigned strobe) {
     a &= 0xFFFFFE;
     if (a >= 0xFF0000) put(s->ram + (a & 0xFFFF), v, strobe);
     else if (a >= 0x900000 && a < 0x930000) put(s->gfxram + (a - 0x900000), v, strobe);
-    else if (a >= 0x800100 && a < 0x800140) s->cpsa[(a - 0x800100) >> 1] = v;
+    else if (a >= 0x800100 && a < 0x800140) {
+        s->cpsa[(a - 0x800100) >> 1] = v;
+        if (a == 0x80010A) cps1_palette_upload(s);
+    }
     else if (a >= 0x800140 && a < 0x800180) cpsb_write(s, a - 0x800140, v);
     else if (a >= 0x800180 && a < 0x800188) s->sound_cmd = (uint8_t)v;   /* P3: the Z80 reads it */
     else if (a >= 0x800188 && a < 0x800190) s->sound_fade = (uint8_t)v;
@@ -106,7 +109,10 @@ void cps1_set_input(Cps1 *s, int player, uint16_t pad) {
 
 void cps1_frame(Cps1 *s) {
     for (s->line = 0; s->line < CPS1_LINES; s->line++) {
-        if (s->line == CPS1_VBLANK_LINE) s->cpu.ipl = 2;
+        if (s->line == CPS1_VBLANK_LINE) {
+            cps1_render(s);
+            s->cpu.ipl = 2;
+        }
         s->line_end += CPS1_LINE_CLOCKS;
         while (s->cpu.cycles < s->line_end && !s->cpu.halted) m68k_step(&s->cpu);
         if (s->cpu.halted) s->cpu.cycles = s->line_end;

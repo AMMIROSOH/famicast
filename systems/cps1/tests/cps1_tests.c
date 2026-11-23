@@ -1,6 +1,7 @@
 /* CPS-1 self-checks: matching a zip to the game table and the load layouts
  * (with a test-only game), the detector, and the machine: VBlank, inputs,
- * the CPS-B ID and multiplier, unmapped reads. */
+ * the CPS-B ID and multiplier, unmapped reads; the palette, the three
+ * scroll layers, sprites and priority. */
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -196,6 +197,106 @@ static void test_unmapped(void) {
     assert(m68k_read(&m.cpu, 0x900010, 5, 3) == 0xABCD);
 }
 
+/* ---- video ---- */
+
+static uint8_t gfxrom[1 << 20];
+
+static void boot_video(void) {
+    boot_program();
+    memset(gfxrom, 0xFF, sizeof gfxrom);  /* every pen 15: transparent */
+    prog_rom.region[CPS1_R_GFX] = gfxrom;
+    prog_rom.size[CPS1_R_GFX] = sizeof gfxrom;
+    prog_game.b.layer_enable[0] = 0x02, prog_game.b.layer_enable[1] = 0x04, prog_game.b.layer_enable[2] = 0x08;
+}
+
+static void cpsa(unsigned off, uint16_t v) { m68k_write(&m.cpu, 0x800100 + off, v, 5, 3); }
+static void cpsb(unsigned off, uint16_t v) { m68k_write(&m.cpu, 0x800140 + off, v, 5, 3); }
+static void gram(uint32_t off, uint16_t v) { m68k_write(&m.cpu, 0x900000 + off, v, 5, 3); }
+
+/* pen at (x, y) of a tile at addr with rows of rowbytes; 8 pixels per 4 bytes */
+static void pixel(uint32_t addr, unsigned rowbytes, unsigned x, unsigned y, unsigned pen) {
+    uint8_t *b = gfxrom + addr + y * rowbytes + (x / 8) * 4;
+    for (unsigned p = 0; p < 4; p++) {
+        b[p] = (uint8_t)(b[p] & ~(0x80 >> x % 8));
+        b[p] |= (uint8_t)(((pen >> p) & 1) << (7 - x % 8));
+    }
+}
+
+/* bottom to top: scroll3, scroll2, sprites, scroll1; all three enabled */
+#define ORDER (3 << 6 | 2 << 8 | 0 << 10 | 1 << 12 | 0x0E)
+
+static void test_palette(void) {
+    boot_video();
+    cpsb(0x30, 0x3F);                    /* upload all six pages */
+    gram(0x20000 + 0x13 * 2, 0xFF08);    /* brightest: red 15, blue 8 */
+    gram(0x20000 + 0x14 * 2, 0x0F00);    /* darkest: red 15 */
+    cpsa(0x0A, 0x9200);                  /* palette base $920000: the upload */
+    assert(cps1_color(&m, 0x13) == 0xFF0088);
+    assert(cps1_color(&m, 0x14) == 0x550000);
+}
+
+static void test_scroll1_tile(void) {
+    boot_video();
+    cpsb(0x2E, ORDER);
+    cpsa(0x02, 0x9080);                  /* scroll1 map at $908000 */
+    unsigned col = 9, row = 2, i = (row & 0x1F) + ((col & 0x3F) << 5) + ((row & 0x20) << 6);
+    gram(0x8000 + i * 4, 3), gram(0x8000 + i * 4 + 2, 4);  /* code 3, palette 4 */
+    pixel(3 * 64, 8, 8 + 0, 0, 5);       /* an odd column: the right half (bytes 4-7) */
+    cps1_render(&m);
+    assert(m.frame[0 * CPS1_WIDTH + 8] == 0x200 + 4 * 16 + 5);
+    assert(m.frame[0 * CPS1_WIDTH + 9] == 0xBFF);  /* the background */
+}
+
+static void test_scroll2_tile(void) {
+    boot_video();
+    cpsb(0x2E, ORDER);
+    cpsa(0x04, 0x9040);                  /* scroll2 map at $904000 */
+    cpsa(0x10, 16), cpsa(0x12, 0);       /* scrolled 16 right */
+    unsigned col = 6, row = 2, i = (row & 0x0F) + ((col & 0x3F) << 4) + ((row & 0x30) << 6);
+    gram(0x4000 + i * 4, 5), gram(0x4000 + i * 4 + 2, 2);
+    pixel(5 * 128, 8, 3, 4, 7);          /* tile pixel (3, 4): map (99, 36) */
+    cps1_render(&m);
+    assert(m.frame[(36 - 16) * CPS1_WIDTH + (99 - 64 - 16)] == 0x400 + 2 * 16 + 7);
+}
+
+static void test_scroll3_tile(void) {
+    boot_video();
+    cpsb(0x2E, ORDER);
+    cpsa(0x06, 0x90C0);                  /* scroll3 map at $90C000 */
+    unsigned col = 3, row = 0, i = (row & 0x07) + ((col & 0x3F) << 3) + ((row & 0x38) << 6);
+    gram(0xC000 + i * 4, 2), gram(0xC000 + i * 4 + 2, 0);
+    pixel(2 * 512, 16, 8, 26, 9);        /* map (104, 26): screen (40, 10) */
+    cps1_render(&m);
+    assert(m.frame[10 * CPS1_WIDTH + 40] == 0x600 + 9);
+}
+
+static void sprite_scene(uint16_t prio) {
+    boot_video();
+    cpsb(0x2E, ORDER);
+    cpsb(0x28, prio);                    /* the mask of group 1 */
+    cpsa(0x00, 0x9100);                  /* sprites at $910000 */
+    gram(0x10000, 64 + 100), gram(0x10002, 16 + 50), gram(0x10004, 0x20);
+    gram(0x10006, 1 | 0x20 | 1 << 8);    /* palette 1, flipped in X, 2 blocks wide */
+    gram(0x1000E, 0xFF00);               /* the end */
+    pixel(0x20 * 128, 8, 0, 0, 3);
+    cpsa(0x04, 0x9040);                  /* a scroll2 tile under the sprite's pixel, group 1, pen 7 */
+    unsigned col = 12, row = 4, i = (row & 0x0F) + ((col & 0x3F) << 4) + ((row & 0x30) << 6);
+    gram(0x4000 + i * 4, 6), gram(0x4000 + i * 4 + 2, 1 << 7);
+    pixel(6 * 128, 8, 3, 2, 7);          /* map (195, 66): screen (131, 50) */
+    cps1_render(&m);
+}
+
+static void test_sprite_flip(void) {
+    sprite_scene(0);
+    assert(m.frame[50 * CPS1_WIDTH + 131] == 0x13);   /* block $20, flipped, on the right */
+    assert(m.frame[50 * CPS1_WIDTH + 100] == 0xBFF);  /* block $21 (empty) on the left */
+}
+
+static void test_priority(void) {
+    sprite_scene(1 << 7);                /* pen 7 of group 1 goes over sprites */
+    assert(m.frame[50 * CPS1_WIDTH + 131] == 0x400 + 0 * 16 + 7);
+}
+
 int main(void) {
     make_test_game();
     test_layouts();
@@ -205,6 +306,12 @@ int main(void) {
     test_inputs();
     test_cpsb();
     test_unmapped();
+    test_palette();
+    test_scroll1_tile();
+    test_scroll2_tile();
+    test_scroll3_tile();
+    test_sprite_flip();
+    test_priority();
     puts("cps1_tests: ok");
     return 0;
 }
