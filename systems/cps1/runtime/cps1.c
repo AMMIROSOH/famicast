@@ -20,6 +20,12 @@ static void put(uint8_t *p, uint16_t v, unsigned strobe) {
     if (strobe & 1) p[1] = (uint8_t)v;
 }
 
+/* a register after a write of the bytes strobe selects (2 upper, 1 lower) */
+static uint16_t merge(uint16_t old, uint16_t v, unsigned strobe) {
+    uint16_t mask = (uint16_t)((strobe & 2 ? 0xFF00 : 0) | (strobe & 1 ? 0x00FF : 0));
+    return (uint16_t)((old & ~mask) | (v & mask));
+}
+
 static uint16_t players(const Cps1 *s) {
     uint16_t v = 0;
     for (int p = 0; p < 2; p++) {
@@ -80,10 +86,10 @@ static void wr(Cps1 *s, uint32_t a, uint16_t v, unsigned strobe) {
     if (a >= 0xFF0000) put(s->ram + (a & 0xFFFF), v, strobe);
     else if (a >= 0x900000 && a < 0x930000) put(s->gfxram + (a - 0x900000), v, strobe);
     else if (a >= 0x800100 && a < 0x800140) {
-        s->cpsa[(a - 0x800100) >> 1] = v;
+        s->cpsa[(a - 0x800100) >> 1] = merge(s->cpsa[(a - 0x800100) >> 1], v, strobe);
         if (a == 0x80010A) cps1_palette_upload(s);
     }
-    else if (a >= 0x800140 && a < 0x800180) cpsb_write(s, a - 0x800140, v);
+    else if (a >= 0x800140 && a < 0x800180) cpsb_write(s, a - 0x800140, merge(s->cpsb[(a - 0x800140) >> 1], v, strobe));
     else if (a >= 0x800180 && a < 0x800188) s->sound_cmd = (uint8_t)v;   /* P3: the Z80 reads it */
     else if (a >= 0x800188 && a < 0x800190) s->sound_fade = (uint8_t)v;
 }

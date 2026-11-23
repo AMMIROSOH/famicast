@@ -197,6 +197,16 @@ static void test_unmapped(void) {
     assert(m68k_read(&m.cpu, 0x900010, 5, 3) == 0xABCD);
 }
 
+static void test_byte_writes(void) {  /* a byte write keeps the register's other byte */
+    boot_program();
+    m68k_write(&m.cpu, 0x800110, 0x1234, 5, 3);
+    m68k_write(&m.cpu, 0x800111, 0x5656, 5, 1);   /* lower byte only */
+    assert(m.cpsa[0x10 >> 1] == 0x1256);
+    m68k_write(&m.cpu, 0x80016E, 0xABCD, 5, 3);
+    m68k_write(&m.cpu, 0x80016E, 0x7777, 5, 2);   /* upper byte only */
+    assert(m.cpsb[0x2E >> 1] == 0x77CD);
+}
+
 /* ---- video ---- */
 
 static uint8_t gfxrom[1 << 20];
@@ -306,6 +316,7 @@ int main(void) {
     test_inputs();
     test_cpsb();
     test_unmapped();
+    test_byte_writes();
     test_palette();
     test_scroll1_tile();
     test_scroll2_tile();
