@@ -14,6 +14,7 @@
 #include "cps1.h"
 #include "detect.h"
 #include "input_log.h"
+#include "oki6295.h"
 #include "ym2151.h"
 
 extern const SystemDetector cps1_detector;
@@ -376,6 +377,62 @@ static void test_opm_release(void) {
     assert(last == 0);
 }
 
+/* ---- the OKI MSM6295 ---- */
+
+static uint8_t okirom[0x1000];
+static Oki oki;
+
+static void oki_phrase(int n, uint32_t start, uint32_t end) {
+    uint8_t *e = okirom + n * 8;
+    e[0] = (uint8_t)(start >> 16), e[1] = (uint8_t)(start >> 8), e[2] = (uint8_t)start;
+    e[3] = (uint8_t)(end >> 16), e[4] = (uint8_t)(end >> 8), e[5] = (uint8_t)end;
+}
+
+static void oki_setup(void) {
+    memset(okirom, 0, sizeof okirom);
+    oki_phrase(1, 0x400, 0x401);
+    okirom[0x400] = 0x08, okirom[0x401] = 0x80;  /* nibbles 0, 8, 8, 0 */
+    oki_phrase(2, 0x500, 0x4FF);                 /* ends before it starts */
+    oki_phrase(3, 0x3FFFF, 0x3FFFF);             /* past the ROM */
+    oki_phrase(4, 0xFF0, 0xFFF0);                /* runs off the ROM's end */
+    oki_reset(&oki, okirom, sizeof okirom);
+}
+
+static void test_oki_decode(void) {
+    oki_setup();
+    oki_write(&oki, 0x81), oki_write(&oki, 0x10);  /* phrase 1 on voice 1, full volume */
+    assert(oki_sample(&oki) == 2);
+    assert(oki_sample(&oki) == 0);
+    assert(oki_sample(&oki) == -2);
+    assert(oki_sample(&oki) == 0);
+}
+
+static void test_oki_status(void) {
+    oki_setup();
+    assert(oki_status(&oki) == 0xF0);
+    oki_write(&oki, 0x81), oki_write(&oki, 0x20);  /* voice 2 */
+    assert(oki_status(&oki) == 0xF2);
+    for (int i = 0; i < 5; i++) oki_sample(&oki);
+    assert(oki_status(&oki) == 0xF0);
+}
+
+static void test_oki_stop(void) {
+    oki_setup();
+    oki_write(&oki, 0x81), oki_write(&oki, 0x10);
+    oki_write(&oki, 0x08);                         /* stop voice 1 */
+    assert(oki_status(&oki) == 0xF0 && oki_sample(&oki) == 0);
+}
+
+static void test_oki_bad_phrase(void) {
+    oki_setup();
+    oki_write(&oki, 0x82), oki_write(&oki, 0x10);
+    oki_write(&oki, 0x83), oki_write(&oki, 0x20);
+    assert(oki_status(&oki) == 0xF0);
+    oki_write(&oki, 0x84), oki_write(&oki, 0x40);
+    for (int i = 0; i < 0x100; i++) oki_sample(&oki);  /* 16 bytes to the end, then it stops */
+    assert(oki_status(&oki) == 0xF0);
+}
+
 int main(void) {
     make_test_game();
     test_layouts();
@@ -397,6 +454,10 @@ int main(void) {
     test_opm_timer_a();
     test_opm_timer_b();
     test_opm_release();
+    test_oki_decode();
+    test_oki_status();
+    test_oki_stop();
+    test_oki_bad_phrase();
     puts("cps1_tests: ok");
     return 0;
 }
