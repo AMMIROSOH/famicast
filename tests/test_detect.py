@@ -148,6 +148,47 @@ class TestDetect(unittest.TestCase):
                     self.assertEqual(r.returncode, 0, r.stderr)
                     self.assertEqual(CMAKE_ID[r.stderr.strip()], want)  # message() prints to stderr
 
+CPS1 = os.environ.get("CPS1_ROMS_DIR", os.path.join(ROOT, "roms", "CAPCOM - Play System I"))
+CPS2_ZIP = os.path.join(os.path.dirname(CPS1), "CAPCOM - Play System II", "sfa.zip")
+SCRIPT = os.path.join(ROOT, "cmake", "detect_system.cmake")
+
+
+class TestCps1(unittest.TestCase):
+    """A CPS-1 zip is matched to the game table (systems/cps1/runtime/games.c)
+    by its files' CRCs: the C detector and the CMake rule, which reads the
+    table itself."""
+
+    def cmake(self, path, *defs):
+        return subprocess.run(["cmake", "-DFILE=" + path, *defs, "-P", SCRIPT], capture_output=True, text=True)
+
+    @unittest.skipUnless(os.path.exists(os.path.join(CPS1, "ffight.zip")), "no ffight.zip in " + CPS1)
+    @built(RUNNER, "build system_detect first (-DTESTS=ON)")
+    def test_cps1_zip(self):
+        game = os.path.join(CPS1, "ffight.zip")
+        r = subprocess.run([RUNNER, game], capture_output=True, text=True)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "cps1"), r.stderr)
+        r = self.cmake(game)
+        self.assertEqual((r.returncode, r.stderr.strip()), (0, "cps1"))
+        if os.path.exists(CPS2_ZIP):  # another board's zip: neither takes it
+            self.assertNotEqual(subprocess.run([RUNNER, CPS2_ZIP], capture_output=True).returncode, 0)
+            r = self.cmake(CPS2_ZIP)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("not a game", r.stderr)
+
+    @unittest.skipUnless(shutil.which("cmake"), "no cmake")
+    def test_cps1_table_parse(self):  # a games.c the rule cannot read fails loudly
+        src = open(os.path.join(ROOT, "systems", "cps1", "runtime", "games.c"), encoding="utf-8").read()
+        broken = src.replace("{0xf9a5ce83,", "{ 0xf9a5ce83,", 1)
+        self.assertNotEqual(src, broken)
+        with tempfile.TemporaryDirectory() as d:
+            games = os.path.join(d, "games.c")
+            open(games, "w", encoding="utf-8").write(broken)
+            other = os.path.join(d, "game.nes")
+            open(other, "wb").write(nes())
+            r = self.cmake(other, "-DGAMES_C=" + games)
+            self.assertNotEqual(r.returncode, 0, r.stderr)
+            self.assertIn("games.c", r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
