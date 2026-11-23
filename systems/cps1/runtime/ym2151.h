@@ -1,4 +1,4 @@
-/* The YM2151 (OPM): 8 FM channels of 4 operators (core/fm.h), notes by key
+/* The YM2151 (OPM): 8 FM channels of 4 operators (core/audio/fm.h), notes by key
  * code and fraction, the LFO, noise on channel 8, timers A and B with their
  * IRQ. One sample every 64 clocks; the CPS-1's output is mono (L + R). */
 #ifndef CPS1_YM2151_H

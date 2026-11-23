@@ -294,7 +294,7 @@ static void states(const char *path) {
 }
 
 /* The YM2612's samples for a fixed program, pinned: moving the operator
- * (core/fm.c) must not change one bit. */
+ * (core/audio/fm.c) must not change one bit. */
 static void ym_golden(void) {
     load("U", 0);
     static const uint8_t ops[4][7] = {  /* DT/MUL, TL, KS/AR, AM/DR, SR, SL/RR per operator */

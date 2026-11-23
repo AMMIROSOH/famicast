@@ -2,14 +2,18 @@
 
 Needs the C build (-DTESTS=ON). The game test needs the CPS-1 set (.zip
 files) in roms/CAPCOM - Play System I or $CPS1_ROMS_DIR; it skips without
-it. Final Fight plays 1,200 frames, a coin and Start tapped, and must end
-on a picture of many colours, not a blank screen.
+it. Final Fight plays 1,200 frames, a coin tapped, and must end on its
+title, a picture of many colours; with Start pressed on the title, the
+last 10 seconds of 2,400 frames of play must not be silent.
 """
 import os
 import re
 import subprocess
 import tempfile
+import array
+import math
 import unittest
+import wave
 import zipfile
 
 from tests.games import ROOT, built
@@ -50,6 +54,22 @@ class TestHeadless(unittest.TestCase):
             self.assertIsNotNone(m, r.stdout)
             self.assertGreaterEqual(int(m.group(1)), 16, r.stdout)
             self.assertTrue(os.path.getsize(ppm) > 384 * 224 * 3)
+
+    @unittest.skipUnless(os.path.exists(os.path.join(SET, "ffight.zip")), "no ffight.zip in " + SET)
+    def test_ffight_sound(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "out.wav")
+            r = subprocess.run([RUNNER, os.path.join(SET, "ffight.zip"), "--frames", "2400", "--play", "--wav", out],
+                               capture_output=True, text=True, timeout=300)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            with wave.open(out) as w:
+                self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 55930))
+                rate = w.getframerate()
+                data = array.array("h", w.readframes(w.getnframes()))
+            last = data[-10 * rate:]
+            rms = math.sqrt(sum(x * x for x in last) / len(last))
+            self.assertGreater(rms, 300)
+            self.assertGreater(len(set(last)), 100)
 
 
 if __name__ == "__main__":

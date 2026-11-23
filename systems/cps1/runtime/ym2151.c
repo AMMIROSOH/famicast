@@ -6,7 +6,7 @@
  *   $20+ch R L FB CON; $28+ch key code; $30+ch key fraction; $38+ch PMS AMS.
  *   $40-$FF per operator, slots M1 M2 C1 C2 (8 apart): DT1 MUL, TL, KS AR,
  *   AM-enable D1R, DT2 D2R, D1L RR.
- * The operator and envelope are core/fm.c's. Sources: docs/sources.md (CPS-1 sound). */
+ * The operator and envelope are core/audio/fm.c's. Sources: docs/sources.md (CPS-1 sound). */
 #include <math.h>
 #include <string.h>
 
