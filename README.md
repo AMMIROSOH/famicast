@@ -18,6 +18,7 @@ own.
 | Atari 2600 | 2K/4K/F8/F6/F4 cartridges, TIA picture and sound, NTSC and PAL, joystick; recompiled; no Superchip RAM or other schemes, paddles or SECAM | [systems/atari2600/README.md](systems/atari2600/README.md) |
 | Master System / Mark III | Z80, Sega and Codemasters mappers, cartridge RAM, VDP (mode 4) and PSG, NTSC and PAL, two pads and Pause; recompiled (Z80) | [systems/mastersystem/README.md](systems/mastersystem/README.md) |
 | Game Gear | a mode of the Master System: 160x144 LCD, 12-bit palette, Start on port $00; recompiled (Z80) | [systems/mastersystem/README.md](systems/mastersystem/README.md) |
+| Capcom Play System I (arcade) | in progress: zips, 68000, CPS-A/CPS-B picture; Final Fight reaches its title in `cps1_headless`; no sound or window yet | [systems/cps1/README.md](systems/cps1/README.md) |
 
 ## How it works
 1. Each system has a recompiler (`systems/nes/recomp/` → `nesrecomp`, `systems/gb/recomp/`
@@ -81,7 +82,7 @@ without it `cmake --build` builds Debug, which is too slow to play.
 Ninja and Makefiles ignore the flag and build Release anyway. Programs are
 put in `build/` with every generator (no `Release/` or `Debug/` subfolder).
 Headless (no SDL3): add `-DFRONTEND=OFF`. Only some systems:
-`-DSYSTEMS=gb` (default `nes;gb;genesis;atari2600;mastersystem`; `mastersystem` includes the Game Gear). Warnings as errors: `-DWERROR=ON`. Test programs: `-DTESTS=ON` ([Contributing](#contributing)). On Windows the game programs open
+`-DSYSTEMS=gb` (default `nes;gb;genesis;atari2600;mastersystem;cps1`; `mastersystem` includes the Game Gear). Warnings as errors: `-DWERROR=ON`. Test programs: `-DTESTS=ON` ([Contributing](#contributing)). On Windows the game programs open
 no console window; use the `_headless` programs for text output.
 
 ## Recompiling a game

@@ -2,18 +2,20 @@
 detectors (system_detect, as retrocast picks the system) and the CMake rules
 for the ROMS list (cmake/detect_system.cmake) on the same made-up files; both
 must give the same answer."""
+import io
 import os
 import shutil
 import subprocess
 import tempfile
 import unittest
+import zipfile
 
 from tests.games import ROOT, built
 
 BUILD = os.environ.get("NES_BUILD", os.path.join(ROOT, "build"))
 EXE = ".exe" if os.name == "nt" else ""
 RUNNER = os.path.join(BUILD, "system_detect" + EXE)
-CMAKE_ID = {"nes": "nes", "gb": "gb", "genesis": "md", "atari2600": "a26", "mastersystem": "sms", "gamegear": "gg"}
+CMAKE_ID = {"nes": "nes", "gb": "gb", "genesis": "md", "atari2600": "a26", "mastersystem": "sms", "gamegear": "gg", "cps1": "cps1"}
 LOGO = bytes.fromhex("ceed6666cc0d000b03730083000c000d0008111f8889000edccc6ee6ddddd999"
                      "bbbb67636e0eecccdddc999fbbb9333e")
 
@@ -66,7 +68,15 @@ def both_headers():  # an iNES header and "SEGA" at $100: two sure answers
     return bytes(rom)
 
 
+def zipped():
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr("game.bin", bytes(range(256)) * 64)
+    return b.getvalue()
+
+
 CASES = [  # file name, bytes, expected id (None: refused)
+    ("other.zip", zipped(), None),  # a zip of no CPS-1 game
     ("game.nes", nes(), "nes"),
     ("disk.fds", b"FDS\x1a\x01" + bytes(11) + bytes(65500), "nes"),
     ("raw.fds", b"\x01*NINTENDO-HVC*" + bytes(65500), "nes"),

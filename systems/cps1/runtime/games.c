@@ -4,8 +4,9 @@
 
 #define K 1024
 /* CPS-B-04: ID $0004 at $20, no multiplier; layer control $2E, priority
- * masks $26-$2C, palette control $30. */
-#define CPSB_04 {0x20, 0x0004, CPS1_NONE, CPS1_NONE, CPS1_NONE, CPS1_NONE, 0x2E, {0x26, 0x28, 0x2A, 0x2C}, 0x30, \
+ * masks $26, $30, $28, $32, palette control $2A (Final Fight writes its
+ * six-page $3F there). */
+#define CPSB_04 {0x20, 0x0004, CPS1_NONE, CPS1_NONE, CPS1_NONE, CPS1_NONE, 0x2E, {0x26, 0x30, 0x28, 0x32}, 0x2A, \
                  {0x02, 0x04, 0x08, 0x30, 0x30}}
 
 const Cps1Game cps1_games[] = {

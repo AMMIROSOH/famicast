@@ -12,3 +12,7 @@ if(TESTS)
     add_executable(cps1_tests tests/cps1_tests.c)
     target_link_libraries(cps1_tests PRIVATE cps1core)
 endif()
+
+# Runs a game without a window (tests/cps1/test_cps1.py)
+add_executable(cps1_headless tests/cps1_headless.c)
+target_link_libraries(cps1_headless PRIVATE cps1core)
