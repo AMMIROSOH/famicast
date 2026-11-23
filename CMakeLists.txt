@@ -24,7 +24,7 @@ include(cmake/detect_system.cmake)  # detect_system(): which system a ROM is for
 set(NES_DIR ${CMAKE_SOURCE_DIR}/systems/nes)
 
 # Shared by every system: input recordings and the pad bits (core/).
-add_library(core STATIC core/input_log.c core/detect.c)
+add_library(core STATIC core/input_log.c core/detect.c core/zip.c)
 target_include_directories(core PUBLIC core)
 # Instruction templates for the recompilers (build-time tools).
 add_library(recomp_template STATIC core/recomp/template.c)
@@ -163,18 +163,19 @@ if(WERROR)
     add_compile_options($<IF:$<C_COMPILER_ID:MSVC>,/WX,-Werror>)
 endif()
 
-# The systems to build (CI builds the ones a change touches): nes, gb, genesis.
-set(SYSTEMS "nes;gb;genesis;atari2600;mastersystem" CACHE STRING "Systems to build (semicolon-separated): nes, gb, genesis, atari2600, mastersystem (with the Game Gear)")
+# The systems to build (CI builds the ones a change touches).
+set(SYSTEMS "nes;gb;genesis;atari2600;mastersystem;cps1" CACHE STRING "Systems to build (semicolon-separated): nes, gb, genesis, atari2600, mastersystem (with the Game Gear), cps1")
 # The CPUs they use (cpu/): added once each, before the systems.
 set(CPU_nes 6502)
 set(CPU_gb sm83)
 set(CPU_genesis "m68k;z80")  # the 68000 and the Z80
 set(CPU_atari2600 6502)
 set(CPU_mastersystem z80)
+set(CPU_cps1 "m68k;z80")
 set(cpus "")
 foreach(sys IN LISTS SYSTEMS)
-    if(NOT sys MATCHES "^(nes|gb|genesis|atari2600|mastersystem)$")
-        message(FATAL_ERROR "SYSTEMS: unknown system ${sys} (nes, gb, genesis, atari2600, mastersystem)")
+    if(NOT sys MATCHES "^(nes|gb|genesis|atari2600|mastersystem|cps1)$")
+        message(FATAL_ERROR "SYSTEMS: unknown system ${sys} (nes, gb, genesis, atari2600, mastersystem, cps1)")
     endif()
     list(APPEND cpus ${CPU_${sys}})
 endforeach()
@@ -186,6 +187,8 @@ foreach(sys IN LISTS SYSTEMS)
     add_subdirectory(systems/${sys} ${CMAKE_BINARY_DIR}/sys_${sys})  # not build/<sys>: that is the program (no .exe off Windows)
 endforeach()
 if(TESTS)
+    add_executable(zip_check core/zip_check.c)  # tests/test_zip.py
+    target_link_libraries(zip_check PRIVATE core)
     # system_detect FILE: the system a file is for, from its bytes (core/detect.h;
     # each system's detector and the library it is in)
     set(DETECTOR_nes nes_detector nescore)
@@ -193,6 +196,7 @@ if(TESTS)
     set(DETECTOR_genesis md_detector mdcore)
     set(DETECTOR_atari2600 a26_detector atari2600_cart)
     set(DETECTOR_mastersystem sms_detector smscore)
+    set(DETECTOR_cps1 cps1_detector cps1core)
     set(text "#include \"detect.h\"
     ")
     set(items "")

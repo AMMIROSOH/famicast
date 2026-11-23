@@ -56,7 +56,9 @@ share one program. What makes that work:
   renames `cpu_reset`, `cpu_step`, `cpu_read` and `cpu_write` (`cpu6502.h`);
   the Atari's code is compiled with the same prefix. Calls stay direct:
   the copies cost nothing at run time, and the generated switch and
-  recompiled code are the same bytes for both.
+  recompiled code are the same bytes for both. The Z80 (`z80_library`,
+  `Z80_PREFIX`) and the 68000 (`m68k_library`, `M68K_PREFIX`) work the same
+  way, for the Genesis next to the Master System and the CPS-1.
 - **Names inside one file** still clash and do not need to: the `FLAG_*`
   enums of `cpu6502.h` and `sm83_cpu.h`, the static helpers of the ops
   headers (`rd`, `wr`, `fetch_k`, `op_ADC`, ...) and the 6502's template

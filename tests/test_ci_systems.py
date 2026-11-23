@@ -15,26 +15,27 @@ class TestCiSystems(unittest.TestCase):
         self.assertEqual(systems_for(["systems/nes/runtime/apu.c"]), ["nes"])
         self.assertEqual(systems_for(["systems/atari2600/runtime/cart.c"]), ["atari2600"])
         self.assertEqual(systems_for(["systems/mastersystem/runtime/sms.c", "tests/mastersystem/test_sms.py"]), ["mastersystem"])
+        self.assertEqual(systems_for(["systems/cps1/runtime/load.c", "tests/cps1/test_cps1.py"]), ["cps1"])
 
     def test_docs_select_nothing(self):
         self.assertEqual(systems_for(["README.md", "systems/nes/README.md", "docs/roadmap.md", "dist/README.txt"]), [])
 
     def test_shared_code_selects_every_system(self):
         for f in ("core/frontend/sdl3_main.c", "CMakeLists.txt", "tests/fetch_test_roms.py", ".github/workflows/ci.yml"):
-            self.assertEqual(systems_for([f, "systems/gb/runtime/gb.c"]), ["nes", "gb", "genesis", "atari2600", "mastersystem"], f)
+            self.assertEqual(systems_for([f, "systems/gb/runtime/gb.c"]), ["nes", "gb", "genesis", "atari2600", "mastersystem", "cps1"], f)
 
     def test_cpu_folder_selects_its_systems(self):
         self.assertEqual(systems_for(["cpu/6502/c6502.c"]), ["nes", "atari2600"])
         self.assertEqual(systems_for(["cpu/sm83/sm83_ops.h", "systems/gb/runtime/gb.c"]), ["gb"])
         self.assertEqual(systems_for(["cpu/6502/ops.c", "cpu/sm83/sm83.c"]), ["nes", "gb", "atari2600"])
-        self.assertEqual(systems_for(["cpu/z80/z80.c"]), ["genesis", "mastersystem"])
-        self.assertEqual(systems_for(["cpu/z80/z80_ops.h", "cpu/sm83/sm83.c"]), ["gb", "genesis", "mastersystem"])
+        self.assertEqual(systems_for(["cpu/z80/z80.c"]), ["genesis", "mastersystem", "cps1"])
+        self.assertEqual(systems_for(["cpu/z80/z80_ops.h", "cpu/sm83/sm83.c"]), ["gb", "genesis", "mastersystem", "cps1"])
         self.assertEqual(systems_for(["cpu/README.md"]), [])
-        self.assertEqual(systems_for(["cpu/m68k/m68k.c"]), ["genesis"])
+        self.assertEqual(systems_for(["cpu/m68k/m68k.c"]), ["genesis", "cps1"])
 
     def test_unknown_cpu_selects_every_system(self):
         for f in ("cpu/arm7/arm7.c", "cpu/CMakeLists.txt"):
-            self.assertEqual(systems_for([f]), ["nes", "gb", "genesis", "atari2600", "mastersystem"], f)
+            self.assertEqual(systems_for([f]), ["nes", "gb", "genesis", "atari2600", "mastersystem", "cps1"], f)
 
     def test_two_systems(self):
         self.assertEqual(systems_for(["systems/gb/runtime/gb.c", "systems/nes/runtime/nes.c"]), ["nes", "gb"])
