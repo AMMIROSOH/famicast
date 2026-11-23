@@ -158,6 +158,11 @@ endif()
 # programs, the recompilers and your games.
 option(TESTS "Build the test programs and test recompiles" OFF)
 
+# Float results the same with every compiler: no fused multiply-add where the
+# C source has a multiply then an add (gcc fuses by default when its target
+# CPU has FMA). Our code only, as for warnings below.
+add_compile_options($<$<NOT:$<C_COMPILER_ID:MSVC>>:-ffp-contract=off>)
+
 option(WERROR "Treat compiler warnings as errors" OFF)
 if(WERROR)
     add_compile_options($<IF:$<C_COMPILER_ID:MSVC>,/WX,-Werror>)
