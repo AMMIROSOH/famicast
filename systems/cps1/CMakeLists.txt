@@ -7,6 +7,9 @@ m68k_library(cps1_m68k cps1_)
 z80_library(cps1_z80 cps1_)  # the sound CPU, its own copy as well
 add_library(cps1core STATIC runtime/ym2151.c runtime/oki6295.c runtime/cps1.c runtime/video.c runtime/games.c runtime/load.c runtime/detect.c)
 target_include_directories(cps1core PUBLIC runtime ${Z80_DIR})  # cps1.h holds a Z80
+if(NOT MSVC)
+    target_link_libraries(cps1core PUBLIC m)  # ym2151.c
+endif()
 target_link_libraries(cps1core PUBLIC cps1_m68k core PRIVATE cps1_z80)  # Z80_PREFIX stays inside: the Master System has its own
 
 if(TESTS)

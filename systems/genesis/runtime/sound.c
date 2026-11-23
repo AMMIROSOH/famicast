@@ -16,7 +16,6 @@ static int tables_done;
 
 static void tables(void) {
     if (tables_done) return;
-    fm_tables();
     /* FMS: the deepest vibrato in cents; the LFO's PM is a triangle of 8 steps a quarter.
      * shortcut: a smooth scale, not the chip's table of F-number bits */
     static const double CENTS[8] = {0, 3.4, 6.7, 10, 14, 20, 40, 80};

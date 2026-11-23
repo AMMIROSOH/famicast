@@ -23,7 +23,6 @@ static uint32_t INC[768];                                /* phase increment x 64
  * 32 - frequency samples a step. Upgrade if a game sounds off. */
 static void tables(void) {
     if (INC[0]) return;
-    fm_tables();
     for (int i = 0; i < 768; i++) {
         double semis = i / 64.0 - (4 * 12 + 8);        /* from A4: octave 4, note A (index 8) */
         INC[i] = (uint32_t)lround(440.0 * pow(2, semis / 12) * (1 << 20) / OPM_RATE * 64);

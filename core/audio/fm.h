@@ -17,7 +17,6 @@ typedef struct {
     uint32_t phase;           /* 20 bits */
 } FmOp;
 
-void fm_tables(void);                             /* before the rest; once is enough */
 void fm_key(FmOp *o, int on);
 void fm_eg_step(FmOp *o, int kc, uint32_t eg_cnt);  /* kc: the 5-bit key code */
 int fm_op_out(const FmOp *o, int mod, int am);    /* phase plus modulation, through log-sin and exp: +-8168 */
