@@ -1,9 +1,10 @@
 retrocast - static recompiler for NES, Famicom Disk System, Game Boy, Game Boy Color,
-Genesis / Mega Drive, Atari 2600, Master System and Game Gear games
+Genesis / Mega Drive, Atari 2600, Master System and Game Gear games, and a
+player for Capcom Play System I (CPS-1) arcade games
 https://github.com/Viper-Bit/retrocast
 
 No games are included. Use your own legally dumped games (.nes, .fds, .gb, .gbc,
-.md, .a26, .sms, .gg).
+.md, .a26, .sms, .gg; CPS-1: the game's .zip as MAME and FBNeo name it).
 
 
 WHAT IS IN HERE
@@ -28,6 +29,8 @@ WHAT IS IN HERE
   sms_headless    Master System interpreter without a window (--frames N,
                   --ppm FILE, --wav FILE, --diff, --coverage).
   smsrecomp       The Master System recompiler (Z80 code into C source).
+  cps1_headless   CPS-1 interpreter without a window (--frames N, --ppm FILE,
+                  --wav FILE, --state-at N FILE, --load-state FILE).
   kit/            Everything needed to build a recompiled game into a
                   native program (see below), with SDL3 prebuilt.
 
@@ -45,8 +48,10 @@ Gamepads work too (first = player 1, second = player 2).
 Genesis pad: A, B, C = keyboard A, Z, X (gamepad West, South, East);
 X, Y, Z = Q, S, W (left shoulder, North, right shoulder); Mode = Right Shift.
 Master System pad: button 1 = Z, button 2 = X, Pause = Enter.
+CPS-1: buttons 1, 2, 3 = Z, X, S (gamepad South, East, North); a coin =
+Right Shift (Back); Start = Enter.
 Settings are in nes.ini / gb.ini / genesis.ini / atari2600.ini /
-mastersystem.ini next to
+mastersystem.ini / cps1.ini next to
 retrocast, one per system, created on first run.
 
 

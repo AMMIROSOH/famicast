@@ -5,6 +5,22 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../../docs/verification-log.md).
 
+## 2026-11-24 · P4 · the window, detection, save states
+- **Save states** (`cps1_tests`): a state with a sound command pending,
+  loaded into a second machine, gives the same 20 frames and samples; a
+  state of another game, cut short or with a wrong magic is refused and
+  the machine is unchanged. `test_ffight_state`: a state at frame 1,400
+  of Final Fight, loaded and run 100 frames, gives the same picture as
+  1,500 frames straight.
+- **Detection** (`test_detect`): the C detector and the CMake rule both
+  say `cps1` for `ffight.zip` and refuse `sfa.zip` (CPS-2); a `games.c`
+  with one file line laid out otherwise stops the CMake rule, naming the
+  file. `ROMS` with a CPS-1 zip stops the configure with a message.
+- **retrocast**: opens `ffight.zip` with the title "Final Fight (World)
+  (ffight)"; a CPS-2 zip gives "not a game of a known system".
+- **Not checked**: a long session by hand (the picture, pads, sound and
+  F2 / F4 in the window).
+
 ## 2026-11-23 · P3 · the OKI and the mix against MAME
 - **How**: MAME 0.289 (the official Windows build, SHA-256 checked) ran
   Final Fight for 82 s, a coin at frame 300 and Start at 1,300, logging
