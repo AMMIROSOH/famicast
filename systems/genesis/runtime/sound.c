@@ -4,27 +4,28 @@
  * fm.c tables (detune, envelope increments, LFO periods, AM depths) and
  * the log-sin / exp operator of the OPN family as Nuked-OPN2 models it
  * (docs/sources.md). Checked by systems/genesis/tests/md_tests.c, not against a console. */
-#include <math.h>
 #include <string.h>
 
 #include "fm.h"
 #include "md.h"
 
-static int32_t PM_MUL[8][8];           /* F-number change x 65536 for each FMS and LFO PM step 0-7 */
-static float PSG_VOL[16];
-static int tables_done;
-
-static void tables(void) {
-    if (tables_done) return;
-    /* FMS: the deepest vibrato in cents; the LFO's PM is a triangle of 8 steps a quarter.
-     * shortcut: a smooth scale, not the chip's table of F-number bits */
-    static const double CENTS[8] = {0, 3.4, 6.7, 10, 14, 20, 40, 80};
-    for (int f = 0; f < 8; f++)
-        for (int v = 0; v < 8; v++) PM_MUL[f][v] = (int32_t)lround((exp2(CENTS[f] * v / 7 / 1200) - 1) * 65536);
-    for (int i = 0; i < 15; i++) PSG_VOL[i] = (float)pow(10, -0.1 * i);  /* 2 dB a step */
-    PSG_VOL[15] = 0;
-    tables_done = 1;
-}
+/* Constants, so every machine agrees (a C library's exp2 and pow may differ
+ * in the last bit by CPU). PM_MUL: the F-number change x 65,536 for each FMS
+ * and LFO PM step, lround((2^(cents x step / 7 / 1200) - 1) x 65536) with the
+ * deepest vibrato of each FMS 0, 3.4, 6.7, 10, 14, 20, 40, 80 cents.
+ * shortcut: a smooth scale, not the chip's table of F-number bits.
+ * PSG_VOL: 2 dB a step, 10^(-step / 10), the last one silent. */
+static const int32_t PM_MUL[8][8] = {
+    {0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 18, 37, 55, 74, 92, 110, 129},
+    {0, 36, 73, 109, 145, 181, 218, 254},
+    {0, 54, 108, 162, 217, 271, 325, 380},
+    {0, 76, 152, 228, 304, 380, 456, 532},
+    {0, 108, 217, 325, 434, 543, 652, 761},
+    {0, 217, 434, 652, 871, 1091, 1311, 1532},
+    {0, 434, 871, 1311, 1754, 2199, 2648, 3099},
+};
+static const float PSG_VOL[16] = {1.0f, 0.794328213f, 0.630957365f, 0.501187205f, 0.398107171f, 0.316227764f, 0.251188636f, 0.199526235f, 0.158489317f, 0.125892535f, 0.100000001f, 0.0794328228f, 0.0630957335f, 0.050118722f, 0.0398107171f, 0};
 
 /* ---- the YM2612 ---- */
 static const uint8_t LFO_PERIOD[8] = {108, 77, 71, 67, 62, 44, 8, 5};  /* samples per LFO step (128 a cycle) */
@@ -184,7 +185,6 @@ void psg_write(Md *m, uint64_t now, uint8_t v) {
 
 /* ---- the timeline ---- */
 void snd_reset(Sound *s) {
-    tables();
     memset(s, 0, sizeof *s);
     ym_reset(&s->ym);
     for (int i = 0; i < 4; i++) s->psg.vol[i] = 15, s->psg.count[i] = 1;
