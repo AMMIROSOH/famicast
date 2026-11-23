@@ -5,6 +5,33 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../../docs/verification-log.md).
 
+## 2026-11-23 · S3 · the Z80 recompiler
+- **Random instructions** (`smstest_random`, `tests/random_rom.c`): 6,391
+  instructions from the base, CB, ED, DD and FD tables, memory writes
+  through HL, BC, DE, IX, IY and (nn) pointed at RAM, conditional JR, DJNZ
+  and JP over a few NOPs. All recompiled (100.00% of cycles); 600 frames,
+  no difference. Mutation checks: without the jump end of a block after
+  `@B` (conditional branches) the diff fails in frame 0; without `qprev`
+  cleared after a DD/FD prefix it fails in frame 6.
+- **Games** (built through `-DROMS` with the 6,000-frame trace, then 3,000
+  frames of `--play --diff --coverage`): no difference in any of the ten.
+  Recompiled share: Alex Kidd in Miracle World 89.3%, Captain Silver
+  88.5%, Cosmic Spacehead 67.7%, Fantastic Dizzy 85.5%, Fantasy Zone
+  92.6%, Hang On 85.7%, Micro Machines 82.8%, Phantasy Star 99.4%, R-Type
+  99.9%, Wonder Boy in Monster Land 99.3% (the three Codemasters games on
+  their own mapper).
+- **Speed** (the same 3,000 frames, best of two): the recompiled programs
+  take 0.9-1.0 times the interpreter's time (about 1 s each). Without
+  drawing the picture, the interpreter needs 0.27 s of Phantasy Star's
+  1.01 s: the CPU is a quarter of the work, and recompiling it does not
+  make it cheaper here.
+- **Builds**: MinGW gcc with `-DWERROR=ON`, every system with the frontend
+  and two recompiled games (`NAME` and `NAME_headless`); the Python suite
+  with `RETROCAST_STRICT=1`. MSVC with `-DWERROR=ON` for the Master System.
+- **Not checked**: the window program's `NAME.misses` round trip by hand
+  (the same functions as `--misses`, which the build uses); public Z80
+  test ROMs against the recompiler.
+
 ## 2026-11-23 · S1-S2 · the machine, detection and window program
 - **Self-checks** (`sms_tests`): the header and its region, the Sega
   mapper (power-on banks, the fixed first 1 KB, bank wrap, registers

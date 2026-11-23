@@ -1,4 +1,4 @@
 /* No recompiled code linked: programs built from the interpreter use this. */
-#include "sms.h"
+#include "recomp_rt.h"
 
-void *sms_recomp_program = NULL;
+const SmsRecompProgram *const sms_recomp_program = NULL;

@@ -50,10 +50,6 @@ uint8_t sms_vdp_read_status(SmsVdp *v) {
     return r;
 }
 
-int sms_vdp_irq(const SmsVdp *v) {
-    return ((v->status & 0x80) && (v->reg[1] & 0x20)) || (v->line_flag && (v->reg[0] & 0x10));
-}
-
 /* The V counter jumps back after $DA (NTSC) or $F2 (PAL), so it fits a byte. */
 uint8_t sms_vdp_vcount(const Sms *s) {
     unsigned l = s->line;
