@@ -233,6 +233,7 @@ static float peak(int n) {
     for (int i = 0; i < n; i++) p = snd[i] > p ? snd[i] : -snd[i] > p ? -snd[i] : p;
     return p;
 }
+#define YM_GOLDEN 0xBEA274D9u
 static void ym(unsigned reg, unsigned v) { w8(0xA04000, reg), w8(0xA04001, v); }
 
 static void sound(void) {
@@ -292,6 +293,33 @@ static void states(const char *path) {
     CHECK(m.cpu.pc == 0x204 && r16(0xFF0010) == count && !m.z80_run, "reset: pc $%06X", m.cpu.pc);
 }
 
+/* The YM2612's samples for a fixed program, pinned: moving the operator
+ * (core/fm.c) must not change one bit. */
+static void ym_golden(void) {
+    load("U", 0);
+    static const uint8_t ops[4][7] = {  /* DT/MUL, TL, KS/AR, AM/DR, SR, SL/RR per operator */
+        {0x71, 0x23, 0x5F, 0x8C, 0x05, 0x27}, {0x02, 0x10, 0x1F, 0x05, 0x02, 0x1A},
+        {0x34, 0x2C, 0x9A, 0x0A, 0x03, 0x45}, {0x01, 0x00, 0x1F, 0x86, 0x04, 0x1F}};
+    ym(0x22, 0x0B);                              /* the LFO on */
+    for (int ch = 0; ch < 2; ch++) {
+        for (int o = 0; o < 4; o++)
+            for (int r = 0; r < 6; r++) ym(0x30 + r * 0x10 + o * 4 + ch, ops[o][r]);
+        ym(0xB0 + ch, ch ? 0x07 : 0x2C);         /* algorithm 4 with feedback 5; algorithm 7 */
+        ym(0xB4 + ch, 0xF5);                     /* both sides, AMS 3, FMS 5 */
+        ym(0xA4 + ch, 0x22 + ch), ym(0xA0 + ch, 0x69);
+        ym(0x28, 0xF0 | ch);                     /* key on */
+    }
+    uint32_t h = 2166136261u;
+    for (int part = 0; part < 2; part++) {
+        int n = sound_run(4096);
+        const uint8_t *b = (const uint8_t *)snd;
+        for (size_t i = 0; i < (size_t)n * sizeof *snd; i++) h = (h ^ b[i]) * 16777619u;
+        if (part == 0) CHECK(peak(n) > 0.05f, "YM2612 program silent: %f", peak(n));
+        if (part == 0) ym(0x28, 0x00), ym(0x28, 0x01);  /* key off */
+    }
+    CHECK(h == YM_GOLDEN, "YM2612 samples changed: hash %08X", (unsigned)h);
+}
+
 int main(int argc, char **argv) {
     (void)argc;
     version();
@@ -302,6 +330,7 @@ int main(int argc, char **argv) {
     tmss();
     vdp();
     sound();
+    ym_golden();
     char path[1024];
     snprintf(path, sizeof path, "%s.state", argv[0]);  /* next to the program */
     states(path);

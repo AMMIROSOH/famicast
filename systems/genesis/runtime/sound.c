@@ -7,21 +7,16 @@
 #include <math.h>
 #include <string.h>
 
+#include "fm.h"
 #include "md.h"
 
-enum { ATTACK, DECAY, SUSTAIN, RELEASE };
-
-static uint16_t LOGSIN[256], EXP[256];  /* quarter sine as -log2 * 256; 2^x fraction * 1024 */
 static int32_t PM_MUL[8][8];           /* F-number change x 65536 for each FMS and LFO PM step 0-7 */
 static float PSG_VOL[16];
 static int tables_done;
 
 static void tables(void) {
     if (tables_done) return;
-    for (int i = 0; i < 256; i++) {  /* integers: the same on every platform */
-        LOGSIN[i] = (uint16_t)lround(-log2(sin((i + 0.5) * 3.14159265358979 / 512)) * 256);
-        EXP[i] = (uint16_t)lround((exp2(i / 256.0) - 1) * 1024);
-    }
+    fm_tables();
     /* FMS: the deepest vibrato in cents; the LFO's PM is a triangle of 8 steps a quarter.
      * shortcut: a smooth scale, not the chip's table of F-number bits */
     static const double CENTS[8] = {0, 3.4, 6.7, 10, 14, 20, 40, 80};
@@ -33,19 +28,6 @@ static void tables(void) {
 }
 
 /* ---- the YM2612 ---- */
-static const uint8_t DT[4][32] = {  /* detune by key code, in phase increments */
-    {0},
-    {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 8, 8},
-    {1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 16, 16, 16, 16},
-    {2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 20, 22, 22, 22, 22},
-};
-static const uint8_t EG_INC[17][8] = {  /* envelope steps: rows by rate % 4 below 48, then by rate */
-    {0, 1, 0, 1, 0, 1, 0, 1}, {0, 1, 0, 1, 1, 1, 0, 1}, {0, 1, 1, 1, 0, 1, 1, 1}, {0, 1, 1, 1, 1, 1, 1, 1},
-    {1, 1, 1, 1, 1, 1, 1, 1}, {1, 1, 1, 2, 1, 1, 1, 2}, {1, 2, 1, 2, 1, 2, 1, 2}, {1, 2, 2, 2, 1, 2, 2, 2},
-    {2, 2, 2, 2, 2, 2, 2, 2}, {2, 2, 2, 4, 2, 2, 2, 4}, {2, 4, 2, 4, 2, 4, 2, 4}, {2, 4, 4, 4, 2, 4, 4, 4},
-    {4, 4, 4, 4, 4, 4, 4, 4}, {4, 4, 4, 8, 4, 4, 4, 8}, {4, 8, 4, 8, 4, 8, 4, 8}, {4, 8, 8, 8, 4, 8, 8, 8},
-    {8, 8, 8, 8, 8, 8, 8, 8},
-};
 static const uint8_t LFO_PERIOD[8] = {108, 77, 71, 67, 62, 44, 8, 5};  /* samples per LFO step (128 a cycle) */
 static const uint8_t AM_SHIFT[4] = {8, 3, 1, 0};  /* AMS: 0, 1.4, 5.9, 11.8 dB */
 static const uint8_t SLOT_OP[4] = {0, 2, 1, 3};   /* register slot (+0, +4, +8, +12) to S1..S4 */
@@ -59,50 +41,8 @@ void ym_reset(Ym *y) {
     memset(y, 0, sizeof *y);
     for (int c = 0; c < 6; c++) {
         y->ch[c].pan = 3;
-        for (int o = 0; o < 4; o++) y->ch[c].op[o].state = RELEASE, y->ch[c].op[o].att = 0x3FF;
+        for (int o = 0; o < 4; o++) y->ch[c].op[o].state = FM_RELEASE, y->ch[c].op[o].att = 0x3FF;
     }
-}
-
-static void key(YmOp *o, int on) {
-    if (on && !o->key) {
-        o->phase = 0;
-        o->state = ATTACK;
-    } else if (!on && o->key) {
-        o->state = RELEASE;
-    }
-    o->key = (uint8_t)on;
-}
-
-static void eg_step(YmOp *o, int kc, uint32_t cnt) {
-    int rate = o->state == ATTACK ? o->ar : o->state == DECAY ? o->dr : o->state == SUSTAIN ? o->sr : o->rr * 2 + 1;
-    int r = rate ? 2 * rate + (kc >> (3 - o->ks)) : 0;
-    if (r > 63) r = 63;
-    int shift = r < 48 ? 11 - (r >> 2) : 0;
-    if (!r || cnt & ((1u << shift) - 1)) return;
-    int inc = EG_INC[r < 48 ? r & 3 : (r - 44 < 16 ? r - 44 : 16)][cnt >> shift & 7];
-    int att = o->att;
-    if (o->state == ATTACK) {
-        att = r >= 62 ? 0 : att + ((~att * inc) >> 4);
-        if (att <= 0) att = 0, o->state = DECAY;
-    } else {
-        att += inc;
-        int sl = o->sl == 15 ? 0x3E0 : o->sl << 5;
-        if (o->state == DECAY && att >= sl) o->state = SUSTAIN;
-        if (att > 0x3FF) att = 0x3FF;
-    }
-    o->att = (uint16_t)att;
-}
-
-/* One operator: phase (10 bits) plus modulation, through log-sin and exp; +-8168. */
-static int op_out(const YmOp *o, int mod, int am) {
-    int env = o->att + (o->tl << 3) + am;
-    if (env > 0x3FF) env = 0x3FF;
-    unsigned p = ((o->phase >> 10) + (unsigned)mod) & 0x3FF;
-    int q = p & 0xFF;
-    if (p & 0x100) q ^= 0xFF;
-    int level = LOGSIN[q] + (env << 2);
-    int v = level >= 0x1FFF ? 0 : ((EXP[(level & 0xFF) ^ 0xFF] | 0x400) << 2) >> (level >> 8);
-    return p & 0x200 ? -v : v;
 }
 
 static int channel(Ym *y, int c) {
@@ -110,7 +50,7 @@ static int channel(Ym *y, int c) {
     int lfo_am = !y->lfo_on ? 0 : y->lfo_step < 64 ? (y->lfo_step ^ 63) << 1 : (y->lfo_step & 63) << 1;
     int am = lfo_am >> AM_SHIFT[ch->ams];
     for (int i = 0; i < 4; i++) {  /* phases */
-        YmOp *o = &ch->op[i];
+        FmOp *o = &ch->op[i];
         int fn = ch->fnum, bl = ch->block;
         if (c == 2 && (y->mode & 0xC0) && i < 3) {  /* channel 3's special mode: S1-S3 have their own */
             static const int IX[3] = {1, 2, 0};
@@ -122,28 +62,13 @@ static int channel(Ym *y, int c) {
             int d = (int)(((int64_t)fn * PM_MUL[ch->fms][v]) >> 16);
             fn += s & 16 ? -d : d;
         }
-        int d = DT[o->dt & 3][kc];
-        uint32_t inc = ((uint32_t)((fn << bl) >> 1) + (uint32_t)(o->dt & 4 ? -d : d)) & 0x1FFFF;
+        uint32_t inc = ((uint32_t)((fn << bl) >> 1) + (uint32_t)fm_detune(o->dt, kc)) & 0x1FFFF;
         inc = o->mul ? inc * o->mul : inc >> 1;
         o->phase = (o->phase + inc) & 0xFFFFF;
-        if (y->eg_sub == 0) eg_step(o, kc, y->eg_cnt);
+        if (y->eg_sub == 0) fm_eg_step(o, kc, y->eg_cnt);
     }
-    YmOp *op = ch->op;
-    int a1 = op[0].am ? am : 0, a2 = op[1].am ? am : 0, a3 = op[2].am ? am : 0, a4 = op[3].am ? am : 0;
-    int fb = ch->fb ? (ch->fb_out[0] + ch->fb_out[1]) >> (10 - ch->fb) : 0;
-    int s1 = op_out(&op[0], fb, a1), s2, s3, out;
-    ch->fb_out[1] = ch->fb_out[0], ch->fb_out[0] = (int16_t)s1;
-    switch (ch->alg) {
-    case 0: s2 = op_out(&op[1], s1 >> 1, a2); s3 = op_out(&op[2], s2 >> 1, a3); out = op_out(&op[3], s3 >> 1, a4); break;
-    case 1: s2 = op_out(&op[1], 0, a2); s3 = op_out(&op[2], (s1 + s2) >> 1, a3); out = op_out(&op[3], s3 >> 1, a4); break;
-    case 2: s2 = op_out(&op[1], 0, a2); s3 = op_out(&op[2], s2 >> 1, a3); out = op_out(&op[3], (s1 + s3) >> 1, a4); break;
-    case 3: s2 = op_out(&op[1], s1 >> 1, a2); s3 = op_out(&op[2], 0, a3); out = op_out(&op[3], (s2 + s3) >> 1, a4); break;
-    case 4: s2 = op_out(&op[1], s1 >> 1, a2); s3 = op_out(&op[2], 0, a3); out = s2 + op_out(&op[3], s3 >> 1, a4); break;
-    case 5: s2 = op_out(&op[1], s1 >> 1, a2); s3 = op_out(&op[2], s1 >> 1, a3); out = s2 + s3 + op_out(&op[3], s1 >> 1, a4); break;
-    case 6: s2 = op_out(&op[1], s1 >> 1, a2); s3 = op_out(&op[2], 0, a3); out = s2 + s3 + op_out(&op[3], 0, a4); break;
-    default: s2 = op_out(&op[1], 0, a2); s3 = op_out(&op[2], 0, a3); out = s1 + s2 + s3 + op_out(&op[3], 0, a4); break;
-    }
-    return out > 8191 ? 8191 : out < -8192 ? -8192 : out;
+    int am4[4] = {ch->op[0].am ? am : 0, ch->op[1].am ? am : 0, ch->op[2].am ? am : 0, ch->op[3].am ? am : 0};
+    return fm_algorithm(ch->op, ch->alg, ch->fb, ch->fb_out, am4);
 }
 
 static void ym_sample(Ym *y, float *l, float *r) {
@@ -187,7 +112,7 @@ static void ym_reg(Ym *y, int port, int reg, uint8_t v) {
             int c = v & 7;
             if ((c & 3) == 3) break;
             YmCh *ch = &y->ch[(c & 3) + (c & 4 ? 3 : 0)];
-            for (int i = 0; i < 4; i++) key(&ch->op[i], v >> (4 + i) & 1);
+            for (int i = 0; i < 4; i++) fm_key(&ch->op[i], v >> (4 + i) & 1);
             break;
         }
         case 0x2A: y->dac = v; break;
@@ -198,7 +123,7 @@ static void ym_reg(Ym *y, int port, int reg, uint8_t v) {
     int c = reg & 3;
     if (reg < 0xA0) {
         if (c == 3) return;
-        YmOp *o = &y->ch[port * 3 + c].op[SLOT_OP[reg >> 2 & 3]];
+        FmOp *o = &y->ch[port * 3 + c].op[SLOT_OP[reg >> 2 & 3]];
         switch (reg & 0xF0) {
         case 0x30: o->dt = v >> 4 & 7, o->mul = v & 15; break;
         case 0x40: o->tl = v & 0x7F; break;
