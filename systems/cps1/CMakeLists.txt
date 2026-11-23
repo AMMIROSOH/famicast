@@ -20,3 +20,7 @@ endif()
 # Runs a game without a window (tests/cps1/test_cps1.py)
 add_executable(cps1_headless tests/cps1_headless.c)
 target_link_libraries(cps1_headless PRIVATE cps1core)
+
+if(FRONTEND)
+    frontend_system(cps1 cps1core)
+endif()
