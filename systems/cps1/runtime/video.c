@@ -40,6 +40,20 @@ static const uint8_t *base(const Cps1 *s, unsigned off, uint32_t align) {
 
 static uint16_t word(const uint8_t *p) { return (uint16_t)(p[0] << 8 | p[1]); }
 
+int cps1_gfx_map(const Cps1Mapper *m, int type, int code) {
+    if (!m->n) return code;
+    int shift = type == CPS1_GFX_SCROLL1 ? 0 : type == CPS1_GFX_SCROLL3 ? 3 : 1;
+    uint32_t unit = (uint32_t)code << shift;
+    for (int i = 0; i < m->n; i++) {
+        const Cps1Range *r = &m->range[i];
+        if (unit < r->start || unit > r->end || !(r->type & type)) continue;
+        uint32_t base = 0;
+        for (int b = 0; b < r->bank; b++) base += m->bank_size[b];
+        return (int)((base + (unit & (m->bank_size[r->bank] - 1))) >> shift);
+    }
+    return -1;
+}
+
 void cps1_palette_upload(Cps1 *s) {
     const uint8_t *src = base(s, A_PALETTE, 0x400), *start = src, *end = s->gfxram + sizeof s->gfxram;
     uint16_t ctrl = s->cpsb[s->rom->game->b.pal_ctrl >> 1];
@@ -98,7 +112,9 @@ static unsigned layer_pixel(const Cps1 *s, int n, unsigned x, unsigned y, uint16
     unsigned i = (row & (b - 1)) + ((col & 0x3F) * b) + ((row & ~(b - 1) & 0x3F) << 6);
     const uint8_t *e = map + i * 4;
     if (e + 4 > s->gfxram + sizeof s->gfxram) return 15;
-    uint16_t code = word(e), attr = word(e + 2);
+    uint16_t attr = word(e + 2);
+    int code = cps1_gfx_map(&s->rom->game->mapper, n == 1 ? CPS1_GFX_SCROLL1 : n == 2 ? CPS1_GFX_SCROLL2 : CPS1_GFX_SCROLL3, word(e));
+    if (code < 0) return 15;  /* the board's PAL leaves it out */
     unsigned px = mx % l->tile, py = my % l->tile;
     if (attr & 0x20) px = l->tile - 1 - px;
     if (attr & 0x40) py = l->tile - 1 - py;
@@ -109,8 +125,7 @@ static unsigned layer_pixel(const Cps1 *s, int n, unsigned x, unsigned y, uint16
     return p;
 }
 
-/* shortcut: no per-game graphics ROM mapper (codes outside a layer's range
- * are not blanked), no stars, no flip screen, the frame drawn at once from
+/* shortcut: no stars, no flip screen, the frame drawn at once from
  * VBlank's state; P5 adds what the other games need. */
 static void draw_sprites(Cps1 *s, const uint8_t *high) {
     const uint8_t *obj = base(s, A_OBJ, 0x800);
@@ -122,13 +137,15 @@ static void draw_sprites(Cps1 *s, const uint8_t *high) {
         unsigned nx = (attr >> 8 & 0xF) + 1, ny = (attr >> 12 & 0xF) + 1, fx = attr >> 5 & 1, fy = attr >> 6 & 1;
         for (unsigned by = 0; by < ny; by++)
             for (unsigned bx = 0; bx < nx; bx++) {
-                unsigned c = (code & ~0xFu) + ((code + bx) & 0xF) + 0x10 * by;
+                int c = cps1_gfx_map(&s->rom->game->mapper, CPS1_GFX_SPRITES,
+                                     (int)((code & ~0xFu) + ((code + bx) & 0xF) + 0x10 * by));
+                if (c < 0) continue;
                 unsigned ox = x + 16 * (fx ? nx - 1 - bx : bx), oy = y + 16 * (fy ? ny - 1 - by : by);
                 for (unsigned ty = 0; ty < 16; ty++)
                     for (unsigned tx = 0; tx < 16; tx++) {
                         int sx = (int)((ox + tx - RAW_X) & 0x1FF), sy = (int)((oy + ty - RAW_Y) & 0x1FF);
                         if (sx >= CPS1_WIDTH || sy >= CPS1_HEIGHT || high[sy * CPS1_WIDTH + sx]) continue;
-                        unsigned p = pen(s->rom, c * 128u, 8, fx ? 15 - tx : tx, fy ? 15 - ty : ty);
+                        unsigned p = pen(s->rom, (uint32_t)c * 128u, 8, fx ? 15 - tx : tx, fy ? 15 - ty : ty);
                         if (p != 15) s->frame[sy * CPS1_WIDTH + sx] = (uint16_t)((attr & 0x1F) * 16 + p);
                     }
             }

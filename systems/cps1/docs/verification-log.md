@@ -20,8 +20,14 @@ Checks of shared parts: [docs/verification-log.md](../../../docs/verification-lo
   CPS-1 zip stops the configure with a message.
 - **retrocast**: opens `ffight.zip` with the title "Final Fight (World)
   (ffight)"; a CPS-2 zip gives "not a game of a known system".
-- **Not checked**: a long session by hand (the picture, pads, sound and
-  F2 / F4 in the window).
+- **Graphics ROM mapper**: played by hand, Final Fight's Game Over screen
+  showed stale scroll tiles over the background; MAME's shows black. With
+  the S224B mapper (MAME's table) those codes are not drawn: the same
+  screen (`cps1_headless --play`, frame 7,500) is clean. `cps1_tests`:
+  the mapper's ranges, its shifts, and a scroll2 tile hidden by it.
+- **By hand** (the user, `retrocast`): Final Fight played to Game Over
+  in the window, pads, sound and picture as in MAME but for the mapper
+  above.
 
 ## 2026-11-23 · P3 · the OKI and the mix against MAME
 - **How**: MAME 0.289 (the official Windows build, SHA-256 checked) ran

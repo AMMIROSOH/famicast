@@ -22,8 +22,9 @@ without a window.
   against MAME's, the mix against MAME's recording (verification log).
 - **Picture**: the palette (six pages, uploaded on a palette-base write),
   scroll1-3 with flips and scroll2's row scroll, sprites of up to 16x16
-  blocks, layer order and the priority masks. Not yet: stars, flip screen,
-  the per-game graphics ROM mapper, raster interrupts.
+  blocks, layer order and the priority masks, the board's graphics ROM
+  mapper (which tile codes each layer may use). Not yet: stars, flip
+  screen, raster interrupts.
 - **Detection**: a zip holding every file of a game in the table, by CRC
   and size, in `retrocast` and in the build (`cmake/detect_system.cmake`
   reads the table from `games.c`).

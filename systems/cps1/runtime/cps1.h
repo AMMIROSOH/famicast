@@ -43,6 +43,16 @@ typedef struct {
     uint16_t layer_enable[5];    /* the layer-control bits enabling scroll1-3, stars 1-2 */
 } Cps1B;
 
+/* The graphics ROM mapper (a PAL per board): which tile codes each layer
+ * may use, in 64-byte units (a code shifted: sprites and scroll2 << 1,
+ * scroll1 << 0, scroll3 << 3), and the bank they come from. A code in no
+ * range of its layer is not drawn; no ranges at all lets every code through. */
+enum { CPS1_GFX_SPRITES = 1, CPS1_GFX_SCROLL1 = 2, CPS1_GFX_SCROLL2 = 4, CPS1_GFX_SCROLL3 = 8, CPS1_GFX_STARS = 16 };
+typedef struct { uint8_t type; uint32_t start, end; uint8_t bank; } Cps1Range;
+typedef struct { uint32_t bank_size[4]; uint8_t n; Cps1Range range[8]; } Cps1Mapper;
+/* The code to draw for a layer's tile code, or -1: not drawn. */
+int cps1_gfx_map(const Cps1Mapper *m, int type, int code);
+
 typedef struct {
     const char *id, *title;
     uint8_t group;
@@ -50,6 +60,7 @@ typedef struct {
     Cps1B b;
     uint8_t nfiles;
     Cps1File files[32];
+    Cps1Mapper mapper;           /* the board's graphics ROM PAL */
 } Cps1Game;
 
 extern const Cps1Game cps1_games[];
