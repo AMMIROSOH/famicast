@@ -73,6 +73,23 @@ def tiny_gb_rom(path):
         f.write(rom)
 
 
+def tiny_sms_rom(path):
+    """A 32 KB Master System cartridge: "TMR SEGA" with an export region at
+    $7FF0, then a loop that counts in RAM and writes a VDP register."""
+    rom = bytearray(0x8000)
+    rom[0:15] = bytes([0xF3, 0x31, 0xF0, 0xDF,  # DI; LD SP,$DFF0
+                       0x21, 0x00, 0xC0,  # LD HL,$C000
+                       0x34,  # loop: INC (HL)
+                       0x3E, 0x81, 0xD3, 0xBF,  # LD A,$81; OUT ($BF),A
+                       0xD3, 0xBF,  # OUT ($BF),A
+                       0x18])  # JR loop
+    rom[15] = (7 - 16) & 0xFF
+    rom[0x7FF0:0x7FF8] = b"TMR SEGA"
+    rom[0x7FFF] = 0x4C  # export Master System, 32 KB
+    with open(path, "wb") as f:
+        f.write(rom)
+
+
 def tiny_md_rom(path):
     """A Genesis cartridge: vectors, the "SEGA" header, the TMSS unlock, one VDP
     register write (the headless program and the build's trace count a game
@@ -122,7 +139,7 @@ def main():
     # 3. stage
     for prog in ("retrocast", "nes_headless", "nesrecomp", "gb_headless", "gbrecomp",
                  "genesis_headless", "mdrecomp", "atari2600_headless", "atari2600recomp",
-                 "sms_headless"):
+                 "sms_headless", "smsrecomp"):
         shutil.copy2(os.path.join(build, prog + EXE), stage)
     for item in KIT_FILES:
         src = os.path.join(ROOT, item)
@@ -139,16 +156,20 @@ def main():
     tiny_rom(rom)
     gb_rom = os.path.join(work, "kit_check_gb.gb")
     tiny_gb_rom(gb_rom)
+    sms_rom = os.path.join(work, "kit_check_sms.sms")
+    tiny_sms_rom(sms_rom)
     md_rom = os.path.join(work, "kit_check_md.md")
     tiny_md_rom(md_rom)
     atari_rom = os.path.join(work, "kit_check_atari.a26")
     tiny_atari_rom(atari_rom)
     kit_build = os.path.join(work, "kit-build")
-    cmake_build(kit, kit_build, "-DROMS=" + ";".join((rom, gb_rom, md_rom, atari_rom)))
+    cmake_build(kit, kit_build, "-DROMS=" + ";".join((rom, gb_rom, md_rom, atari_rom, sms_rom)))
     run(os.path.join(kit_build, "kit_check_headless" + EXE), "--frames", "30")
     run(os.path.join(stage, "nes_headless" + EXE), rom, "--frames", "30")
     run(os.path.join(kit_build, "kit_check_gb_headless" + EXE), gb_rom, "--frames", "30", "--diff")
     run(os.path.join(stage, "gb_headless" + EXE), gb_rom, "--frames", "30")
+    run(os.path.join(kit_build, "kit_check_sms_headless" + EXE), sms_rom, "--frames", "30", "--diff")
+    run(os.path.join(stage, "sms_headless" + EXE), sms_rom, "--frames", "30")
     run(os.path.join(kit_build, "kit_check_md_headless" + EXE), md_rom, "--frames", "30", "--diff")
     run(os.path.join(stage, "genesis_headless" + EXE), md_rom, "--frames", "30")
     run(os.path.join(kit_build, "kit_check_atari_headless" + EXE), "--frames", "2", "--diff")

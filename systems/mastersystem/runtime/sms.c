@@ -2,9 +2,11 @@
  * frame's timeline. No BIOS: the cartridge starts at $0000, as games do on a
  * console whose BIOS found them (the mapper's power-on banks 0, 1, 2). */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "input_log.h"
+#include "recomp_rt.h"
 #include "sms.h"
 
 /* ---- memory ---- */
@@ -81,6 +83,60 @@ void z80_out(Z80 *z, uint16_t port, uint8_t v) {
     }
 }
 
+/* ---- recompiled code ---- */
+uint32_t sms_rom_hash(const uint8_t *rom, size_t size) {
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < size; i++) h = (h ^ rom[i]) * 16777619u;
+    return h;
+}
+
+unsigned sms_page_at(const SmsCart *c, uint16_t a) {
+    return a < 0x0400 && !c->codemasters ? 0 : c->page[1 + (a >> 14)];
+}
+
+void sms_step(Sms *s) {
+    uint64_t before = s->cpu.tstates;
+    SmsRecompFn f = NULL;
+    if (s->recomp_on && !s->cpu.halted && s->cpu.pc < SMS_CODE_SPAN)
+        f = sms_recomp_program->lookup(s->cpu.pc, sms_page_at(&s->cart, s->cpu.pc));
+    if (f) {
+        f(&s->cpu);
+        s->cycles_native += s->cpu.tstates - before;
+    } else {
+        if (s->misses && s->cpu.pc < SMS_CODE_SPAN) {
+            unsigned page = sms_page_at(&s->cart, s->cpu.pc);
+            if (page < (s->cart.size + SMS_ROM_BANK - 1) / SMS_ROM_BANK) s->misses[sms_code_index(page, s->cpu.pc)] = 1;
+        }
+        z80_step(&s->cpu);
+        s->cycles_interp += s->cpu.tstates - before;
+    }
+}
+
+size_t sms_miss_slots(const Sms *s) {
+    return sms_code_index((unsigned)((s->cart.size + SMS_ROM_BANK - 1) / SMS_ROM_BANK), 0);
+}
+
+void sms_misses_write(const Sms *s, FILE *f) {
+    for (size_t i = 0, n = sms_miss_slots(s); i < n; i++)
+        if (s->misses[i]) fprintf(f, "MISS $%04X page %u\n", (unsigned)(i % SMS_CODE_SPAN), (unsigned)(i / SMS_CODE_SPAN));
+}
+
+size_t sms_misses_merge(Sms *s, const char *path) {
+    size_t n = sms_miss_slots(s), fresh = 0;
+    uint8_t *known = calloc(n, 1);
+    if (!known) return 1;
+    FILE *f = fopen(path, "r");
+    char line[64];
+    unsigned pc, page;
+    while (f && fgets(line, sizeof line, f))
+        if (sscanf(line, "MISS $%x page %u", &pc, &page) == 2 && pc < SMS_CODE_SPAN && sms_code_index(page, (uint16_t)pc) < n)
+            known[sms_code_index(page, (uint16_t)pc)] = 1;
+    if (f) fclose(f);
+    for (size_t i = 0; i < n; i++) fresh += s->misses[i] && !known[i], s->misses[i] |= known[i];
+    free(known);
+    return fresh;
+}
+
 /* ---- the machine ---- */
 unsigned sms_lines(const Sms *s) { return s->pal ? SMS_LINES_PAL : SMS_LINES_NTSC; }
 
@@ -97,6 +153,7 @@ void sms_reset(Sms *s) {
     s->line = 0;
     s->line_start = 0;
     s->frames = 0;
+    s->cycles_native = s->cycles_interp = 0;
     s->samples_made = 0;
     s->n_samples = 0;
     sms_psg_reset(&s->psg);
@@ -109,6 +166,7 @@ int sms_init(Sms *s, const uint8_t *rom, size_t size, int pal) {
     s->cart.size = size;
     s->cart.codemasters = (uint8_t)sms_is_codemasters(rom, size);
     s->pal = pal;
+    s->recomp_on = sms_recomp_program && sms_recomp_program->rom_hash == sms_rom_hash(rom, size);
     sms_reset(s);
     return 0;
 }
@@ -128,8 +186,9 @@ void sms_frame(Sms *s, uint16_t pad0, uint16_t pad1) {
         s->line = line;
         sms_vdp_line(s, line);
         uint64_t end = s->line_start + SMS_LINE_TSTATES;
+        s->line_end = end;
         while (s->cpu.tstates < end)
-            if (!sms_vdp_irq(&s->vdp) || !z80_interrupt(&s->cpu)) z80_step(&s->cpu);
+            if (!sms_vdp_irq(&s->vdp) || !z80_interrupt(&s->cpu)) sms_step(s);
         for (uint64_t t; (t = sample_time(s, s->samples_made + 1)) <= end; s->samples_made++) {
             sms_psg_run(&s->psg, t);
             if (s->n_samples < sizeof s->samples / sizeof s->samples[0])
@@ -149,6 +208,7 @@ int sms_save(const Sms *s, const char *path) {
     Sms copy = *s;
     copy.cart.data = NULL;
     copy.cpu.bus = NULL;
+    copy.misses = NULL;
     uint32_t size = sizeof copy;
     int bad = fwrite(MAGIC, 1, 8, f) != 8 || fwrite(&size, 4, 1, f) != 1 || fwrite(&copy, 1, sizeof copy, f) != sizeof copy;
     return fclose(f) || bad;
@@ -166,9 +226,13 @@ int sms_load(Sms *s, const char *path, char *err, size_t errlen) {
     if (bad) { snprintf(err, errlen, "%s: not a state of this version", path); return 1; }
     const uint8_t *rom = s->cart.data;
     size_t rom_size = s->cart.size;
+    uint8_t *misses = s->misses;
+    int recomp_on = s->recomp_on;
     *s = loaded;
     s->cart.data = rom;
     s->cart.size = rom_size;
+    s->misses = misses;
+    s->recomp_on = recomp_on;
     s->cpu.bus = s;
     return 0;
 }

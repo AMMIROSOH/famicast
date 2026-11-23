@@ -9,6 +9,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "z80_cpu.h"
 
@@ -21,6 +22,11 @@
 #define SMS_CLOCK_PAL 3546893
 #define SMS_SAMPLE_RATE 44100
 #define SMS_ROM_BANK 0x4000         /* the Sega mapper switches 16 KB banks */
+#define SMS_CODE_SPAN 0xC000        /* ROM is mapped at $0000-$BFFF */
+
+/* Code is known by the page mapped in its slot and its address: a page can
+ * be mapped into any of the three slots, at different addresses. */
+static inline size_t sms_code_index(unsigned page, uint16_t pc) { return (size_t)page * SMS_CODE_SPAN + pc; }
 
 typedef struct {
     const uint8_t *data;
@@ -69,6 +75,10 @@ typedef struct Sms {
     int pal;
     unsigned line;                  /* the line being run */
     uint64_t line_start;            /* its first T-state */
+    uint64_t line_end;              /* T-state the line's instructions must finish by */
+    int recomp_on;                  /* a matching recompiled program is linked */
+    uint64_t cycles_native, cycles_interp;
+    uint8_t *misses;                /* by sms_code_index: 1 = run in the interpreter (pages * 48 KB) */
     uint32_t frames;
     uint64_t samples_made;          /* samples since power-on: their T-states follow from the clock */
     float samples[1024];            /* this frame's, mono */
@@ -87,6 +97,18 @@ int sms_load(Sms *s, const char *path, char *err, size_t errlen);
 /* XRGB8888 of CRAM entry 0-31. */
 uint32_t sms_color(const Sms *s, unsigned index);
 unsigned sms_lines(const Sms *s);
+/* FNV-1a of the ROM, as the recompiler computes it. */
+uint32_t sms_rom_hash(const uint8_t *rom, size_t size);
+/* The ROM page mapped into the slot holding `a` (slot 0's vectors stay on 0). */
+unsigned sms_page_at(const SmsCart *c, uint16_t a);
+/* One instruction, or a recompiled block when there is one for the PC. */
+void sms_step(Sms *s);
+/* The code run in the interpreter (s->misses, sms_miss_slots bytes): written
+ * as "MISS $PC page P" lines, which smsrecomp reads; merge adds a file's
+ * lines and returns how many of this run's it did not have. */
+size_t sms_miss_slots(const Sms *s);
+void sms_misses_write(const Sms *s, FILE *f);
+size_t sms_misses_merge(Sms *s, const char *path);
 
 /* cart.c */
 long sms_header(const uint8_t *data, size_t size);  /* "TMR SEGA" offset, or -1 */
@@ -101,7 +123,10 @@ void sms_vdp_write_ctrl(SmsVdp *v, uint8_t val);
 void sms_vdp_line(Sms *s, unsigned line);           /* a line's start: draw it, counters, flags */
 uint8_t sms_vdp_vcount(const Sms *s);
 uint8_t sms_vdp_hcount(const Sms *s);
-int sms_vdp_irq(const SmsVdp *v);
+/* The VDP's interrupt line: inline, as recompiled code checks it after every instruction. */
+static inline int sms_vdp_irq(const SmsVdp *v) {
+    return ((v->status & 0x80) && (v->reg[1] & 0x20)) || (v->line_flag && (v->reg[0] & 0x10));
+}
 
 /* psg.c */
 void sms_psg_reset(SmsPsg *p);

@@ -1,5 +1,5 @@
 retrocast - static recompiler for NES, Famicom Disk System, Game Boy, Game Boy Color,
-Genesis / Mega Drive and Atari 2600 games; plays Master System games too
+Genesis / Mega Drive, Atari 2600 and Master System games
 https://github.com/Viper-Bit/retrocast
 
 No games are included. Use your own legally dumped games (.nes, .fds, .gb, .gbc,
@@ -26,8 +26,8 @@ WHAT IS IN HERE
   atari2600_headless  Atari 2600 interpreter without a window.
   atari2600recomp Atari 2600 recompiler.
   sms_headless    Master System interpreter without a window (--frames N,
-                  --ppm FILE, --wav FILE). Master System games are not
-                  recompiled yet.
+                  --ppm FILE, --wav FILE, --diff, --coverage).
+  smsrecomp       The Master System recompiler (Z80 code into C source).
   kit/            Everything needed to build a recompiled game into a
                   native program (see below), with SDL3 prebuilt.
 
@@ -73,7 +73,7 @@ Code the recompiler cannot find on its own runs in the interpreter. Two
 things recompile more of it:
   - the build plays each game for a while first (scripted, about 6 seconds)
     and recompiles everything that ran; -DAUTO_HINTS=OFF skips this;
-  - your own play (NES, Game Boy and Genesis games): the game notes code it had to
+  - your own play (NES, Game Boy, Genesis and Master System games): the game notes code it had to
     interpret in build/my_game.misses, and the next
     "cmake --build build --config Release" recompiles it.
 

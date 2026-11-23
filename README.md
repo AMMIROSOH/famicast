@@ -16,11 +16,12 @@ own.
 | Game Boy and Game Boy Color | ROM only, MBC1/2/3/5 (MBC3 clock), DMG and CGB mode; recompiled | [systems/gb/README.md](systems/gb/README.md) |
 | Sega Genesis / Mega Drive | 68000, Z80, VDP, PSG and YM2612, 3- and 6-button pads, battery saves; recompiled (68000) | [systems/genesis/README.md](systems/genesis/README.md) |
 | Atari 2600 | 2K/4K/F8/F6/F4 cartridges, TIA picture and sound, NTSC and PAL, joystick; recompiled; no Superchip RAM or other schemes, paddles or SECAM | [systems/atari2600/README.md](systems/atari2600/README.md) |
-| Master System / Mark III | Z80, Sega and Codemasters mappers, cartridge RAM, VDP (mode 4) and PSG, NTSC and PAL, two pads and Pause; interpreted (no Z80 recompiler yet) | [systems/mastersystem/README.md](systems/mastersystem/README.md) |
+| Master System / Mark III | Z80, Sega and Codemasters mappers, cartridge RAM, VDP (mode 4) and PSG, NTSC and PAL, two pads and Pause; recompiled (Z80) | [systems/mastersystem/README.md](systems/mastersystem/README.md) |
 
 ## How it works
 1. Each system has a recompiler (`systems/nes/recomp/` → `nesrecomp`, `systems/gb/recomp/`
-   → `gbrecomp`, `systems/genesis/recomp/` → `mdrecomp`; C, built and run by CMake). It finds the reachable code and
+   → `gbrecomp`, `systems/genesis/recomp/` → `mdrecomp`, `systems/mastersystem/recomp/`
+   → `smsrecomp`; C, built and run by CMake). It finds the reachable code and
    emits one C function per basic block, plus the ROM itself. Before that,
    the build plays the game for a while in the interpreter to find code
    static analysis cannot.
@@ -44,7 +45,7 @@ Windows (x64, arm64), Linux (x64, arm64; glibc 2.35+) and macOS (arm64):
 `retrocast`, which plays a game of any system in the interpreter; per
 system a headless program (`nes_headless`, `gb_headless`, `genesis_headless`,
 `atari2600_headless`, `sms_headless`) and a recompiler (`nesrecomp`, `gbrecomp`, `mdrecomp`,
-`atari2600recomp`); and a **kit** that recompiles your games
+`atari2600recomp`, `smsrecomp`); and a **kit** that recompiles your games
 into native programs with only CMake and a C compiler installed (SDL3 comes
 prebuilt). `README.txt` in the archive explains both. Archives are made by
 `tools/make_release.py` (`.github/workflows/release.yml`: push a tag `v*`

@@ -1,14 +1,19 @@
 # Sega Master System / Mark III
 
 The Master System part of [retrocast](../../README.md): `retrocast` plays a
-raw `.sms` in the interpreter, `sms_headless` runs one without a window.
-There is no recompiler yet (roadmap S3): a `.sms` in `-DROMS` is skipped
-with a warning.
+raw `.sms`, `sms_headless` runs one without a window, and `smsrecomp`
+recompiles one (through `-DROMS`, see the
+[root README](../../README.md#recompiling-a-game)).
 
 ## Status
 - **CPU**: the shared Z80 (`cpu/z80`), which passes every SingleStepTests
   z80 file; this system links its own copy (`sms_` prefix) so it and the
   Genesis fit in one program.
+- **Recompiled**: the code reached by a trace of scripted play and by your
+  own play (`NAME.misses`), as C basic blocks; `--diff` compares every
+  frame with the interpreter. Ten games ran 3,000 frames without a
+  difference, 68-99.9% of their cycles recompiled; no faster than the
+  interpreter, since drawing the picture costs far more than the Z80.
 - **Cartridges**: Sega's mapper with cartridge RAM (kept in `game.sms.sav`),
   Codemasters' mapper; raw `.sms`, with or without a 512-byte copier
   header. No BIOS needed. Not yet: Korean and other mappers.

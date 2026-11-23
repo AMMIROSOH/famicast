@@ -9,7 +9,7 @@ recompiler and its lockstep diff.
 |---|---|---|
 | [S1](#s1--the-machine) | cartridge and mappers, RAM, I/O, VDP, PSG, interrupts, headless | done (public test ROMs open) |
 | [S2](#s2--window-program) | window program, pads and Pause, cartridge RAM saves, save states | done |
-| [S3](#s3--recompiler) | Z80 recompiler, lockstep `--diff` | open |
+| [S3](#s3--recompiler) | Z80 recompiler, lockstep `--diff` | done |
 
 ## S1 · The machine
 - [x] **Z80**: the shared interpreter in `cpu/z80`, checked against all
@@ -51,10 +51,31 @@ recompiler and its lockstep diff.
   names Master System files `sms` (`tests/test_detect.py`).
 
 ## S3 · Recompiler
-- [ ] Static Z80 recompilation from ROM, hints from a trace, and a headless
-  `--diff` against the interpreter, as for the other systems.
-- [ ] **Exit:** a ROM of random Z80 instructions runs in lockstep in CI; a
-  sample of real games reaches a high recompiled share.
+- [x] `smsrecomp` turns the reachable code into C basic blocks from the
+  instruction templates of `cpu/z80` (opcode and operand bytes as
+  constants, every bus cycle kept). Code is keyed by the ROM page mapped in
+  its slot and its address; a block returns to the runtime when the line
+  ends, an interrupt the Z80 would take is due, the CPU halts, or the page
+  under the next instruction changed, and chains to the next block when
+  it is known. Entry points: reset, RST, NMI, a trace of scripted play and
+  the code your own play reached (`NAME.misses`, written by the window
+  program); then the targets and fallthrough of what they reach. DD CB /
+  FD CB instructions and the DD/FD opcodes that run as base ones stay in
+  the interpreter.
+- [x] `sms_headless --diff` runs the interpreter alongside and names the
+  first thing they disagree on (T-states, registers, RAM, cartridge, VDP,
+  PSG); `--misses` writes a trace, `--coverage` the recompiled share.
+  `-DROMS` builds `NAME` (window) and `NAME_headless`; the release kit
+  checks a small ROM through it.
+- [x] **Exit:** `tests/mastersystem/test_recomp.py`: a ROM of random
+  instructions from every table but DD CB / FD CB, memory writes and
+  conditional branches included, all recompiled, 600 frames in lockstep.
+  Ten games, 3,000 frames of scripted play each: no difference, 68-99.9%
+  of cycles recompiled (verification log).
+- Speed: the recompiled programs run as fast as the interpreter, not
+  faster. A Master System game's Z80 costs little next to drawing the
+  picture (three quarters of the time); a faster renderer is where speed
+  would come from.
 
 ## Later
 - Game Gear: the same machine with a 160x144 window of the picture, 12-bit
