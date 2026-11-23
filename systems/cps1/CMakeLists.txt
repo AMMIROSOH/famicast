@@ -4,7 +4,7 @@
 # Its own copy of the 68000 interpreter: the bus functions are global
 # symbols, so the Genesis and the CPS-1 cannot share one in retrocast.
 m68k_library(cps1_m68k cps1_)
-add_library(cps1core STATIC runtime/games.c runtime/load.c runtime/detect.c)
+add_library(cps1core STATIC runtime/cps1.c runtime/games.c runtime/load.c runtime/detect.c)
 target_include_directories(cps1core PUBLIC runtime)
 target_link_libraries(cps1core PUBLIC cps1_m68k core)
 

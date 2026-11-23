@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "m68k_cpu.h"
 #include "zip.h"
 
 /* ---- the game table (games.c) and loading (load.c) ---- */
@@ -64,5 +65,34 @@ const Cps1Game *cps1_match_in(const Zip *z, const Cps1Game *games, int n);
 /* 0, or -1 with the first missing or damaged file (its CRC) in err. */
 int cps1_load(const Cps1Game *g, const Zip *z, Cps1Rom *r, char *err, size_t errlen);
 void cps1_unload(Cps1Rom *r);
+
+/* ---- the machine (cps1.c) ---- */
+
+#define CPS1_WIDTH 384
+#define CPS1_HEIGHT 224
+#define CPS1_LINES 262          /* 8 MHz pixel clock, 512 per line: 59.64 Hz */
+#define CPS1_FIRST_LINE 16      /* the visible lines are 16-239 */
+#define CPS1_VBLANK_LINE 240
+#define CPS1_CLOCK 10000000     /* 68000 */
+#define CPS1_LINE_CLOCKS 640    /* 10 MHz / (8 MHz / 512) */
+
+typedef struct Cps1 {
+    M68k cpu;
+    const Cps1Rom *rom;
+    uint8_t ram[0x10000];       /* $FF0000-$FFFFFF */
+    uint8_t gfxram[0x30000];    /* $900000-$92FFFF */
+    uint16_t cpsa[0x20], cpsb[0x20];  /* $800100 and $800140, by word */
+    uint16_t mult_a, mult_b;
+    uint8_t sound_cmd, sound_fade;
+    uint16_t pad[2];            /* core/input_log.h PAD_* bits, players 1-2 */
+    uint8_t dip[3];             /* DIP switches A-C, as read (active low) */
+    int line;
+    uint64_t line_end;          /* cpu.cycles when the current line ends */
+    uint16_t frame[CPS1_WIDTH * CPS1_HEIGHT];  /* palette indices */
+} Cps1;
+
+void cps1_init(Cps1 *s, const Cps1Rom *r);
+void cps1_frame(Cps1 *s);       /* 262 lines; the picture is left in s->frame */
+void cps1_set_input(Cps1 *s, int player, uint16_t pad);  /* buttons 1-3 = B, A, C; Start, and Select = coin */
 
 #endif

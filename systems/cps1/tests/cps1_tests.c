@@ -1,5 +1,6 @@
 /* CPS-1 self-checks: matching a zip to the game table and the load layouts
- * (with a test-only game), and the detector. */
+ * (with a test-only game), the detector, and the machine: VBlank, inputs,
+ * the CPS-B ID and multiplier, unmapped reads. */
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -11,6 +12,7 @@
 
 #include "cps1.h"
 #include "detect.h"
+#include "input_log.h"
 
 extern const SystemDetector cps1_detector;
 
@@ -131,11 +133,78 @@ static void test_detector(void) {
     assert(cps1_detector.score(junk, sizeof junk) == 0);  /* not a zip at all */
 }
 
+/* ---- the machine, on a hand-assembled program ---- */
+
+static Cps1 m;
+static uint8_t prog[1 << 20];
+static Cps1Game prog_game = {"prog", "Program", CPS1_PLAIN, {1 << 20, 0, 0, 0},
+                             {0x20, 0x0004, 0x00, 0x02, 0x04, 0x06, 0x2E, {0x26, 0x28, 0x2A, 0x2C}, 0x30, {0}}, 0, {{0}}};
+static Cps1Rom prog_rom;
+
+static void w16(uint32_t a, uint16_t v) { prog[a] = (uint8_t)(v >> 8), prog[a + 1] = (uint8_t)v; }
+
+static void boot_program(void) {
+    memset(prog, 0, sizeof prog);
+    w16(0, 0x00FF), w16(2, 0x8000);              /* SSP $FF8000 */
+    w16(4, 0x0000), w16(6, 0x0400);              /* PC $400 */
+    w16(26 * 4, 0x0000), w16(26 * 4 + 2, 0x0500);  /* level 2 autovector: $500 */
+    static const uint16_t main_[] = {0x46FC, 0x2000,                       /* move #$2000,sr */
+                                     0x33F9, 0x0080, 0x0000, 0x00FF, 0x0002,  /* move.w $800000,$FF0002 */
+                                     0x60F4};                              /* bra.s the move */
+    for (unsigned i = 0; i < sizeof main_ / 2; i++) w16(0x400 + i * 2, main_[i]);
+    static const uint16_t irq[] = {0x5279, 0x00FF, 0x0000, 0x4E73};      /* addq.w #1,$FF0000; rte */
+    for (unsigned i = 0; i < sizeof irq / 2; i++) w16(0x500 + i * 2, irq[i]);
+    prog_rom.game = &prog_game;
+    prog_rom.region[CPS1_R_MAIN] = prog;
+    prog_rom.size[CPS1_R_MAIN] = sizeof prog;
+    cps1_init(&m, &prog_rom);
+}
+
+static uint16_t ram16(uint32_t a) { return (uint16_t)(m.ram[a & 0xFFFF] << 8 | m.ram[(a + 1) & 0xFFFF]); }
+
+static void test_vblank(void) {
+    boot_program();
+    for (int i = 0; i < 3; i++) cps1_frame(&m);
+    assert(ram16(0xFF0000) == 3);
+}
+
+static void test_inputs(void) {
+    boot_program();
+    cps1_frame(&m);
+    assert(ram16(0xFF0002) == 0xFFFF);           /* nothing pressed: all high */
+    cps1_set_input(&m, 0, PAD_RIGHT | PAD_B);
+    cps1_set_input(&m, 1, PAD_UP);
+    cps1_frame(&m);
+    assert(ram16(0xFF0002) == (uint16_t)~(0x01 | 0x10 | 0x0800));  /* P1 right, button 1; P2 up */
+    cps1_set_input(&m, 0, PAD_START | PAD_SELECT);
+    assert((m68k_read(&m.cpu, 0x800018, 5, 3) >> 8) == (uint8_t)~(0x10 | 0x01));  /* start 1, coin 1 */
+}
+
+static void test_cpsb(void) {
+    boot_program();
+    assert(m68k_read(&m.cpu, 0x800140 + 0x20, 5, 3) == 0x0004);  /* the ID port */
+    m68k_write(&m.cpu, 0x800140 + 0x00, 300, 5, 3);
+    m68k_write(&m.cpu, 0x800140 + 0x02, 400, 5, 3);
+    uint32_t p = (uint32_t)m68k_read(&m.cpu, 0x800140 + 0x06, 5, 3) << 16 | m68k_read(&m.cpu, 0x800140 + 0x04, 5, 3);
+    assert(p == 120000);
+}
+
+static void test_unmapped(void) {
+    boot_program();
+    assert(m68k_read(&m.cpu, 0x600000, 5, 3) == 0xFFFF);
+    m68k_write(&m.cpu, 0x900010, 0xABCD, 5, 3);  /* graphics RAM is RAM */
+    assert(m68k_read(&m.cpu, 0x900010, 5, 3) == 0xABCD);
+}
+
 int main(void) {
     make_test_game();
     test_layouts();
     test_missing();
     test_detector();
+    test_vblank();
+    test_inputs();
+    test_cpsb();
+    test_unmapped();
     puts("cps1_tests: ok");
     return 0;
 }
