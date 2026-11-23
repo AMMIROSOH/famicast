@@ -14,6 +14,7 @@
 #include "cps1.h"
 #include "detect.h"
 #include "input_log.h"
+#include "ym2151.h"
 
 extern const SystemDetector cps1_detector;
 
@@ -307,6 +308,74 @@ static void test_priority(void) {
     assert(m.frame[50 * CPS1_WIDTH + 131] == 0x400 + 0 * 16 + 7);
 }
 
+/* ---- the YM2151 ---- */
+
+static Opm opm;
+static void opm_reg(uint8_t r, uint8_t v) { opm_write(&opm, 0, r), opm_write(&opm, 1, v); }
+
+static void opm_tone(uint8_t kc) {  /* channel 0, algorithm 7, only C2 sounding */
+    opm_reset(&opm);
+    opm_reg(0x20, 0xC7);
+    for (int slot = 0; slot < 4; slot++) opm_reg((uint8_t)(0x60 + slot * 8), 127);
+    opm_reg(0x40 + 24, 0x01), opm_reg(0x60 + 24, 0), opm_reg(0x80 + 24, 0x1F), opm_reg(0xE0 + 24, 0x0F);
+    opm_reg(0x28, kc), opm_reg(0x30, 0);
+    opm_reg(0x08, 0x40);                 /* key on C2 of channel 0 */
+}
+
+static double opm_pitch(void) {
+    int prev = opm_sample(&opm), crossings = 0;
+    for (int i = 1; i < OPM_RATE; i++) {
+        int v = opm_sample(&opm);
+        if (prev < 0 && v >= 0) crossings++;
+        prev = v;
+    }
+    return crossings;
+}
+
+static void test_opm_pitch(void) {
+    opm_tone(0x4A);                      /* A4 */
+    double f = opm_pitch();
+    assert(f >= 437 && f <= 443);
+}
+
+static void test_opm_octave(void) {
+    opm_tone(0x5A);                      /* A5 */
+    double f = opm_pitch();
+    assert(f >= 874 && f <= 886);
+}
+
+static void test_opm_timer_a(void) {
+    opm_reset(&opm);
+    opm_reg(0x10, 1000 >> 2), opm_reg(0x11, 1000 & 3);  /* 24 samples */
+    opm_reg(0x14, 0x05);                 /* load A, its IRQ on */
+    for (int i = 0; i < 23; i++) opm_sample(&opm);
+    assert(!opm.irq && !(opm_status(&opm) & 1));
+    opm_sample(&opm);
+    assert(opm.irq && (opm_status(&opm) & 1));
+    opm_reg(0x14, 0x15);                 /* reset A's flag (keep it running) */
+    assert(!opm.irq && !(opm_status(&opm) & 1));
+}
+
+static void test_opm_timer_b(void) {
+    opm_reset(&opm);
+    opm_reg(0x12, 255);                  /* 16 samples */
+    opm_reg(0x14, 0x0A);
+    for (int i = 0; i < 15; i++) opm_sample(&opm);
+    assert(!opm.irq);
+    opm_sample(&opm);
+    assert(opm.irq && (opm_status(&opm) & 2));
+}
+
+static void test_opm_release(void) {
+    opm_tone(0x4A);
+    for (int i = 0; i < 1000; i++) opm_sample(&opm);
+    opm_reg(0x08, 0x00);                 /* key off */
+    int last = 1;
+    for (int i = 0; i < 2000; i++) last = opm_sample(&opm);
+    for (int i = 0; i < 100; i++) last |= opm_sample(&opm);
+    assert(last == 0);
+}
+
 int main(void) {
     make_test_game();
     test_layouts();
@@ -323,6 +392,11 @@ int main(void) {
     test_scroll3_tile();
     test_sprite_flip();
     test_priority();
+    test_opm_pitch();
+    test_opm_octave();
+    test_opm_timer_a();
+    test_opm_timer_b();
+    test_opm_release();
     puts("cps1_tests: ok");
     return 0;
 }
