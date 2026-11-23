@@ -163,18 +163,19 @@ if(WERROR)
     add_compile_options($<IF:$<C_COMPILER_ID:MSVC>,/WX,-Werror>)
 endif()
 
-# The systems to build (CI builds the ones a change touches): nes, gb, genesis.
-set(SYSTEMS "nes;gb;genesis;atari2600;mastersystem" CACHE STRING "Systems to build (semicolon-separated): nes, gb, genesis, atari2600, mastersystem (with the Game Gear)")
+# The systems to build (CI builds the ones a change touches).
+set(SYSTEMS "nes;gb;genesis;atari2600;mastersystem;cps1" CACHE STRING "Systems to build (semicolon-separated): nes, gb, genesis, atari2600, mastersystem (with the Game Gear), cps1")
 # The CPUs they use (cpu/): added once each, before the systems.
 set(CPU_nes 6502)
 set(CPU_gb sm83)
 set(CPU_genesis "m68k;z80")  # the 68000 and the Z80
 set(CPU_atari2600 6502)
 set(CPU_mastersystem z80)
+set(CPU_cps1 "m68k;z80")
 set(cpus "")
 foreach(sys IN LISTS SYSTEMS)
-    if(NOT sys MATCHES "^(nes|gb|genesis|atari2600|mastersystem)$")
-        message(FATAL_ERROR "SYSTEMS: unknown system ${sys} (nes, gb, genesis, atari2600, mastersystem)")
+    if(NOT sys MATCHES "^(nes|gb|genesis|atari2600|mastersystem|cps1)$")
+        message(FATAL_ERROR "SYSTEMS: unknown system ${sys} (nes, gb, genesis, atari2600, mastersystem, cps1)")
     endif()
     list(APPEND cpus ${CPU_${sys}})
 endforeach()
@@ -195,6 +196,7 @@ if(TESTS)
     set(DETECTOR_genesis md_detector mdcore)
     set(DETECTOR_atari2600 a26_detector atari2600_cart)
     set(DETECTOR_mastersystem sms_detector smscore)
+    set(DETECTOR_cps1 cps1_detector cps1core)
     set(text "#include \"detect.h\"
     ")
     set(items "")
