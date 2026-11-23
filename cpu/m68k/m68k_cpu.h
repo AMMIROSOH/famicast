@@ -14,6 +14,27 @@
 #include <setjmp.h>
 #include <stdint.h>
 
+/* Two systems with this CPU in one program (the Genesis and the CPS-1 in
+ * retrocast) each get their own copy of the interpreter: M68K_PREFIX
+ * (m68k_library() in CMakeLists.txt) renames its functions and the bus it
+ * calls, so the calls stay direct. */
+#ifdef M68K_PREFIX
+#define M68K_CAT2(p, n) p##n
+#define M68K_CAT(p, n) M68K_CAT2(p, n)
+#define m68k_read M68K_CAT(M68K_PREFIX, m68k_read)
+#define m68k_write M68K_CAT(M68K_PREFIX, m68k_write)
+#define m68k_idle M68K_CAT(M68K_PREFIX, m68k_idle)
+#define m68k_aborted M68K_CAT(M68K_PREFIX, m68k_aborted)
+#define m68k_iack M68K_CAT(M68K_PREFIX, m68k_iack)
+#define m68k_reset_out M68K_CAT(M68K_PREFIX, m68k_reset_out)
+#define m68k_set_sr M68K_CAT(M68K_PREFIX, m68k_set_sr)
+#define m68k_exception M68K_CAT(M68K_PREFIX, m68k_exception)
+#define m68k_privilege M68K_CAT(M68K_PREFIX, m68k_privilege)
+#define m68k_address_error M68K_CAT(M68K_PREFIX, m68k_address_error)
+#define m68k_reset M68K_CAT(M68K_PREFIX, m68k_reset)
+#define m68k_step M68K_CAT(M68K_PREFIX, m68k_step)
+#endif
+
 /* SR bits */
 enum {
     M68K_C = 0x01, M68K_V = 0x02, M68K_Z = 0x04, M68K_N = 0x08, M68K_X = 0x10,

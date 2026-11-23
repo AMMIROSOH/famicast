@@ -21,8 +21,19 @@ add_custom_command(
     COMMENT "Generating the 68000 interpreter's handlers")
 
 # The interpreter (m68k_cpu.c) and the instruction helpers (m68k_ops.h).
-add_library(m68k STATIC m68k_cpu.c ${GEN_DIR}/m68k_handlers.inc)
-target_include_directories(m68k PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${GEN_DIR})
+# m68k_library(NAME PREFIX): another copy with its functions and the bus it
+# calls renamed PREFIXm68k_step, PREFIXm68k_read, ... (m68k_cpu.h), for a
+# second system with this CPU in the same program.
+set(M68K_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE INTERNAL "")  # seen from the systems' folders
+function(m68k_library name prefix)
+    add_library(${name} STATIC ${M68K_DIR}/m68k_cpu.c ${GEN_DIR}/m68k_handlers.inc)
+    target_include_directories(${name} PUBLIC ${M68K_DIR} PRIVATE ${GEN_DIR})
+    if(prefix)
+        target_compile_definitions(${name} PUBLIC M68K_PREFIX=${prefix})
+        add_dependencies(${name} m68k)  # the handlers' rule belongs to this folder's target
+    endif()
+endfunction()
+m68k_library(m68k "")
 
 if(TESTS)
     # SingleStepTests m68000 on a flat bus (tests/genesis/test_m68k.py)
