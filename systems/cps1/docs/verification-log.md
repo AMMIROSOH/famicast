@@ -5,6 +5,24 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../../docs/verification-log.md).
 
+## 2026-11-23 · P3 · the OKI and the mix against MAME
+- **How**: MAME 0.289 (the official Windows build, SHA-256 checked) ran
+  Final Fight for 82 s, a coin at frame 300 and Start at 1,300, logging
+  every write to $F000-$F002 with its time (a Lua tap) and recording its
+  sound (`-wavwrite`, 55,930 Hz). Our `s224b.1a` PAL dump differs from
+  MAME's; MAME does not emulate it.
+- **OKI, bit-exact**: MAME's 664 OKI commands played at their sample
+  positions through our `oki6295.c` and through MAME's okim6295 logic
+  (its source, rebuilt standalone): 633,538 samples (295,953 not
+  silent), none different. Before: MAME's volume table (steps 5, 7, 8),
+  a busy voice ignoring a start, a phrase needing its end after its
+  start, and the exact sum (no division per voice) differed.
+- **Mix**: MAME's recording fitted, in 50 ms windows of power, as the
+  YM2151 (ymfm on MAME's own writes) plus the OKI (ours on MAME's
+  commands): weights 0.703 and 0.1446 against ours, 0.700 and 0.150
+  (MAME's routing: 0.35 a YM2151 side, 0.30 the OKI); 99.1% of the power
+  explained. Before, the OKI was 4x too quiet.
+
 ## 2026-11-23 · P3 · the YM2151 against ymfm
 - **How**: Final Fight's 173,836 YM2151 register writes (80 s of play,
   logged with their sample) played through our YM2151 and through ymfm

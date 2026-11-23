@@ -428,9 +428,9 @@ static void oki_setup(void) {
 static void test_oki_decode(void) {
     oki_setup();
     oki_write(&oki, 0x81), oki_write(&oki, 0x10);  /* phrase 1 on voice 1, full volume */
-    assert(oki_sample(&oki) == 2);
+    assert(oki_sample(&oki) == 2 * 32);  /* signal x volume (32: full) */
     assert(oki_sample(&oki) == 0);
-    assert(oki_sample(&oki) == -2);
+    assert(oki_sample(&oki) == -2 * 32);
     assert(oki_sample(&oki) == 0);
 }
 
@@ -439,8 +439,24 @@ static void test_oki_status(void) {
     assert(oki_status(&oki) == 0xF0);
     oki_write(&oki, 0x81), oki_write(&oki, 0x20);  /* voice 2 */
     assert(oki_status(&oki) == 0xF2);
-    for (int i = 0; i < 5; i++) oki_sample(&oki);
+    for (int i = 0; i < 3; i++) oki_sample(&oki);
+    assert(oki_status(&oki) == 0xF2);
+    oki_sample(&oki);                              /* the last nibble ends it */
     assert(oki_status(&oki) == 0xF0);
+}
+
+static void test_oki_as_mame(void) {  /* MAME's okim6295: busy voices ignore a start; start = end is no phrase */
+    oki_setup();
+    oki_phrase(5, 0x600, 0x600);
+    okirom[0x400] = 0x77;                          /* a large first nibble: a restart would show */
+    oki_write(&oki, 0x81), oki_write(&oki, 0x10);
+    oki_sample(&oki);
+    oki_write(&oki, 0x81), oki_write(&oki, 0x17); /* again, at volume 7 */
+    assert(oki.v[0].nibble == 1 && oki.v[0].vol == 32);
+    oki_write(&oki, 0x85), oki_write(&oki, 0x20);
+    assert(!(oki_status(&oki) & 2));
+    oki_write(&oki, 0x81), oki_write(&oki, 0x47); /* voice 3 at volume 7: 3/32 */
+    assert(oki.v[2].vol == 3);
 }
 
 static void test_oki_stop(void) {
@@ -455,9 +471,9 @@ static void test_oki_bad_phrase(void) {
     oki_write(&oki, 0x82), oki_write(&oki, 0x10);
     oki_write(&oki, 0x83), oki_write(&oki, 0x20);
     assert(oki_status(&oki) == 0xF0);
-    oki_write(&oki, 0x84), oki_write(&oki, 0x40);
-    for (int i = 0; i < 0x100; i++) oki_sample(&oki);  /* 16 bytes to the end, then it stops */
-    assert(oki_status(&oki) == 0xF0);
+    oki_write(&oki, 0x84), oki_write(&oki, 0x40);  /* runs off the ROM: no read past it */
+    for (int i = 0; i < 0x1000; i++) oki_sample(&oki);
+    assert(oki.v[2].playing && oki.v[2].start + oki.v[2].nibble / 2 > sizeof okirom);  /* zeros, as MAME reads them */
 }
 
 /* ---- the Z80 side ---- */
@@ -548,6 +564,7 @@ int main(void) {
     test_oki_decode();
     test_oki_status();
     test_oki_stop();
+    test_oki_as_mame();
     test_oki_bad_phrase();
     test_latch();
     test_bank();

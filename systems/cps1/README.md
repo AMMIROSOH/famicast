@@ -15,9 +15,10 @@ A game is the zip of its chip dumps, as MAME and FBNeo sets have them
   one program; the Z80 runs line by line after the 68000.
 - **Sound**: the YM2151 (8 FM channels on the operator shared with the
   Genesis, `core/audio/fm.c`; DT1/DT2, the LFO, noise, timers and their IRQ)
-  and the OKI MSM6295 (4 ADPCM voices), mixed to mono at 55,930 Hz. The
-  YM2151 was checked against ymfm on Final Fight's register writes: the
-  same level and spectrum (verification log).
+  and the OKI MSM6295 (4 ADPCM voices, pin 7's two rates), mixed to mono
+  at 55,930 Hz with MAME's CPS-1 weights. Checked on Final Fight: the
+  YM2151 against ymfm (the same level and spectrum), the OKI bit-exact
+  against MAME's, the mix against MAME's recording (verification log).
 - **Picture**: the palette (six pages, uploaded on a palette-base write),
   scroll1-3 with flips and scroll2's row scroll, sprites of up to 16x16
   blocks, layer order and the priority masks. Not yet: stars, flip screen,

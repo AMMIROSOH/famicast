@@ -36,5 +36,3 @@ before the thing it checks. A milestone is done when its exit test passes.
 - [x] **Exit:** `cps1_tests` (pitch, timers, release, ADPCM, the latch, the
   bank, the YM2151's IRQ, the sample buffer); Final Fight's play is not
   silent (`test_ffight_sound`).
-- Open: the OKI's pin 7 is taken as always high; the mix of the two chips
-  is not yet checked against a recording.

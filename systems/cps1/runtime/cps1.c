@@ -10,7 +10,7 @@
  * line 240, held until acknowledged.
  * The sound Z80: $0000-$7FFF ROM, $8000-$BFFF a 16 KB bank (ROM $8000 +
  * bank x $4000; $F004 bit 0), $D000-$D7FF RAM, $F000/$F001 the YM2151,
- * $F002 the OKI, $F008 / $F00A the 68000's command and fade; the YM2151's
+ * $F002 the OKI ($F006 its pin 7), $F008 / $F00A the 68000's command and fade; the YM2151's
  * IRQ is its INT. It runs line by line after the 68000.
  * Sources: docs/sources.md (CPS-1, CPS-1 sound). */
 #include <string.h>
@@ -130,7 +130,8 @@ void z80_write(Z80 *z, uint16_t a, uint8_t v) {
     else if (a == 0xF000 || a == 0xF001) opm_write(&s->opm, a & 1, v);
     else if (a == 0xF002) oki_write(&s->oki, v);
     else if (a == 0xF004) s->bank = v & 1;
-}  /* $F006, the OKI's pin 7: always high on the CPS-1 boards here */
+    else if (a == 0xF006) s->oki.pin7 = v & 1;  /* the OKI's rate: 132 clocks a sample, or 165 */
+}
 uint8_t z80_in(Z80 *z, uint16_t port) { (void)z, (void)port; return 0xFF; }
 void z80_out(Z80 *z, uint16_t port, uint8_t v) { (void)z, (void)port, (void)v; }
 void z80_idle(Z80 *z, uint16_t a, unsigned n) { (void)z, (void)a, (void)n; }
@@ -138,8 +139,11 @@ uint8_t z80_irq_ack(Z80 *z) { (void)z; return 0xFF; }  /* IM 1: RST $38 */
 
 static void sample(Cps1 *s) {
     s->oki_acc += 64ull * 1000000;  /* 64 Z80 T-states in OKI clocks (1 MHz) x 3,579,545 */
-    while (s->oki_acc >= 132ull * CPS1_Z80_CLOCK) s->oki_acc -= 132ull * CPS1_Z80_CLOCK, s->oki_out = oki_sample(&s->oki);
-    int v = opm_sample(&s->opm) * 7 / 10 + s->oki_out * 6 / 5;
+    uint64_t period = (s->oki.pin7 ? 132ull : 165ull) * CPS1_Z80_CLOCK;
+    while (s->oki_acc >= period) s->oki_acc -= period, s->oki_out = oki_sample(&s->oki);
+    /* MAME's CPS-1 mix: the YM2151's two sides x 0.35, the OKI x 0.30, full
+     * scale 32,768 for the YM2151's 16 bits and 65,536 for the OKI's sum */
+    int v = opm_sample(&s->opm) * 7 / 10 + s->oki_out * 15 / 100;
     if (s->snd_n < CPS1_SND_BUF) s->snd[s->snd_n++] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
 }
 
