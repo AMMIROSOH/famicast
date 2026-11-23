@@ -4,9 +4,10 @@
 # Its own copy of the 68000 interpreter: the bus functions are global
 # symbols, so the Genesis and the CPS-1 cannot share one in retrocast.
 m68k_library(cps1_m68k cps1_)
+z80_library(cps1_z80 cps1_)  # the sound CPU, its own copy as well
 add_library(cps1core STATIC runtime/ym2151.c runtime/oki6295.c runtime/cps1.c runtime/video.c runtime/games.c runtime/load.c runtime/detect.c)
 target_include_directories(cps1core PUBLIC runtime)
-target_link_libraries(cps1core PUBLIC cps1_m68k core)
+target_link_libraries(cps1core PUBLIC cps1_m68k cps1_z80 core)
 
 if(TESTS)
     add_executable(cps1_tests tests/cps1_tests.c)

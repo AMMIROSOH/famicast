@@ -433,6 +433,67 @@ static void test_oki_bad_phrase(void) {
     assert(oki_status(&oki) == 0xF0);
 }
 
+/* ---- the Z80 side ---- */
+
+static uint8_t zrom[0x10000];
+
+static void boot_sound(const uint8_t *code, size_t n) {
+    memset(zrom, 0, sizeof zrom);
+    memcpy(zrom, code, n);
+    boot_program();
+    prog_rom.region[CPS1_R_SOUND] = zrom;
+    prog_rom.size[CPS1_R_SOUND] = sizeof zrom;
+    cps1_init(&m, &prog_rom);
+}
+
+static void test_latch(void) {
+    static const uint8_t code[] = {0x3A, 0x08, 0xF0, 0x32, 0x00, 0xD0, 0x18, 0xF8};  /* ld a,($F008); ld ($D000),a; jr */
+    boot_sound(code, sizeof code);
+    m68k_write(&m.cpu, 0x800180, 0x0023, 5, 1);  /* the low byte: $800181 */
+    cps1_frame(&m);
+    assert(m.z80_ram[0] == 0x23);
+    m68k_write(&m.cpu, 0x800180, 0x0011, 5, 1);
+    m68k_write(&m.cpu, 0x800180, 0x0042, 5, 1);  /* only the last one stays */
+    cps1_frame(&m);
+    assert(m.z80_ram[0] == 0x42);
+}
+
+static void test_bank(void) {
+    static const uint8_t code[] = {0x3E, 0x01, 0x32, 0x04, 0xF0,   /* ld a,1; ld ($F004),a */
+                                   0x3A, 0x00, 0x80, 0x32, 0x00, 0xD0, 0x18, 0xFE};  /* ld a,($8000); ld ($D000),a */
+    boot_sound(code, sizeof code);
+    zrom[0xC000] = 0x5A;                         /* bank 1: ROM $8000 + $4000 */
+    cps1_frame(&m);
+    assert(m.z80_ram[0] == 0x5A);
+}
+
+static void test_ym_irq(void) {
+    static const uint8_t code[] = {
+        0x31, 0x00, 0xD8, 0xED, 0x56,            /* ld sp,$D800; im 1 */
+        0x3E, 0x10, 0x32, 0x00, 0xF0, 0x3E, 0x80, 0x32, 0x01, 0xF0,  /* timer A = 512: 512 samples */
+        0x3E, 0x14, 0x32, 0x00, 0xF0, 0x3E, 0x15, 0x32, 0x01, 0xF0,  /* load A, its IRQ on */
+        0xFB, 0x18, 0xFE};                       /* ei; jr $ */
+    static const uint8_t irq[] = {0x21, 0x01, 0xD0, 0x34,  /* ld hl,$D001; inc (hl) */
+        0x3E, 0x14, 0x32, 0x00, 0xF0, 0x3E, 0x15, 0x32, 0x01, 0xF0,  /* reset A's flag */
+        0xFB, 0xC9};                             /* ei; ret */
+    boot_sound(code, sizeof code);
+    memcpy(zrom + 0x38, irq, sizeof irq);
+    cps1_frame(&m), cps1_frame(&m);
+    assert(m.z80_ram[1] >= 2);                   /* ~1,876 samples: 3 interrupts */
+}
+
+static void test_sound_buffer(void) {
+    static const uint8_t code[] = {0x18, 0xFE};
+    static int16_t out[CPS1_SND_BUF];
+    boot_sound(code, sizeof code);
+    for (int i = 0; i < 20; i++) cps1_frame(&m);  /* nobody takes the samples */
+    assert(m.snd_n <= CPS1_SND_BUF);
+    cps1_take_sound(&m, out, CPS1_SND_BUF);
+    cps1_frame(&m);
+    int n = cps1_take_sound(&m, out, CPS1_SND_BUF);
+    assert(n >= 936 && n <= 940);
+}
+
 int main(void) {
     make_test_game();
     test_layouts();
@@ -458,6 +519,10 @@ int main(void) {
     test_oki_status();
     test_oki_stop();
     test_oki_bad_phrase();
+    test_latch();
+    test_bank();
+    test_ym_irq();
+    test_sound_buffer();
     puts("cps1_tests: ok");
     return 0;
 }
