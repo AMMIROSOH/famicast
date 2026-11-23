@@ -9,6 +9,7 @@
  * They check this code against the hardware facts in
  * systems/genesis/docs/roadmap.md, not against a console. Prints each failure;
  * exit code 0 when all pass. */
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -233,7 +234,7 @@ static float peak(int n) {
     for (int i = 0; i < n; i++) p = snd[i] > p ? snd[i] : -snd[i] > p ? -snd[i] : p;
     return p;
 }
-#define YM_GOLDEN 0xBEA274D9u
+#define YM_GOLDEN 0xA0209A86u
 static void ym(unsigned reg, unsigned v) { w8(0xA04000, reg), w8(0xA04001, v); }
 
 static void sound(void) {
@@ -297,6 +298,7 @@ static void states(const char *path) {
  * (core/audio/fm.c) must not change one bit. */
 static void ym_golden(void) {
     load("U", 0);
+    for (int c = 0; c < 4; c++) w8(0xC00011, (uint8_t)(0x9F | c << 5));  /* the PSG silent: only the integer FM path */
     static const uint8_t ops[4][7] = {  /* DT/MUL, TL, KS/AR, AM/DR, SR, SL/RR per operator */
         {0x71, 0x23, 0x5F, 0x8C, 0x05, 0x27}, {0x02, 0x10, 0x1F, 0x05, 0x02, 0x1A},
         {0x34, 0x2C, 0x9A, 0x0A, 0x03, 0x45}, {0x01, 0x00, 0x1F, 0x86, 0x04, 0x1F}};
@@ -312,8 +314,10 @@ static void ym_golden(void) {
     uint32_t h = 2166136261u;
     for (int part = 0; part < 2; part++) {
         int n = sound_run(4096);
-        const uint8_t *b = (const uint8_t *)snd;
-        for (size_t i = 0; i < (size_t)n * sizeof *snd; i++) h = (h ^ b[i]) * 16777619u;
+        for (int i = 0; i < n; i++) {  /* 16-bit integers: the same on every compiler and C library */
+            uint16_t v = (uint16_t)(int16_t)lrintf(snd[i] * 32767);
+            h = (h ^ (v & 0xFF)) * 16777619u, h = (h ^ (v >> 8)) * 16777619u;
+        }
         if (part == 0) CHECK(peak(n) > 0.05f, "YM2612 program silent: %f", peak(n));
         if (part == 0) ym(0x28, 0x00), ym(0x28, 0x01);  /* key off */
     }
