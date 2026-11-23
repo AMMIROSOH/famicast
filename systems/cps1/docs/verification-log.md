@@ -8,14 +8,16 @@ Checks of shared parts: [docs/verification-log.md](../../../docs/verification-lo
 ## 2026-11-24 · P4 · the window, detection, save states
 - **Save states** (`cps1_tests`): a state with a sound command pending,
   loaded into a second machine, gives the same 20 frames and samples; a
-  state of another game, cut short or with a wrong magic is refused and
-  the machine is unchanged. `test_ffight_state`: a state at frame 1,400
+  state of another game, cut short, with a wrong magic or damaged inside
+  (a CRC-32 over the state) is refused and the machine is unchanged. `test_ffight_state`: a state at frame 1,400
   of Final Fight, loaded and run 100 frames, gives the same picture as
   1,500 frames straight.
 - **Detection** (`test_detect`): the C detector and the CMake rule both
   say `cps1` for `ffight.zip` and refuse `sfa.zip` (CPS-2); a `games.c`
   with one file line laid out otherwise stops the CMake rule, naming the
-  file. `ROMS` with a CPS-1 zip stops the configure with a message.
+  file, and so does a game listing no files (it would match any zip); a
+  CRC written without its leading zero still matches. `ROMS` with a
+  CPS-1 zip stops the configure with a message.
 - **retrocast**: opens `ffight.zip` with the title "Final Fight (World)
   (ffight)"; a CPS-2 zip gives "not a game of a known system".
 - **Not checked**: a long session by hand (the picture, pads, sound and

@@ -188,6 +188,21 @@ class TestCps1(unittest.TestCase):
             r = self.cmake(other, "-DGAMES_C=" + games)
             self.assertNotEqual(r.returncode, 0, r.stderr)
             self.assertIn("games.c", r.stderr)
+            empty = '\n    {"empty", "Empty", CPS1_PLAIN, {0}, CPSB_04, 0, {\n    }},\n};'
+            zero = src.replace("\n};", empty, 1)  # a game of no files would match any zip
+            open(games, "w", encoding="utf-8").write(zero)
+            r = self.cmake(other, "-DGAMES_C=" + games)
+            self.assertNotEqual(r.returncode, 0, r.stderr)
+            self.assertIn("games.c", r.stderr)
+
+    @unittest.skipUnless(os.path.exists(os.path.join(CPS1, "ffight.zip")), "no ffight.zip in " + CPS1)
+    def test_cps1_short_crc(self):  # 0x0b605e44 written 0xb605e44 is the same number in C, and in the rule
+        src = open(os.path.join(ROOT, "systems", "cps1", "runtime", "games.c"), encoding="utf-8").read()
+        with tempfile.TemporaryDirectory() as d:
+            games = os.path.join(d, "games.c")
+            open(games, "w", encoding="utf-8").write(src.replace("{0x0b605e44,", "{0xb605e44,", 1))
+            r = self.cmake(os.path.join(CPS1, "ffight.zip"), "-DGAMES_C=" + games)
+            self.assertEqual((r.returncode, r.stderr.strip()), (0, "cps1"))
 
 
 if __name__ == "__main__":

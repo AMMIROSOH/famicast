@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -589,6 +590,10 @@ static void test_state_refused(void) {
     f = fopen("cps1_test.state", "wb"), fwrite(buf, 1, n / 2, f), fclose(f);  /* cut short */
     assert(cps1_state_load(&m, "cps1_test.state", err, sizeof err) == 1 && memcmp(&before, &m, sizeof m) == 0);
     buf[0] ^= 1;                                   /* a wrong magic */
+    f = fopen("cps1_test.state", "wb"), fwrite(buf, 1, n, f), fclose(f);
+    assert(cps1_state_load(&m, "cps1_test.state", err, sizeof err) == 1 && memcmp(&before, &m, sizeof m) == 0);
+    buf[0] ^= 1;
+    buf[8 + 16 + 4 + 4 + offsetof(Cps1, snd_n) + 1] ^= 0x40;  /* damaged inside, the right length */
     f = fopen("cps1_test.state", "wb"), fwrite(buf, 1, n, f), fclose(f);
     assert(cps1_state_load(&m, "cps1_test.state", err, sizeof err) == 1 && memcmp(&before, &m, sizeof m) == 0);
     remove("cps1_test.state");
