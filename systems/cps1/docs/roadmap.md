@@ -2,7 +2,6 @@
 
 The order rule ([docs/roadmap.md](../../../docs/roadmap.md)): the reference
 before the thing it checks. A milestone is done when its exit test passes.
-The design: [docs/superpowers/specs/2026-11-23-cps1-design.md](../../../docs/superpowers/specs/2026-11-23-cps1-design.md).
 
 | Milestone | Content | State |
 |---|---|---|
