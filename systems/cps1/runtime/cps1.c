@@ -181,6 +181,7 @@ void cps1_set_input(Cps1 *s, int player, uint16_t pad) {
 }
 
 void cps1_frame(Cps1 *s) {
+    s->frames++;
     for (s->line = 0; s->line < CPS1_LINES; s->line++) {
         if (s->line == CPS1_VBLANK_LINE) {
             cps1_render(s);

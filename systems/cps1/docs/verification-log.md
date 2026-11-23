@@ -5,6 +5,30 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../../docs/verification-log.md).
 
+## 2026-11-24 · P4 · the window, detection, save states
+- **Save states** (`cps1_tests`): a state with a sound command pending,
+  loaded into a second machine, gives the same 20 frames and samples; a
+  state of another game, cut short, with a wrong magic or damaged inside
+  (a CRC-32 over the state) is refused and the machine is unchanged. `test_ffight_state`: a state at frame 1,400
+  of Final Fight, loaded and run 100 frames, gives the same picture as
+  1,500 frames straight.
+- **Detection** (`test_detect`): the C detector and the CMake rule both
+  say `cps1` for `ffight.zip` and refuse `sfa.zip` (CPS-2); a `games.c`
+  with one file line laid out otherwise stops the CMake rule, naming the
+  file, and so does a game listing no files (it would match any zip); a
+  CRC written without its leading zero still matches. `ROMS` with a
+  CPS-1 zip stops the configure with a message.
+- **retrocast**: opens `ffight.zip` with the title "Final Fight (World)
+  (ffight)"; a CPS-2 zip gives "not a game of a known system".
+- **Graphics ROM mapper**: played by hand, Final Fight's Game Over screen
+  showed stale scroll tiles over the background; MAME's shows black. With
+  the S224B mapper (MAME's table) those codes are not drawn: the same
+  screen (`cps1_headless --play`, frame 7,500) is clean. `cps1_tests`:
+  the mapper's ranges, its shifts, and a scroll2 tile hidden by it.
+- **By hand** (the user, `retrocast`): Final Fight played to Game Over
+  in the window, pads, sound and picture as in MAME but for the mapper
+  above.
+
 ## 2026-11-23 · P3 · the OKI and the mix against MAME
 - **How**: MAME 0.289 (the official Windows build, SHA-256 checked) ran
   Final Fight for 82 s, a coin at frame 300 and Start at 1,300, logging

@@ -3,6 +3,10 @@
 #include "cps1.h"
 
 #define K 1024
+/* S224B (MAME's mapper_S224B): one bank of $8000 units; sprites, scroll1,
+ * scroll3 and scroll2 in that order. */
+#define MAPPER_S224B {{0x8000}, 4, {{CPS1_GFX_SPRITES, 0x0000, 0x43FF, 0}, {CPS1_GFX_SCROLL1, 0x4400, 0x4BFF, 0}, \
+                                    {CPS1_GFX_SCROLL3, 0x4C00, 0x5FFF, 0}, {CPS1_GFX_SCROLL2, 0x6000, 0x7FFF, 0}}}
 /* CPS-B-04: ID $0004 at $20, no multiplier; layer control $2E, priority
  * masks $26, $30, $28, $32, palette control $2A (Final Fight writes its
  * six-page $3F there). */
@@ -23,6 +27,6 @@ const Cps1Game cps1_games[] = {
         {0xb8367eb5, 64 * K, CPS1_R_SOUND, CPS1_LOAD_PLAIN, 0x00000},   /* ff_09.12b */
         {0x375c66e7, 128 * K, CPS1_R_OKI, CPS1_LOAD_PLAIN, 0x00000},    /* ff_18.11c */
         {0x1ef137f9, 128 * K, CPS1_R_OKI, CPS1_LOAD_PLAIN, 0x20000},    /* ff_19.12c */
-    }},
+    }, MAPPER_S224B},
 };
 const int cps1_game_count = (int)(sizeof cps1_games / sizeof cps1_games[0]);

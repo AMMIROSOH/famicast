@@ -8,8 +8,8 @@ before the thing it checks. A milestone is done when its exit test passes.
 | P1 | `core/zip`: directory, inflate, CRC | done |
 | P2 | the 68000 machine, CPS-A/CPS-B picture, the game table with Final Fight | done |
 | P3 | sound: Z80, YM2151, OKI MSM6295 | done |
-| P4 | the window (`retrocast`, `cps1.ini`), CMake detection, save states | open |
-| P5 | every plain-board game; stars, flip screen, graphics ROM mappers, raster interrupts | open |
+| P4 | the window (`retrocast`, `cps1.ini`), CMake detection, save states | done |
+| P5 | every plain-board game (their mappers); stars, flip screen, raster interrupts | open |
 | P6 | the recompiler (`cps1recomp`, `-DROMS`, `--diff`) | open |
 | P7 | the Q-Sound games: dino, punisher, wof, slammasu, mbombrd | open |
 | P8 | the rest: pang3, megaman, pnickj, qad, qtono2 | open |
@@ -28,6 +28,17 @@ before the thing it checks. A milestone is done when its exit test passes.
   sprites and priority; the game table (Final Fight).
 - [x] **Exit:** `cps1_tests`; Final Fight reaches its title in
   `cps1_headless --ppm`, checked by eye.
+
+## P4 · The window, detection, save states
+- [x] The graphics ROM mapper per board (Final Fight's S224B): a tile code
+  outside its layer's range is not drawn, as on the board.
+- [x] `cps1_system` in `retrocast` (384x224 on a 4:3 monitor, both
+  players, a coin on Select, mono sound, F2 / F4); save states with the
+  game's id; `cmake/detect_system.cmake` matches a zip to `games.c`'s CRCs.
+- [x] **Exit:** `test_detect` (the C detector and the CMake rule agree on
+  Final Fight and refuse a CPS-2 zip; a `games.c` the rule cannot read
+  stops it); `test_ffight_state`; Final Fight played by hand in
+  `retrocast` to Game Over.
 
 ## P3 · Sound
 - [x] The Z80 (ROM, bank, RAM, the command and fade latches), the YM2151

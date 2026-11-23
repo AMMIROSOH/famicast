@@ -18,7 +18,7 @@ own.
 | Atari 2600 | 2K/4K/F8/F6/F4 cartridges, TIA picture and sound, NTSC and PAL, joystick; recompiled; no Superchip RAM or other schemes, paddles or SECAM | [systems/atari2600/README.md](systems/atari2600/README.md) |
 | Master System / Mark III | Z80, Sega and Codemasters mappers, cartridge RAM, VDP (mode 4) and PSG, NTSC and PAL, two pads and Pause; recompiled (Z80) | [systems/mastersystem/README.md](systems/mastersystem/README.md) |
 | Game Gear | a mode of the Master System: 160x144 LCD, 12-bit palette, Start on port $00; recompiled (Z80) | [systems/mastersystem/README.md](systems/mastersystem/README.md) |
-| Capcom Play System I (arcade) | in progress: zips, 68000 and Z80, CPS-A/CPS-B picture, YM2151 and OKI sound; Final Fight plays in `cps1_headless`; no window yet | [systems/cps1/README.md](systems/cps1/README.md) |
+| Capcom Play System I (arcade) | in progress: zips, 68000 and Z80, CPS-A/CPS-B picture, YM2151 and OKI sound, save states; Final Fight plays in `retrocast`; not yet recompiled | [systems/cps1/README.md](systems/cps1/README.md) |
 
 ## How it works
 1. Each system has a recompiler (`systems/nes/recomp/` → `nesrecomp`, `systems/gb/recomp/`
@@ -122,7 +122,8 @@ A, South = B, North = X, West = Y, shoulders = L and R, Back = Select,
 Start. Each system reads the buttons its pad has (the NES and Game Boy:
 A, B, Select, Start and the directions; the Genesis: A on Y, B on B, C on
 A, X on L, Y on X, Z on R, Mode on Select; the Master System: button 1
-on B, button 2 on A, the console's Pause on Start).
+on B, button 2 on A, the console's Pause on Start; the CPS-1: buttons
+1-3 on B, A and X, a coin on Select, Start).
 
 | Key | Action |
 |-----|--------|

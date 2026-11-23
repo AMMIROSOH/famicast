@@ -43,6 +43,16 @@ typedef struct {
     uint16_t layer_enable[5];    /* the layer-control bits enabling scroll1-3, stars 1-2 */
 } Cps1B;
 
+/* The graphics ROM mapper (a PAL per board): which tile codes each layer
+ * may use, in 64-byte units (a code shifted: sprites and scroll2 << 1,
+ * scroll1 << 0, scroll3 << 3), and the bank they come from. A code in no
+ * range of its layer is not drawn; no ranges at all lets every code through. */
+enum { CPS1_GFX_SPRITES = 1, CPS1_GFX_SCROLL1 = 2, CPS1_GFX_SCROLL2 = 4, CPS1_GFX_SCROLL3 = 8, CPS1_GFX_STARS = 16 };
+typedef struct { uint8_t type; uint32_t start, end; uint8_t bank; } Cps1Range;
+typedef struct { uint32_t bank_size[4]; uint8_t n; Cps1Range range[8]; } Cps1Mapper;
+/* The code to draw for a layer's tile code, or -1: not drawn. */
+int cps1_gfx_map(const Cps1Mapper *m, int type, int code);
+
 typedef struct {
     const char *id, *title;
     uint8_t group;
@@ -50,6 +60,7 @@ typedef struct {
     Cps1B b;
     uint8_t nfiles;
     Cps1File files[32];
+    Cps1Mapper mapper;           /* the board's graphics ROM PAL */
 } Cps1Game;
 
 extern const Cps1Game cps1_games[];
@@ -93,6 +104,7 @@ typedef struct Cps1 {
     uint16_t pad[2];            /* core/input_log.h PAD_* bits, players 1-2 */
     uint8_t dip[3];             /* DIP switches A-C, as read (active low) */
     int line;
+    uint64_t frames;            /* run since power-on */
     uint64_t line_end;          /* cpu.cycles when the current line ends */
     Z80 z80;                    /* sound: $0000-$BFFF ROM (bank at $8000), $D000 RAM, $F000- I/O */
     uint8_t z80_ram[0x800];
@@ -115,6 +127,12 @@ void cps1_set_input(Cps1 *s, int player, uint16_t pad);  /* buttons 1-3 = B, A, 
 /* Up to max samples (mono, CPS1_SAMPLE_RATE) made so far; the number taken. When
  * nobody takes them, a full buffer drops the new ones. */
 int cps1_take_sound(Cps1 *s, int16_t *out, int max);
+
+/* ---- save states (state.c) ---- */
+int cps1_state_save(const Cps1 *s, const char *path);  /* 0, or 1 */
+/* 0, or 1 with a message: not a state, another version or another game;
+ * the machine is untouched then. */
+int cps1_state_load(Cps1 *s, const char *path, char *err, size_t errlen);
 
 /* ---- the picture (video.c) ---- */
 void cps1_render(Cps1 *s);                     /* fills s->frame */
