@@ -71,6 +71,19 @@ class TestHeadless(unittest.TestCase):
             self.assertGreater(rms, 300)
             self.assertGreater(len(set(last)), 100)
 
+    @unittest.skipUnless(os.path.exists(os.path.join(SET, "ffight.zip")), "no ffight.zip in " + SET)
+    def test_ffight_state(self):  # a state at 1,400, loaded and run 100 frames: the same picture as 1,500 straight
+        game = os.path.join(SET, "ffight.zip")
+        with tempfile.TemporaryDirectory() as d:
+            st, a, b = (os.path.join(d, n) for n in ("s.state", "a.ppm", "b.ppm"))
+            r = subprocess.run([RUNNER, game, "--frames", "1500", "--play", "--state-at", "1400", st, "--ppm", a],
+                               capture_output=True, text=True, timeout=300)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            r = subprocess.run([RUNNER, game, "--frames", "100", "--play", "--load-state", st, "--ppm", b],
+                               capture_output=True, text=True, timeout=300)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(open(a, "rb").read(), open(b, "rb").read())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -93,6 +93,7 @@ typedef struct Cps1 {
     uint16_t pad[2];            /* core/input_log.h PAD_* bits, players 1-2 */
     uint8_t dip[3];             /* DIP switches A-C, as read (active low) */
     int line;
+    uint64_t frames;            /* run since power-on */
     uint64_t line_end;          /* cpu.cycles when the current line ends */
     Z80 z80;                    /* sound: $0000-$BFFF ROM (bank at $8000), $D000 RAM, $F000- I/O */
     uint8_t z80_ram[0x800];
@@ -115,6 +116,12 @@ void cps1_set_input(Cps1 *s, int player, uint16_t pad);  /* buttons 1-3 = B, A, 
 /* Up to max samples (mono, CPS1_SAMPLE_RATE) made so far; the number taken. When
  * nobody takes them, a full buffer drops the new ones. */
 int cps1_take_sound(Cps1 *s, int16_t *out, int max);
+
+/* ---- save states (state.c) ---- */
+int cps1_state_save(const Cps1 *s, const char *path);  /* 0, or 1 */
+/* 0, or 1 with a message: not a state, another version or another game;
+ * the machine is untouched then. */
+int cps1_state_load(Cps1 *s, const char *path, char *err, size_t errlen);
 
 /* ---- the picture (video.c) ---- */
 void cps1_render(Cps1 *s);                     /* fills s->frame */

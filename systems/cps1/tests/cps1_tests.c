@@ -537,6 +537,63 @@ static void test_sound_buffer(void) {
     assert(n >= 936 && n <= 940);
 }
 
+/* ---- save states ---- */
+
+static Cps1 m2;
+
+static void state_scene(void) {  /* the 68000's VBlank program and the Z80 with the YM2151's timer IRQ */
+    static const uint8_t code[] = {
+        0x31, 0x00, 0xD8, 0xED, 0x56, 0x3E, 0x10, 0x32, 0x00, 0xF0, 0x3E, 0x80, 0x32, 0x01, 0xF0,
+        0x3E, 0x14, 0x32, 0x00, 0xF0, 0x3E, 0x15, 0x32, 0x01, 0xF0, 0xFB, 0x18, 0xFE};
+    static const uint8_t irq[] = {0x21, 0x01, 0xD0, 0x34, 0x3E, 0x14, 0x32, 0x00, 0xF0, 0x3E, 0x15, 0x32, 0x01, 0xF0, 0xFB, 0xC9};
+    boot_sound(code, sizeof code);
+    memcpy(zrom + 0x38, irq, sizeof irq);
+    cps1_init(&m, &prog_rom);
+}
+
+static void test_state_roundtrip(void) {
+    static int16_t a[CPS1_SND_BUF], b[CPS1_SND_BUF];
+    static uint16_t frame[CPS1_WIDTH * CPS1_HEIGHT];
+    state_scene();
+    for (int i = 0; i < 30; i++) cps1_frame(&m), cps1_take_sound(&m, a, CPS1_SND_BUF);
+    m68k_write(&m.cpu, 0x800180, 0x0033, 5, 1);   /* a command still waiting for the Z80 */
+    assert(cps1_state_save(&m, "cps1_test.state") == 0);
+    int na = 0;
+    for (int i = 0; i < 20; i++) cps1_frame(&m), na += cps1_take_sound(&m, a + na, CPS1_SND_BUF - na);
+    memcpy(frame, m.frame, sizeof frame);
+    cps1_init(&m2, &prog_rom);
+    char err[128];
+    assert(cps1_state_load(&m2, "cps1_test.state", err, sizeof err) == 0);
+    int nb = 0;
+    for (int i = 0; i < 20; i++) cps1_frame(&m2), nb += cps1_take_sound(&m2, b + nb, CPS1_SND_BUF - nb);
+    assert(na == nb && memcmp(a, b, (size_t)na * sizeof *a) == 0);
+    assert(memcmp(frame, m2.frame, sizeof frame) == 0);
+    assert(m2.frames == m.frames && m2.z80_ram[1] == m.z80_ram[1]);
+}
+
+static void test_state_refused(void) {
+    static Cps1 before;
+    char err[128] = "";
+    state_scene();
+    for (int i = 0; i < 3; i++) cps1_frame(&m);
+    assert(cps1_state_save(&m, "cps1_test.state") == 0);
+    FILE *f = fopen("cps1_test.state", "rb");
+    static uint8_t buf[sizeof(Cps1) + 64];
+    size_t n = fread(buf, 1, sizeof buf, f);
+    fclose(f);
+    prog_game.id = "other";                        /* another game's state */
+    memcpy(&before, &m, sizeof m);
+    assert(cps1_state_load(&m, "cps1_test.state", err, sizeof err) == 1 && strstr(err, "prog"));
+    assert(memcmp(&before, &m, sizeof m) == 0);
+    prog_game.id = "prog";
+    f = fopen("cps1_test.state", "wb"), fwrite(buf, 1, n / 2, f), fclose(f);  /* cut short */
+    assert(cps1_state_load(&m, "cps1_test.state", err, sizeof err) == 1 && memcmp(&before, &m, sizeof m) == 0);
+    buf[0] ^= 1;                                   /* a wrong magic */
+    f = fopen("cps1_test.state", "wb"), fwrite(buf, 1, n, f), fclose(f);
+    assert(cps1_state_load(&m, "cps1_test.state", err, sizeof err) == 1 && memcmp(&before, &m, sizeof m) == 0);
+    remove("cps1_test.state");
+}
+
 int main(void) {
     make_test_game();
     test_layouts();
@@ -570,6 +627,8 @@ int main(void) {
     test_bank();
     test_ym_irq();
     test_sound_buffer();
+    test_state_roundtrip();
+    test_state_refused();
     puts("cps1_tests: ok");
     return 0;
 }
